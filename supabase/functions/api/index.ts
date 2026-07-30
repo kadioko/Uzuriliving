@@ -71,7 +71,13 @@ const jwtSecret = () => {
 };
 
 function normalizePhone(value: unknown) {
-  return String(value ?? "").replace(/[\s()-]/g, "").trim();
+  const compact = String(value ?? "").replace(/[\s()-]/g, "").trim();
+  if (compact.startsWith("00")) return `+${compact.slice(2)}`;
+  if (compact.startsWith("255")) return `+${compact}`;
+  // Accept Tanzania's familiar local format while preserving every other
+  // country's international format unchanged.
+  if (/^0\d{9}$/.test(compact)) return `+255${compact.slice(1)}`;
+  return compact;
 }
 
 function validPhone(phone: string) {
