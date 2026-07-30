@@ -1,5 +1,4 @@
 "use client";
-import Image from "next/image";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -432,23 +431,13 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
             })}
           </div>
 
-          <div className="mt-8 hidden max-w-2xl gap-4 sm:grid sm:grid-cols-[170px_1fr]">
-            <div className="rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+          <div className="mt-8 hidden sm:block">
+            <div className="inline-block rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur">
               <BadgeDollarSign className="h-5 w-5 text-brand-100" />
               <p className="mt-3 text-sm font-bold text-white">TZS 15,000/month</p>
               <p className="mt-1 text-xs leading-5 text-brand-100">
                 {lang === "sw" ? "Baada ya jaribio la bure." : "After the free trial."}
               </p>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-white/15 bg-white/95 p-3 shadow-2xl shadow-black/20">
-              <Image
-                src="/marketing/phone-dashboard.png"
-                alt={lang === "sw" ? "Muonekano wa dashboard ya Uzuri Living" : "Uzuri Living dashboard preview"}
-                width={420}
-                height={744}
-                className="h-56 w-full rounded-xl object-cover object-top sm:h-64"
-                priority
-              />
             </div>
           </div>
         </section>
