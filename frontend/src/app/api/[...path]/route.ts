@@ -6,9 +6,9 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   const { path } = await context.params;
   const target = `${API_ORIGIN}/${path.map((part) => encodeURIComponent(part)).join("/")}${new URL(request.url).search}`;
   const headers = new Headers(request.headers);
-  headers.delete("host");
-  headers.delete("origin");
-  headers.delete("content-length");
+  for (const header of ["host", "origin", "content-length", "connection", "keep-alive", "transfer-encoding", "expect", "accept-encoding"]) {
+    headers.delete(header);
+  }
 
   const upstream = await fetch(target, {
     method: request.method,
