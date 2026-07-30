@@ -73,6 +73,9 @@ def uploadKeyPassword = signingValue("UZURILIVING_UPLOAD_KEY_PASSWORD", "keyPass
 android {
     compileSdkVersion 36
     namespace "com.uzuriliving.app"
+    buildFeatures {
+        resValues true
+    }
     defaultConfig {
         applicationId "com.uzuriliving.app"
         minSdkVersion 23
