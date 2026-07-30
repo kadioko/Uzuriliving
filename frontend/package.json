@@ -1,5 +1,5 @@
 {
-  "name": "dukapilot-frontend",
+  "name": "uzuriliving-frontend",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
     "start:prod": "next start",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke-test.js",
-    "smoke:login": "cross-env PLAYWRIGHT_BASE_URL=https://www.dukapilot.com playwright test tests/login.smoke.spec.ts",
+    "smoke:login": "cross-env PLAYWRIGHT_BASE_URL=https://www.uzuriliving.com playwright test tests/login.smoke.spec.ts",
     "test:auth": "playwright test tests/auth.negative.spec.ts",
     "test:inventory": "playwright test tests/inventory.flows.spec.ts",
     "test:supplier": "playwright test tests/supplier.portal.spec.ts",

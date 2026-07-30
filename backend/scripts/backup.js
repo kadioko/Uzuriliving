@@ -1,31 +1,31 @@
 #!/usr/bin/env node
 /**
- * DukaPilot — PostgreSQL backup script
+ * Uzuri Living â€” PostgreSQL backup script
  *
  * Creates a gzipped pg_dump and (optionally) uploads it to S3-compatible
  * object storage (Cloudflare R2 / AWS S3) so a copy survives even a full
- * Railway volume wipe.
+ * Supabase volume wipe.
  *
  * Usage:
  *   node scripts/backup.js
  *
  * Required env vars:
- *   DATABASE_URL — PostgreSQL connection URL (or DATABASE_MIGRATE_URL public proxy)
+ *   DATABASE_URL â€” PostgreSQL connection URL (or DATABASE_MIGRATE_URL public proxy)
  *
  * Local backup (always runs):
- *   BACKUP_DIR          — Directory to write backups to (default: ./backups)
- *   BACKUP_RETAIN_DAYS  — Days to keep backups (default: 7)
+ *   BACKUP_DIR          â€” Directory to write backups to (default: ./backups)
+ *   BACKUP_RETAIN_DAYS  â€” Days to keep backups (default: 7)
  *
  * Off-site backup (runs only if BACKUP_S3_BUCKET is set):
- *   BACKUP_S3_BUCKET            — bucket name
- *   BACKUP_S3_ENDPOINT          — S3 endpoint. For R2:
+ *   BACKUP_S3_BUCKET            â€” bucket name
+ *   BACKUP_S3_ENDPOINT          â€” S3 endpoint. For R2:
  *                                 https://<account_id>.r2.cloudflarestorage.com
- *   BACKUP_S3_REGION            — region (default "auto", correct for R2)
- *   BACKUP_S3_ACCESS_KEY_ID     — access key id
- *   BACKUP_S3_SECRET_ACCESS_KEY — secret access key
- *   BACKUP_S3_PREFIX            — key prefix (default "dukapilot-backups/")
+ *   BACKUP_S3_REGION            â€” region (default "auto", correct for R2)
+ *   BACKUP_S3_ACCESS_KEY_ID     â€” access key id
+ *   BACKUP_S3_SECRET_ACCESS_KEY â€” secret access key
+ *   BACKUP_S3_PREFIX            â€” key prefix (default "uzuriliving-backups/")
  *
- * On Railway: this runs as a daily cron (see railway.toml). The container
+ * On Supabase: this runs as a daily cron (see Supabase.toml). The container
  * must have pg_dump available (the Dockerfile installs postgresql-client).
  */
 
@@ -48,7 +48,7 @@ fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const now = new Date();
 const timestamp = now.toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-const filename = `dukapilot-backup-${timestamp}.sql.gz`;
+const filename = `uzuriliving-backup-${timestamp}.sql.gz`;
 const filepath = path.join(BACKUP_DIR, filename);
 
 console.log(`[backup] Starting backup at ${now.toISOString()}`);
@@ -75,7 +75,7 @@ console.log(`[backup] Local backup complete: ${filename} (${sizeMB} MB)`);
 const cutoff = Date.now() - RETAIN_DAYS * 24 * 60 * 60 * 1000;
 let deleted = 0;
 for (const file of fs.readdirSync(BACKUP_DIR)) {
-  if (!file.startsWith("dukapilot-backup-") || !file.endsWith(".sql.gz")) continue;
+  if (!file.startsWith("uzuriliving-backup-") || !file.endsWith(".sql.gz")) continue;
   const fullPath = path.join(BACKUP_DIR, file);
   const fileStat = fs.statSync(fullPath);
   if (fileStat.mtimeMs < cutoff) {
@@ -86,11 +86,11 @@ for (const file of fs.readdirSync(BACKUP_DIR)) {
 }
 console.log(`[backup] Local cleanup complete: ${deleted} old backup(s) removed`);
 
-// ── Off-site upload to S3 / Cloudflare R2 ──────────────────────────────────
+// â”€â”€ Off-site upload to S3 / Cloudflare R2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function uploadToS3() {
   const bucket = process.env.BACKUP_S3_BUCKET;
   if (!bucket) {
-    console.log("[backup] BACKUP_S3_BUCKET not set — skipping off-site upload.");
+    console.log("[backup] BACKUP_S3_BUCKET not set â€” skipping off-site upload.");
     return;
   }
 
@@ -101,7 +101,7 @@ async function uploadToS3() {
     DeleteObjectsCommand,
   } = require("@aws-sdk/client-s3");
 
-  const prefix = process.env.BACKUP_S3_PREFIX || "dukapilot-backups/";
+  const prefix = process.env.BACKUP_S3_PREFIX || "uzuriliving-backups/";
   const client = new S3Client({
     region: process.env.BACKUP_S3_REGION || "auto",
     endpoint: process.env.BACKUP_S3_ENDPOINT || undefined,
@@ -146,7 +146,7 @@ uploadToS3()
     console.log("[backup] Done.");
   })
   .catch((err) => {
-    // Off-site upload failure should not silently pass — exit non-zero so the
+    // Off-site upload failure should not silently pass â€” exit non-zero so the
     // cron is marked failed and you get alerted, but the local dump still exists.
     console.error("[backup] Off-site upload FAILED:", err.message);
     process.exit(1);

@@ -57,11 +57,11 @@ jobs:
         run: |
           test -f app/build/outputs/apk/debug/app-debug.apk
           grep -q 'targetSdkVersion 36' app/build.gradle
-          grep -q 'https://www.dukapilot.com/sales' android/twa-manifest.json
-          grep -q 'https://www.dukapilot.com/inventory' android/twa-manifest.json
-          grep -q 'https://www.dukapilot.com/debts' android/twa-manifest.json
-          curl --fail --silent --show-error https://www.dukapilot.com/manifest.json | grep -q 'DukaPilot'
-          curl --fail --silent --show-error https://www.dukapilot.com/.well-known/assetlinks.json | grep -q 'com.dukapilot.app'
+          grep -q 'https://www.uzuriliving.com/sales' android/twa-manifest.json
+          grep -q 'https://www.uzuriliving.com/inventory' android/twa-manifest.json
+          grep -q 'https://www.uzuriliving.com/debts' android/twa-manifest.json
+          curl --fail --silent --show-error https://www.uzuriliving.com/manifest.json | grep -q 'Uzuri Living'
+          curl --fail --silent --show-error https://www.uzuriliving.com/.well-known/assetlinks.json | grep -q 'com.uzuriliving.app'
 
   playwright-mocked:
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build
-      - run: nohup npm run start >/tmp/dukapilot-frontend.log 2>&1 &
+      - run: nohup npm run start >/tmp/uzuriliving-frontend.log 2>&1 &
       - run: |
           for i in {1..30}; do
             if curl -fsS http://127.0.0.1:3000 >/dev/null; then

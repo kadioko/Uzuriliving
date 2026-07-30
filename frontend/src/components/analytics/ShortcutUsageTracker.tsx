@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
 
 const ROUTES = { sale: "/sales", inventory: "/inventory", debts: "/debts" } as const;
-const DEVICE_ID_KEY = "dukapilot_usage_device_id";
+const DEVICE_ID_KEY = "uzuriliving_usage_device_id";
 
 function deviceId() {
   let id = localStorage.getItem(DEVICE_ID_KEY);

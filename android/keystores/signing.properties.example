@@ -1,6 +1,6 @@
 # Copy this file to signing.properties and fill the values locally.
 # signing.properties stays ignored by Git. Keep its passwords in a password manager.
-storeFile=C:/Users/USER/DukaPilot-Secrets/dukapilot-upload-2026.jks
+storeFile=C:/Users/USER/UzuriLiving-Secrets/uzuriliving-upload-2026.jks
 storePassword=
-keyAlias=dukapilot-upload
+keyAlias=uzuriliving-upload
 keyPassword=

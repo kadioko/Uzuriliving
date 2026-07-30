@@ -1,8 +1,8 @@
 /**
- * Sentry client-side configuration — DukaPilot Frontend
+ * Sentry client-side configuration â€” Uzuri Living Frontend
  *
  * Required env var:
- *   NEXT_PUBLIC_SENTRY_DSN — your Sentry project DSN (public)
+ *   NEXT_PUBLIC_SENTRY_DSN â€” your Sentry project DSN (public)
  *
  * If NEXT_PUBLIC_SENTRY_DSN is not set, Sentry is disabled.
  */

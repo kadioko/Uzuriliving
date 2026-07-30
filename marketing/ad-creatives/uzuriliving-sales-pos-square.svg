@@ -1,13 +1,13 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#f8fafc"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" stroke="#bbf7d0" stroke-width="4"/>
-  <rect x="96" y="96" width="72" height="72" rx="22" fill="#16a34a"/>
+  <rect x="96" y="96" width="72" height="72" rx="22" fill="#e99400"/>
   <path d="M133 119c-10 0-18 8-18 18v21c0 4.4 3.6 8 8 8h21c4.4 0 8-3.6 8-8v-21c0-10-8-18-19-18Zm0 10c5 0 9 4 9 9v5h-18v-5c0-5 4-9 9-9Z" fill="#ffffff"/>
-  <text x="190" y="142" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">DukaPilot</text>
+  <text x="190" y="142" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Uzuri Living</text>
   <text x="96" y="300" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">Rekodi mauzo</text>
   <text x="96" y="390" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">kwa sekunde.</text>
-  <text x="100" y="482" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Chagua bidhaa, ongeza kiasi,</text>
-  <text x="100" y="530" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">ona jumla na stock ibadilike.</text>
+  <text x="100" y="482" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Chagua bidhaa, ongeza kiasi,</text>
+  <text x="100" y="530" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">ona jumla na stock ibadilike.</text>
   <rect x="96" y="630" width="888" height="276" rx="38" fill="#ecfdf5" stroke="#bbf7d0" stroke-width="3"/>
   <rect x="142" y="684" width="258" height="76" rx="22" fill="#ffffff"/>
   <rect x="422" y="684" width="258" height="76" rx="22" fill="#ffffff"/>
@@ -17,7 +17,7 @@
   <text x="734" y="733" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="900">Sabuni</text>
   <rect x="142" y="798" width="514" height="66" rx="20" fill="#ffffff"/>
   <text x="176" y="841" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="900">Jumla: TZS 12,500</text>
-  <rect x="686" y="798" width="252" height="66" rx="20" fill="#16a34a"/>
+  <rect x="686" y="798" width="252" height="66" rx="20" fill="#e99400"/>
   <text x="742" y="841" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="900">Maliza Sale</text>
   <text x="96" y="976" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="900">WhatsApp +255 743 910 580</text>
 </svg>

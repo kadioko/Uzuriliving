@@ -1,6 +1,6 @@
 const dns = require("node:dns").promises;
 
-const DOMAIN = process.env.EMAIL_DOMAIN || "dukapilot.com";
+const DOMAIN = process.env.EMAIL_DOMAIN || "uzuriliving.com";
 const MAILTRAP_DKIM_TARGETS = new Set(["rwmt1.dkim.smtp.mailtrap.live", "rwmt2.dkim.smtp.mailtrap.live"]);
 
 function flattenTxt(records) {

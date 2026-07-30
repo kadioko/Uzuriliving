@@ -1,8 +1,8 @@
 /**
- * Sentry server-side configuration — DukaPilot Frontend
+ * Sentry server-side configuration â€” Uzuri Living Frontend
  *
  * Required env var:
- *   SENTRY_DSN — your Sentry project DSN (server-side, keep private)
+ *   SENTRY_DSN â€” your Sentry project DSN (server-side, keep private)
  */
 
 import * as Sentry from "@sentry/nextjs";

@@ -1,30 +1,30 @@
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1920" fill="#f0fdf4"/>
   <rect x="64" y="72" width="952" height="1776" rx="64" fill="#ffffff" stroke="#bbf7d0" stroke-width="4"/>
-  <rect x="96" y="108" width="74" height="74" rx="22" fill="#16a34a"/>
+  <rect x="96" y="108" width="74" height="74" rx="22" fill="#e99400"/>
   <path d="M134 133c-10.5 0-19 8.5-19 19v20c0 4.4 3.6 8 8 8h22c4.4 0 8-3.6 8-8v-20c0-10.5-8.5-19-19-19Zm0 10c5 0 9 4 9 9v5h-18v-5c0-5 4-9 9-9Z" fill="#ffffff"/>
   <path d="m126 165 6 6 14-17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="194" y="157" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="45" font-weight="900">DukaPilot</text>
+  <text x="194" y="157" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="45" font-weight="900">Uzuri Living</text>
   <text x="96" y="355" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="88" font-weight="900">Acha daftari</text>
   <text x="96" y="455" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="88" font-weight="900">peke yake.</text>
-  <text x="98" y="548" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">Duka lako kwenye simu:</text>
-  <text x="98" y="610" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">mauzo, stock, madeni na maagizo.</text>
+  <text x="98" y="548" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">Duka lako kwenye simu:</text>
+  <text x="98" y="610" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">mauzo, stock, madeni na maagizo.</text>
   <rect x="118" y="735" width="360" height="520" rx="32" fill="#f8fafc" stroke="#d1d5db" stroke-width="3"/>
   <text x="154" y="815" fill="#334155" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="800">Daftari</text>
   <path d="M154 878h260M154 944h240M154 1010h268M154 1076h210M154 1142h252" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round"/>
   <rect x="592" y="700" width="340" height="630" rx="54" fill="#14532d"/>
   <rect x="620" y="758" width="284" height="514" rx="34" fill="#ffffff"/>
-  <rect x="644" y="806" width="62" height="62" rx="18" fill="#16a34a"/>
+  <rect x="644" y="806" width="62" height="62" rx="18" fill="#e99400"/>
   <text x="724" y="836" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="900">Duka la</text>
   <text x="724" y="866" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="900">Amina</text>
-  <text x="650" y="945" fill="#16a34a" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="900">Dashboard</text>
+  <text x="650" y="945" fill="#e99400" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="900">Dashboard</text>
   <rect x="650" y="990" width="224" height="44" rx="22" fill="#dcfce7"/>
   <rect x="650" y="1060" width="180" height="36" rx="18" fill="#bbf7d0"/>
   <rect x="650" y="1122" width="212" height="36" rx="18" fill="#86efac"/>
-  <rect x="650" y="1190" width="224" height="58" rx="18" fill="#16a34a"/>
+  <rect x="650" y="1190" width="224" height="58" rx="18" fill="#e99400"/>
   <text x="692" y="1228" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="900">Anza Mauzo</text>
-  <rect x="96" y="1450" width="888" height="132" rx="34" fill="#16a34a"/>
+  <rect x="96" y="1450" width="888" height="132" rx="34" fill="#e99400"/>
   <text x="150" y="1530" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="41" font-weight="900">Jaribu bure siku 14</text>
   <text x="96" y="1680" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="39" font-weight="900">Tuma WhatsApp tupange setup</text>
-  <text x="96" y="1740" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800">+255 743 910 580</text>
+  <text x="96" y="1740" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800">+255 743 910 580</text>
 </svg>

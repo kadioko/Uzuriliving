@@ -10,7 +10,7 @@ if (!dsn) {
 }
 
 Sentry.init({ dsn, environment: process.env.NODE_ENV || "production" });
-Sentry.captureMessage("DukaPilot alert drill", {
+Sentry.captureMessage("Uzuri Living alert drill", {
   level: "error",
   tags: { alert_drill: "true", source: "backend-script" },
 });

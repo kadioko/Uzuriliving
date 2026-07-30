@@ -1,10 +1,10 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#0f7a3b"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
-  <rect x="86" y="86" width="74" height="74" rx="22" fill="#16a34a"/>
+  <rect x="86" y="86" width="74" height="74" rx="22" fill="#e99400"/>
   <path d="M124 111c-10.5 0-19 8.5-19 19v20c0 4.4 3.6 8 8 8h22c4.4 0 8-3.6 8-8v-20c0-10.5-8.5-19-19-19Zm0 10c5 0 9 4 9 9v5h-18v-5c0-5 4-9 9-9Z" fill="#ffffff"/>
   <path d="m116 143 6 6 14-17" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="178" y="132" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="800">DukaPilot</text>
+  <text x="178" y="132" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="800">Uzuri Living</text>
   <text x="178" y="166" fill="#d1fae5" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600">Mfumo wa duka kwenye simu</text>
   <text x="86" y="320" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="92" font-weight="900">Unajua</text>
   <text x="86" y="424" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="92" font-weight="900">faida ya leo?</text>

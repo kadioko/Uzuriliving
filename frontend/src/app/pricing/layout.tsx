@@ -1,29 +1,29 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "DukaPilot Pricing - POS Tanzania, Inventory App, Mfumo wa Duka",
+  title: "Uzuri Living Pricing - POS Tanzania, Inventory App, Mfumo wa Duka",
   description:
-    "Simple DukaPilot pricing for Tanzanian shops. POS Tanzania, inventory app Tanzania, duka stock management, debts, expenses, supplier orders, and programu ya stock in Kiswahili.",
+    "Simple Uzuri Living pricing for Tanzanian shops. POS Tanzania, inventory app Tanzania, duka stock management, debts, expenses, supplier orders, and programu ya stock in Kiswahili.",
   keywords: [
     "POS Tanzania",
     "inventory app Tanzania",
     "mfumo wa duka",
     "duka stock management",
     "programu ya stock",
-    "DukaPilot pricing",
+    "Uzuri Living pricing",
     "shop management Tanzania",
   ],
   alternates: {
     canonical: "/pricing",
   },
   openGraph: {
-    title: "DukaPilot Pricing - POS and Inventory App Tanzania",
+    title: "Uzuri Living Pricing - POS and Inventory App Tanzania",
     description:
       "Track stock, sales, debts, expenses, and supplier orders for Tanzanian shops. Start free, then pay by M-Pesa.",
     url: "/pricing",
-    siteName: "DukaPilot",
+    siteName: "Uzuri Living",
     type: "website",
-    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "DukaPilot pricing and dashboard" }],
+    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "Uzuri Living pricing and dashboard" }],
   },
 };
 

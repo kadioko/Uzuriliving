@@ -4,10 +4,10 @@ Do not publish a shop name, photo, quote, dashboard image, or business result un
 
 ## WhatsApp Request
 
-Habari [Jina], asante kwa kutumia DukaPilot. Tunataka kushare uzoefu wa maduka halisi ili kuwasaidia wamiliki wengine kuelewa mfumo. Unaweza kutuma majibu mafupi?
+Habari [Jina], asante kwa kutumia Uzuri Living. Tunataka kushare uzoefu wa maduka halisi ili kuwasaidia wamiliki wengine kuelewa mfumo. Unaweza kutuma majibu mafupi?
 
 1. Duka lako linauza nini na lipo mji gani?
-2. Ni kitu gani DukaPilot imekusaidia kuona au kufanya kwa urahisi?
+2. Ni kitu gani Uzuri Living imekusaidia kuona au kufanya kwa urahisi?
 3. Tunaweza kutumia jina la duka, quote yako, au screenshot iliyofichwa taarifa za wateja kwenye website/WhatsApp/LinkedIn? Jibu: Ndiyo / Hapana.
 
 ## Record Before Publishing

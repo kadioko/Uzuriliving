@@ -16,7 +16,7 @@ function readCookieToken(req) {
       })
   );
 
-  return cookies.dukapilot_token || cookies.dukaos_token || null;
+  return cookies.uzuriliving_token || cookies.dukaos_token || null;
 }
 
 async function authenticate(req, res, next) {

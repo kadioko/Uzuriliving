@@ -5,9 +5,9 @@ services:
     image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: dukapilot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dukapilot_secret}
-      POSTGRES_DB: dukapilot
+      POSTGRES_USER: uzuriliving
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uzuriliving_secret}
+      POSTGRES_DB: uzuriliving
     ports:
       - "5432:5432"
     volumes:
@@ -21,7 +21,7 @@ services:
     ports:
       - "4000:4000"
     environment:
-      DATABASE_URL: postgresql://dukapilot:${POSTGRES_PASSWORD:-dukapilot_secret}@db:5432/dukapilot
+      DATABASE_URL: postgresql://uzuriliving:${POSTGRES_PASSWORD:-uzuriliving_secret}@db:5432/uzuriliving
       JWT_SECRET: ${JWT_SECRET:-change_this_secret_in_production}
       PORT: 4000
     volumes:

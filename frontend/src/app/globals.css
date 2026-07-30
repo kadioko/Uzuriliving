@@ -4,21 +4,24 @@
 
 /* Tailwind 4 CSS-based theme - replaces tailwind.config.ts theme.extend */
 @theme {
-  --color-brand-50: #f0fdf4;
-  --color-brand-100: #dcfce7;
-  --color-brand-200: #bbf7d0;
-  --color-brand-300: #86efac;
-  --color-brand-400: #4ade80;
-  --color-brand-500: #22c55e;
-  --color-brand-600: #16a34a;
-  --color-brand-700: #15803d;
-  --color-brand-800: #166534;
-  --color-brand-900: #14532d;
+  --color-brand-50: #fff9ed;
+  --color-brand-100: #ffefc7;
+  --color-brand-200: #ffdc8a;
+  --color-brand-300: #ffc34d;
+  --color-brand-400: #f6a800;
+  --color-brand-500: #e99400;
+  --color-brand-600: #d47f00;
+  --color-brand-700: #b56600;
+  --color-brand-800: #854b08;
+  --color-brand-900: #5e360b;
   --font-family-sans: "Inter", system-ui, sans-serif;
 }
 
 :root {
-  --brand: #16a34a;
+  --brand: #e99400;
+  --ink: #102a43;
+  --teal: #1f9d9a;
+  --coral: #f06449;
 }
 
 * {
@@ -27,7 +30,7 @@
 
 body {
   font-family: "Inter", system-ui, sans-serif;
-  background-color: #f9fafb;
+  background-color: #fffdf8;
 }
 
 /* Mobile-first touch targets */

@@ -69,7 +69,7 @@ const create = asyncHandler(async (req, res) => {
   if (!name) return res.status(400).json({ error: "Staff name is required" });
   if (!ROLES.has(role)) return res.status(400).json({ error: "Invalid staff role" });
   if (pin && (!phone || !validatePin(pin))) return res.status(400).json({ error: "Staff login requires a phone and 4 to 8 digit PIN" });
-  if (await phoneConflict(phone)) return res.status(409).json({ error: "This phone number already belongs to another DukaPilot login" });
+  if (await phoneConflict(phone)) return res.status(409).json({ error: "This phone number already belongs to another Uzuri Living login" });
 
   const defaults = permissionsFor(role);
   const staff = await prisma.staffMember.create({
@@ -105,7 +105,7 @@ const update = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Staff login requires a phone and 4 to 8 digit PIN" });
   }
   if (nextPhone && nextPhone !== existing.phone && await phoneConflict(nextPhone, existing.id)) {
-    return res.status(409).json({ error: "This phone number already belongs to another DukaPilot login" });
+    return res.status(409).json({ error: "This phone number already belongs to another Uzuri Living login" });
   }
 
   const staff = await prisma.staffMember.update({

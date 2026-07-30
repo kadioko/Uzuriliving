@@ -85,15 +85,15 @@ function clearCookie(res, name) {
 }
 
 function setAuthCookies(res, accessToken, refreshToken) {
-  setCookie(res, "dukapilot_token", accessToken, 60 * 60 * 1000); // 1h
-  setCookie(res, "dukapilot_refresh", refreshToken, REFRESH_TOKEN_EXPIRY_MS); // 30d
+  setCookie(res, "uzuriliving_token", accessToken, 60 * 60 * 1000); // 1h
+  setCookie(res, "uzuriliving_refresh", refreshToken, REFRESH_TOKEN_EXPIRY_MS); // 30d
   clearCookie(res, "dukaos_token");
   clearCookie(res, "dukaos_refresh");
 }
 
 function clearAuthCookies(res) {
-  clearCookie(res, "dukapilot_token");
-  clearCookie(res, "dukapilot_refresh");
+  clearCookie(res, "uzuriliving_token");
+  clearCookie(res, "uzuriliving_refresh");
   clearCookie(res, "dukaos_token");
   clearCookie(res, "dukaos_refresh");
 }
@@ -262,7 +262,7 @@ const login = asyncHandler(async (req, res) => {
       return res.status(402).json({ error: "Subscription required", code: "SUBSCRIPTION_REQUIRED" });
     }
     if (!canUseFeature(staff.shop, "STAFF")) {
-      return res.status(403).json({ error: "Staff login requires DukaPilot Pro", code: "PLAN_UPGRADE_REQUIRED" });
+      return res.status(403).json({ error: "Staff login requires Uzuri Living Pro", code: "PLAN_UPGRADE_REQUIRED" });
     }
     accountUser = staff.shop.user;
   }
@@ -303,7 +303,7 @@ const logout = asyncHandler(async (req, res) => {
   res.json({ message: "Logged out" });
 });
 
-// POST /api/auth/refresh — issue new access token from refresh token cookie or body
+// POST /api/auth/refresh â€” issue new access token from refresh token cookie or body
 const refresh = asyncHandler(async (req, res) => {
   const cookieHeader = req.headers.cookie || "";
   const cookies = Object.fromEntries(
@@ -313,7 +313,7 @@ const refresh = asyncHandler(async (req, res) => {
     })
   );
 
-  const refreshToken = cookies.dukapilot_refresh || cookies.dukaos_refresh || req.body?.refreshToken;
+  const refreshToken = cookies.uzuriliving_refresh || cookies.dukaos_refresh || req.body?.refreshToken;
   if (!refreshToken) return res.status(401).json({ error: "Refresh token required" });
 
   let payload;
@@ -337,12 +337,12 @@ const refresh = asyncHandler(async (req, res) => {
   }
 
   const newAccessToken = issueAccessToken(user, staff);
-  setCookie(res, "dukapilot_token", newAccessToken, 60 * 60 * 1000);
+  setCookie(res, "uzuriliving_token", newAccessToken, 60 * 60 * 1000);
   clearCookie(res, "dukaos_token");
   res.json({ message: "Session refreshed" });
 });
 
-// POST /api/auth/otp/request — send OTP to phone for PIN recovery
+// POST /api/auth/otp/request â€” send OTP to phone for PIN recovery
 const requestOtp = asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body.phone);
 
@@ -351,7 +351,7 @@ const requestOtp = asyncHandler(async (req, res) => {
   }
 
   const user = await prisma.user.findUnique({ where: { phone } });
-  // Don't reveal whether phone exists — always return success
+  // Don't reveal whether phone exists â€” always return success
   if (user) {
     try {
       await issueOtp(phone);
@@ -364,7 +364,7 @@ const requestOtp = asyncHandler(async (req, res) => {
   res.json({ message: "If this number is registered, an OTP has been sent." });
 });
 
-// POST /api/auth/otp/verify-reset — verify OTP and reset PIN
+// POST /api/auth/otp/verify-reset â€” verify OTP and reset PIN
 const verifyOtpAndResetPin = asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body.phone);
   const code = String(req.body.code || "").trim();

@@ -1,4 +1,4 @@
-# DukaPilot First Ad Campaign
+# Uzuri Living First Ad Campaign
 
 Campaign goal:
 
@@ -41,7 +41,7 @@ CTA:
 
 Destination:
 
-- `https://wa.me/255743910580?text=Habari%20DukaPilot%2C%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20`
+- `https://wa.me/255743910580?text=Habari%20Uzuri%20Living%2C%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20`
 
 ## Kiswahili Ad Copy
 
@@ -53,7 +53,7 @@ Headline:
 
 Body:
 
-> DukaPilot hukusaidia kufuatilia stock, mauzo, madeni na faida ya duka lako kwa Kiswahili. Jaribu bure siku 14.
+> Uzuri Living hukusaidia kufuatilia stock, mauzo, madeni na faida ya duka lako kwa Kiswahili. Jaribu bure siku 14.
 
 CTA:
 
@@ -67,7 +67,7 @@ Headline:
 
 Body:
 
-> Ona bidhaa zilizobaki, bidhaa zilizo chini, na muda wa kuagiza tena. DukaPilot inafanya kazi kwenye simu yako.
+> Ona bidhaa zilizobaki, bidhaa zilizo chini, na muda wa kuagiza tena. Uzuri Living inafanya kazi kwenye simu yako.
 
 CTA:
 
@@ -81,11 +81,11 @@ Headline:
 
 Body:
 
-> Tumia DukaPilot kurekodi mauzo, stock, madeni, matumizi na order za supplier. Kiswahili. Simu tu. Jaribio bure siku 14.
+> Tumia Uzuri Living kurekodi mauzo, stock, madeni, matumizi na order za supplier. Kiswahili. Simu tu. Jaribio bure siku 14.
 
 CTA:
 
-> Ongea na DukaPilot.
+> Ongea na Uzuri Living.
 
 ### Ad 4: Debt Hook
 
@@ -95,7 +95,7 @@ Headline:
 
 Body:
 
-> Rekodi deni, kiasi kilicholipwa, na kilichobaki. DukaPilot inakusaidia kufuatilia biashara bila kuchanganya daftari.
+> Rekodi deni, kiasi kilicholipwa, na kilichobaki. Uzuri Living inakusaidia kufuatilia biashara bila kuchanganya daftari.
 
 CTA:
 
@@ -109,7 +109,7 @@ Headline:
 
 Body:
 
-> Tengeneza order ya bidhaa na ujumbe tayari kutuma WhatsApp kwa supplier. DukaPilot ni mfumo wa duka kwenye simu.
+> Tengeneza order ya bidhaa na ujumbe tayari kutuma WhatsApp kwa supplier. Uzuri Living ni mfumo wa duka kwenye simu.
 
 CTA:
 
@@ -137,7 +137,7 @@ Headline:
 
 Body:
 
-> Uliza kuhusu mauzo, stock na madeni. DukaPilot inakupa hatua za kuchukua leo kwa Kiswahili.
+> Uliza kuhusu mauzo, stock na madeni. Uzuri Living inakupa hatua za kuchukua leo kwa Kiswahili.
 
 CTA:
 
@@ -155,7 +155,7 @@ Body:
 
 CTA:
 
-> Ongea na DukaPilot.
+> Ongea na Uzuri Living.
 
 ### Ad 9: M-Pesa Hook
 
@@ -179,7 +179,7 @@ Headline:
 
 Body:
 
-> Ongeza bidhaa 10, rekodi mauzo 10, na rudi siku ya pili. DukaPilot inakuongoza hatua kwa hatua.
+> Ongeza bidhaa 10, rekodi mauzo 10, na rudi siku ya pili. Uzuri Living inakuongoza hatua kwa hatua.
 
 CTA:
 
@@ -189,16 +189,16 @@ CTA:
 
 Editable SVG files:
 
-- `marketing/ad-creatives/dukapilot-stock-profit-square.svg`
-- `marketing/ad-creatives/dukapilot-daftari-phone-story.svg`
-- `marketing/ad-creatives/dukapilot-debts-square.svg`
-- `marketing/ad-creatives/dukapilot-supplier-order-square.svg`
-- `marketing/ad-creatives/dukapilot-low-stock-story.svg`
-- `marketing/ad-creatives/dukapilot-sales-pos-square.svg`
-- `marketing/ad-creatives/dukapilot-ai-assistant-square.svg`
-- `marketing/ad-creatives/dukapilot-expenses-square.svg`
-- `marketing/ad-creatives/dukapilot-mpesa-story.svg`
-- `marketing/ad-creatives/dukapilot-setup-story.svg`
+- `marketing/ad-creatives/uzuriliving-stock-profit-square.svg`
+- `marketing/ad-creatives/uzuriliving-daftari-phone-story.svg`
+- `marketing/ad-creatives/uzuriliving-debts-square.svg`
+- `marketing/ad-creatives/uzuriliving-supplier-order-square.svg`
+- `marketing/ad-creatives/uzuriliving-low-stock-story.svg`
+- `marketing/ad-creatives/uzuriliving-sales-pos-square.svg`
+- `marketing/ad-creatives/uzuriliving-ai-assistant-square.svg`
+- `marketing/ad-creatives/uzuriliving-expenses-square.svg`
+- `marketing/ad-creatives/uzuriliving-mpesa-story.svg`
+- `marketing/ad-creatives/uzuriliving-setup-story.svg`
 
 Ready-to-share exports:
 
@@ -228,7 +228,7 @@ Storyboard:
 
 1. 0-3s: Show notebook or blank paper.
    - Text: `Unajua faida ya leo?`
-2. 3-7s: Open DukaPilot dashboard.
+2. 3-7s: Open Uzuri Living dashboard.
    - Text: `Mauzo, stock na faida sehemu moja.`
 3. 7-11s: Show sales/POS entry.
    - Text: `Rekodi mauzo kwa sekunde chache.`
@@ -241,7 +241,7 @@ Storyboard:
 
 Voiceover:
 
-> Unaendesha duka kwa daftari? DukaPilot hukusaidia kuona stock, mauzo, madeni na faida kwenye simu. Ni Kiswahili, unaanza bure siku 14. Tuma WhatsApp tupange setup ya duka lako.
+> Unaendesha duka kwa daftari? Uzuri Living hukusaidia kuona stock, mauzo, madeni na faida kwenye simu. Ni Kiswahili, unaanza bure siku 14. Tuma WhatsApp tupange setup ya duka lako.
 
 Caption:
 

@@ -1,26 +1,26 @@
 {
-  "packageId": "com.dukapilot.app",
-  "host": "www.dukapilot.com",
-  "name": "DukaPilot",
-  "launcherName": "DukaPilot",
+  "packageId": "com.uzuriliving.app",
+  "host": "www.uzuriliving.com",
+  "name": "Uzuri Living",
+  "launcherName": "Uzuri Living",
   "display": "standalone",
-  "themeColor": "#16a34a",
-  "themeColorDark": "#166534",
-  "navigationColor": "#166534",
-  "navigationColorDark": "#166534",
-  "navigationDividerColor": "#166534",
-  "navigationDividerColorDark": "#166534",
-  "backgroundColor": "#166534",
+  "themeColor": "#e99400",
+  "themeColorDark": "#102a43",
+  "navigationColor": "#102a43",
+  "navigationColorDark": "#102a43",
+  "navigationDividerColor": "#102a43",
+  "navigationDividerColorDark": "#102a43",
+  "backgroundColor": "#102a43",
   "enableNotifications": false,
   "enableSiteSettingsShortcut": true,
   "startUrl": "/",
-  "iconUrl": "https://www.dukapilot.com/logo/dukapilot-icon-512.png",
-  "maskableIconUrl": "https://www.dukapilot.com/logo/dukapilot-icon-512.png",
-  "monochromeIconUrl": "https://www.dukapilot.com/logo/dukapilot-icon-512.png",
+  "iconUrl": "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
+  "maskableIconUrl": "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
+  "monochromeIconUrl": "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
-    "path": "keystores/dukapilot-upload.jks",
-    "alias": "dukapilot"
+    "path": "keystores/uzuriliving-upload.jks",
+    "alias": "uzuriliving"
   },
   "appVersion": "1.0.4",
   "appVersionCode": 5,
@@ -28,24 +28,24 @@
     {
       "name": "Record sale",
       "short_name": "Sale",
-      "url": "https://www.dukapilot.com/sales?shortcut=sale",
+      "url": "https://www.uzuriliving.com/sales?shortcut=sale",
       "icon": "shortcut_sale"
     },
     {
       "name": "Inventory",
       "short_name": "Stock",
-      "url": "https://www.dukapilot.com/inventory?shortcut=inventory",
+      "url": "https://www.uzuriliving.com/inventory?shortcut=inventory",
       "icon": "shortcut_inventory"
     },
     {
       "name": "Customer debts",
       "short_name": "Debts",
-      "url": "https://www.dukapilot.com/debts?shortcut=debts",
+      "url": "https://www.uzuriliving.com/debts?shortcut=debts",
       "icon": "shortcut_debts"
     }
   ],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://www.dukapilot.com/manifest.json",
+  "webManifestUrl": "https://www.uzuriliving.com/manifest.json",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {

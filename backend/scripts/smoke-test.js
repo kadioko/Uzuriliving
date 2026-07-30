@@ -1,4 +1,4 @@
-const PROD_BASE_URL = process.env.SMOKE_BASE_URL || "https://dukapilotproduction.up.railway.app";
+const PROD_BASE_URL = process.env.SMOKE_BASE_URL || "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api";
 const LOGIN_PHONE = process.env.SMOKE_TEST_PHONE || "+255700000003";
 const LOGIN_PIN = process.env.SMOKE_TEST_PIN || "1234";
 const INVALID_PHONE = "not-a-phone";
@@ -31,7 +31,7 @@ async function run() {
   const health = await request("/health");
   assert(health.response.ok, `Healthcheck failed: ${health.response.status}`);
   assert(health.payload?.status === "ok", "Healthcheck payload did not include status=ok");
-  console.log("✓ Healthcheck passed");
+  console.log("âœ“ Healthcheck passed");
 
   const login = await request("/api/auth/login", {
     method: "POST",
@@ -40,21 +40,21 @@ async function run() {
   });
   assert(login.response.ok, `Login failed: ${login.response.status} ${JSON.stringify(login.payload)}`);
   const sessionCookie = cookieHeaderFrom(login.response);
-  assert(sessionCookie.includes("dukapilot_token="), "Login response did not include an access cookie");
-  console.log("✓ Login passed");
+  assert(sessionCookie.includes("uzuriliving_token="), "Login response did not include an access cookie");
+  console.log("âœ“ Login passed");
 
   const me = await request("/api/auth/me", {
     headers: { Cookie: sessionCookie },
   });
   assert(me.response.ok, `Auth /me failed: ${me.response.status} ${JSON.stringify(me.payload)}`);
   assert(me.payload?.user?.phone === LOGIN_PHONE, "Auth /me returned an unexpected user");
-  console.log("✓ Authenticated /me passed");
+  console.log("âœ“ Authenticated /me passed");
 
   const invalid = await request("/api/auth/me", {
     headers: { Authorization: "Bearer definitely-invalid-token" },
   });
   assert(invalid.response.status === 401, `Invalid token check expected 401, got ${invalid.response.status}`);
-  console.log("✓ Invalid token handling passed");
+  console.log("âœ“ Invalid token handling passed");
 
   const invalidLogin = await request("/api/auth/login", {
     method: "POST",
@@ -65,7 +65,7 @@ async function run() {
     invalidLogin.response.status === 400 || invalidLogin.response.status === 401,
     `Invalid login negative-path expected 400 or 401, got ${invalidLogin.response.status}`
   );
-  console.log("✓ Auth negative-path check passed");
+  console.log("âœ“ Auth negative-path check passed");
 
   const invalidSales = await request("/api/sales", {
     method: "POST",
@@ -76,7 +76,7 @@ async function run() {
     body: JSON.stringify({ items: [] }),
   });
   assert([400, 402, 403].includes(invalidSales.response.status), `Invalid sale payload expected a controlled 4xx response, got ${invalidSales.response.status}`);
-  console.log("✓ Sale validation failure passed");
+  console.log("âœ“ Sale validation failure passed");
 
   const invalidStock = await request("/api/stock/adjust", {
     method: "POST",
@@ -87,7 +87,7 @@ async function run() {
     body: JSON.stringify({ productId: "", type: "BAD", quantity: 0 }),
   });
   assert([400, 402, 403].includes(invalidStock.response.status), `Invalid stock payload expected a controlled 4xx response, got ${invalidStock.response.status}`);
-  console.log("✓ Stock validation failure passed");
+  console.log("âœ“ Stock validation failure passed");
 
   const invalidSupplier = await request("/api/suppliers", {
     method: "POST",
@@ -98,7 +98,7 @@ async function run() {
     body: JSON.stringify({ name: "", phone: "" }),
   });
   assert([400, 402, 403].includes(invalidSupplier.response.status), `Invalid supplier payload expected a controlled 4xx response, got ${invalidSupplier.response.status}`);
-  console.log("✓ Supplier validation failure passed");
+  console.log("âœ“ Supplier validation failure passed");
 
   console.log("Smoke test completed successfully.");
 }

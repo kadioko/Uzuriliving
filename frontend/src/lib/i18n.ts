@@ -1,5 +1,5 @@
 /**
- * DukaPilot Translations
+ * Uzuri Living Translations
  * sw = Kiswahili (default)
  * en = English
  */
@@ -8,7 +8,7 @@ import { useSyncExternalStore } from "react";
 
 export type Lang = "sw" | "en";
 
-const STORAGE_KEY = "dukapilot_language";
+const STORAGE_KEY = "uzuriliving_language";
 const LEGACY_STORAGE_KEY = "dukaos_language";
 const listeners = new Set<() => void>();
 
@@ -210,9 +210,9 @@ const translations: Record<string, Record<Lang, string>> = {
   "auth.error.invalidCredentials": { sw: "Nambari ya simu au PIN si sahihi. Jaribu tena.", en: "Invalid phone number or PIN. Please try again." },
   "auth.error.sessionExpired": { sw: "Muda wa sesi yako umeisha. Tafadhali ingia tena.", en: "Your session expired. Please sign in again." },
   "auth.error.rateLimited": { sw: "Umejaribu mara nyingi sana. Tafadhali subiri dakika chache kabla ya kujaribu tena.", en: "Too many attempts. Please wait a few minutes before trying again." },
-  "auth.error.serverOffline": { sw: "Imeshindikana kufikia seva ya DukaPilot. Hakikisha API URL ni sahihi na backend ipo hewani.", en: "Unable to reach the DukaPilot server. Confirm the API URL is correct and the backend is online." },
-  "auth.error.unexpectedResponse": { sw: "Seva ya DukaPilot imerudisha majibu yasiyotegemewa.", en: "The DukaPilot server returned an unexpected response format." },
-  "billing.subscriptionRequired": { sw: "Jaribio au usajili umeisha. Wasiliana WhatsApp +255743910580 ili kuendelea kutumia DukaPilot.", en: "Your trial or subscription has expired. Contact WhatsApp +255743910580 to continue using DukaPilot." },
+  "auth.error.serverOffline": { sw: "Imeshindikana kufikia seva ya Uzuri Living. Hakikisha API URL ni sahihi na backend ipo hewani.", en: "Unable to reach the Uzuri Living server. Confirm the API URL is correct and the backend is online." },
+  "auth.error.unexpectedResponse": { sw: "Seva ya Uzuri Living imerudisha majibu yasiyotegemewa.", en: "The Uzuri Living server returned an unexpected response format." },
+  "billing.subscriptionRequired": { sw: "Jaribio au usajili umeisha. Wasiliana WhatsApp +255743910580 ili kuendelea kutumia Uzuri Living.", en: "Your trial or subscription has expired. Contact WhatsApp +255743910580 to continue using Uzuri Living." },
 
   "common.save": { sw: "Hifadhi", en: "Save" },
   "common.cancel": { sw: "Ghairi", en: "Cancel" },

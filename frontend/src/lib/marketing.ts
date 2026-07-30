@@ -6,8 +6,8 @@ type Attribution = {
   sessionId: string;
 };
 
-const ATTRIBUTION_KEY = "dukapilot_marketing_attribution";
-const SESSION_KEY = "dukapilot_marketing_session";
+const ATTRIBUTION_KEY = "uzuriliving_marketing_attribution";
+const SESSION_KEY = "uzuriliving_marketing_session";
 const MAX_VALUE_LENGTH = 120;
 
 function clean(value: string | null): string | null {

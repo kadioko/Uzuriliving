@@ -125,14 +125,14 @@ export default function ReportsPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => handleExport("/exports/sales.csv", "dukapilot-sales.csv")}
+                onClick={() => handleExport("/exports/sales.csv", "uzuriliving-sales.csv")}
                 className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white hover:bg-brand-700"
               >
                 <Download className="h-4 w-4" /> {lang === "sw" ? "Sales CSV" : "Sales CSV"}
               </button>
               <button
                 type="button"
-                onClick={() => handleExport("/exports/inventory.csv", "dukapilot-inventory.csv")}
+                onClick={() => handleExport("/exports/inventory.csv", "uzuriliving-inventory.csv")}
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 hover:border-brand-300 hover:text-brand-700"
               >
                 <Download className="h-4 w-4" /> {lang === "sw" ? "Inventory CSV" : "Inventory CSV"}

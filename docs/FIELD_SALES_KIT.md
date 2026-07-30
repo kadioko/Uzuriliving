@@ -1,4 +1,4 @@
-# DukaPilot Field Sales Kit
+# Uzuri Living Field Sales Kit
 
 Use this one-page kit when visiting shops. Print it, keep it on your phone, or send it to anyone helping with field onboarding.
 
@@ -28,11 +28,11 @@ Best areas to start:
 
 Swahili:
 
-> Unaandika stock na mauzo kwenye daftari? DukaPilot inakusaidia kujua stock iliyobaki, faida ya leo, madeni ya wateja, na muda wa kuagiza bidhaa tena. Ni Kiswahili, inatumika kwenye simu, na unaweza kujaribu bure siku 14.
+> Unaandika stock na mauzo kwenye daftari? Uzuri Living inakusaidia kujua stock iliyobaki, faida ya leo, madeni ya wateja, na muda wa kuagiza bidhaa tena. Ni Kiswahili, inatumika kwenye simu, na unaweza kujaribu bure siku 14.
 
 English:
 
-> If you track sales and stock in a notebook, DukaPilot helps you see remaining stock, today's profit, customer debts, and when to reorder. It works on your phone, supports Swahili, and starts with a 14-day free trial.
+> If you track sales and stock in a notebook, Uzuri Living helps you see remaining stock, today's profit, customer debts, and when to reorder. It works on your phone, supports Swahili, and starts with a 14-day free trial.
 
 ## Discovery Questions
 
@@ -50,7 +50,7 @@ Ask these before demoing:
 
 Do not show every feature. Show the workflow that matches the shop.
 
-1. Open DukaPilot on phone.
+1. Open Uzuri Living on phone.
 2. Show dashboard summary.
 3. Add or show one product with buying price, selling price, stock, and low-stock threshold.
 4. Record one sale.
@@ -76,7 +76,7 @@ During first setup:
 - Add one debt example if they sell on credit.
 - Add one supplier if they reorder by WhatsApp.
 - Show catalog link if customers order remotely.
-- Save owner on WhatsApp with `DukaPilot - <Shop Name>`.
+- Save owner on WhatsApp with `Uzuri Living - <Shop Name>`.
 - Schedule day-3 follow-up.
 
 ## Close
@@ -94,7 +94,7 @@ Payment close after trial:
 | Objection | Response |
 | --- | --- |
 | "Sina muda." | "Tutachukua bidhaa 10 tu kwanza. Baada ya hapo unaendelea taratibu." |
-| "Natumia daftari." | "Daftari linaendelea, DukaPilot inakuonyesha stock, faida na madeni haraka." |
+| "Natumia daftari." | "Daftari linaendelea, Uzuri Living inakuonyesha stock, faida na madeni haraka." |
 | "Sijui kutumia app." | "Ni Kiswahili na setup ya kwanza tunafanya pamoja." |
 | "Nitajaribu baadaye." | "Sawa. Nitakutumia WhatsApp link, lakini ni rahisi zaidi tukianza na bidhaa 10 sasa." |
 | "Bei ni kubwa." | "Jaribio ni bure siku 14. Ukiiona inakusaidia ndio unaamua." |
@@ -129,5 +129,5 @@ Day 10:
 
 ## WhatsApp Follow-Up Template
 
-> Habari <Name>, hapa ni DukaPilot. Leo lengo ni kumalizia setup ya <Shop Name>: bidhaa 10, mauzo 10, na kurudi siku ya pili. Nikusaidie hatua gani sasa?
+> Habari <Name>, hapa ni Uzuri Living. Leo lengo ni kumalizia setup ya <Shop Name>: bidhaa 10, mauzo 10, na kurudi siku ya pili. Nikusaidie hatua gani sasa?
 

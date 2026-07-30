@@ -1,15 +1,15 @@
-# DukaPilot Email Setup
+# Uzuri Living Email Setup
 
-DukaPilot uses two email services on `dukapilot.com`:
+Uzuri Living uses two email services on `uzuriliving.com`:
 
 - **Mailtrap** handles outbound email from the app, such as transactional messages.
-- **ImprovMX** handles inbound forwarding, such as people emailing `support@dukapilot.com`.
+- **ImprovMX** handles inbound forwarding, such as people emailing `support@uzuriliving.com`.
 
 These do not conflict because outbound sending and inbound receiving use different DNS record types and different runtime paths.
 
 ## DNS Records
 
-DNS is managed in Vercel because `dukapilot.com` is a Vercel domain.
+DNS is managed in Vercel because `uzuriliving.com` is a Vercel domain.
 
 ### Inbound: ImprovMX
 
@@ -29,7 +29,7 @@ Keep the Mailtrap DKIM CNAME records from the Mailtrap dashboard. Current expect
 | `CNAME` | `rwmt1._domainkey` | `rwmt1.dkim.smtp.mailtrap.live` |
 | `CNAME` | `rwmt2._domainkey` | `rwmt2.dkim.smtp.mailtrap.live` |
 
-Keep DMARC on `_dmarc.dukapilot.com`. Start with `p=none` while monitoring reports, then move to stricter policy only after outbound sending is stable.
+Keep DMARC on `_dmarc.uzuriliving.com`. Start with `p=none` while monitoring reports, then move to stricter policy only after outbound sending is stable.
 
 ### SPF: One Combined Record Only
 
@@ -43,19 +43,19 @@ v=spf1 include:spf.improvmx.com include:_spf.mailtrap.io ~all
 
 This keeps ImprovMX authorized for its forwarding flow and Mailtrap authorized for outbound app email.
 
-## Railway Environment
+## Supabase Environment
 
-Set these on the backend service in Railway:
+Set these on the backend service in Supabase:
 
 ```text
-MAIL_FROM="DukaPilot <noreply@dukapilot.com>"
-MAIL_REPLY_TO=support@dukapilot.com
+MAIL_FROM="Uzuri Living <noreply@uzuriliving.com>"
+MAIL_REPLY_TO=support@uzuriliving.com
 MAILTRAP_API_TOKEN=<from Mailtrap>
 MAILTRAP_SMTP_HOST=live.smtp.mailtrap.io
 MAILTRAP_SMTP_PORT=587
 MAILTRAP_SMTP_USER=<from Mailtrap>
 MAILTRAP_SMTP_PASS=<from Mailtrap>
-SUPPORT_EMAIL=support@dukapilot.com
+SUPPORT_EMAIL=support@uzuriliving.com
 ```
 
 Use either Mailtrap API credentials or SMTP credentials, depending on the implementation path used by the app feature.
@@ -81,7 +81,7 @@ The checker verifies:
 
 Use:
 
-- `support@dukapilot.com` for public contact and replies.
-- `noreply@dukapilot.com` for automated app mail.
+- `support@uzuriliving.com` for public contact and replies.
+- `noreply@uzuriliving.com` for automated app mail.
 - ImprovMX dashboard for inbound forwarding destinations.
 - Mailtrap dashboard for outbound sending health, logs, and domain compliance.

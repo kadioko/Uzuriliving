@@ -1,6 +1,6 @@
-# Changelog — DukaPilot
+# Changelog â€” Uzuri Living
 
-All notable changes to DukaPilot are documented here.
+All notable changes to Uzuri Living are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
@@ -52,7 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Converted all money storage to whole TZS integers, removing floating-point drift from sales, debts, expenses, orders, products, and subscriptions.
-- Replaced direct `X-Forwarded-For` rate-limit parsing with Railway proxy-aware `req.ip` handling.
+- Replaced direct `X-Forwarded-For` rate-limit parsing with Supabase proxy-aware `req.ip` handling.
 - Removed browser-stored access tokens and added Content Security Policy, permissions, referrer, and content-type headers.
 - Rebuilt the mobile homepage navigation as a compact menu drawer and added a visible catalog H1 for accessibility and SEO.
 - Updated compatible production dependencies and resolved reported production `npm audit` advisories.
@@ -104,18 +104,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.2.0] — 2026-06-08 — DukaPilot Rebrand & Operations
+## [1.2.0] â€” 2026-06-08 â€” Uzuri Living Rebrand & Operations
 
 ### Added
 
-- Rebranded product, package names, logo asset, manifest, and public pages to **DukaPilot**.
+- Rebranded product, package names, logo asset, manifest, and public pages to **Uzuri Living**.
 - Added public `/about`, `/terms`, and `/privacy` pages with English/Swahili switching.
 - Added public `/contact`, `/help`, and `/demo` pages.
 - Added `/onboarding` as a five-step merchant setup checklist after registration.
 - Added debt tracking with automatic debt creation for credit sales and payment status tracking.
 - Added expense tracking by category.
 - Added staff role management with PIN login and backend permission enforcement for selling, stock, staff, and reports.
-- Added `/assistant` as the DukaPilot AI Assistant positioning and ranked recommendation surface.
+- Added `/assistant` as the Uzuri Living AI Assistant positioning and ranked recommendation surface.
 - Added `npm run monitor:prod` for production health, CORS, catalog, login, dashboard, and stale API URL checks.
 - Added manual subscription payment records, admin plan activation controls, shop suspension, and mutation-level subscription enforcement.
 - Added merchant `/billing` page with M-Pesa payment instructions, payment reference submission through support reports, and WhatsApp handoff.
@@ -132,99 +132,99 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Improved AI Assistant into a daily command list with expected impact and a WhatsApp-style owner summary.
 - Improved onboarding into a tracked setup checklist including staff setup.
 - Improved public trust pages with payment/support/offline/demo guidance.
-- Updated production API defaults to `https://dukapilotproduction.up.railway.app/api`.
-- Allowed `https://www.dukapilot.com`, `https://dukapilot.com`, and the Vercel fallback URL in backend CORS.
-- Bumped the service-worker cache to `dukapilot-v2` and stopped precaching `/` so stale login code does not persist after deploys.
+- Updated production API defaults to `https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api`.
+- Allowed `https://www.uzuriliving.com`, `https://uzuriliving.com`, and the Vercel fallback URL in backend CORS.
+- Bumped the service-worker cache to `uzuriliving-v2` and stopped precaching `/` so stale login code does not persist after deploys.
 - Updated express-rate-limit key generation to use the IPv6-safe helper.
 
 ---
 
-## [1.1.0] — 2026-05-28 — Stability & Infrastructure Hardening
+## [1.1.0] â€” 2026-05-28 â€” Stability & Infrastructure Hardening
 
 ### Fixed
 
-#### Backend — Express 5 error propagation
+#### Backend â€” Express 5 error propagation
 
 - All async controller functions in `sale`, `order`, `supplier`, `stock`, `dashboard`, `export`, `admin`, and `product` controllers were missing `asyncHandler` wrapping. Unhandled promise rejections now correctly propagate to the Express 5 error handler instead of crashing workers.
-- `auth.controller.js` — `verifyOtp()` throws synchronously; it was not caught inside `asyncHandler`. Now wrapped in a `try/catch` that returns HTTP 400 instead of falling through to a 500.
+- `auth.controller.js` â€” `verifyOtp()` throws synchronously; it was not caught inside `asyncHandler`. Now wrapped in a `try/catch` that returns HTTP 400 instead of falling through to a 500.
 
-#### Backend — Migration startup
+#### Backend â€” Migration startup
 
-- `scripts/migrate-and-start.js` — previously swallowed all migration errors silently. Now distinguishes "schema already current" (non-fatal, logs and continues) from unexpected failures (fatal — calls `process.exit(1)` so Railway restarts rather than serving with a stale schema).
+- `scripts/migrate-and-start.js` â€” previously swallowed all migration errors silently. Now distinguishes "schema already current" (non-fatal, logs and continues) from unexpected failures (fatal â€” calls `process.exit(1)` so Supabase restarts rather than serving with a stale schema).
 
 ### Changed
 
-#### Backend — Infrastructure
+#### Backend â€” Infrastructure
 
 - `Dockerfile` upgraded from `node:20` to `node:24-alpine`.
 - Added `postgresql-client` to the Docker image (required by `scripts/backup.js` for `pg_dump`).
 - Added explicit `COPY prisma.config.js ./` step so Prisma 7 CLI can find the datasource config inside the container.
 
-#### Backend — Prisma config
+#### Backend â€” Prisma config
 
 - Removed duplicate `backend/prisma/prisma.config.js`. The canonical config is `backend/prisma.config.js` (the project root relative to the `backend/` working directory), which is where Prisma 7 CLI looks via c12/jiti.
 
-#### Frontend — Tailwind 4
+#### Frontend â€” Tailwind 4
 
-- Deleted `frontend/tailwind.config.ts` — Tailwind CSS 4 uses CSS `@theme` directives only; a JS config file is unused and misleading.
+- Deleted `frontend/tailwind.config.ts` â€” Tailwind CSS 4 uses CSS `@theme` directives only; a JS config file is unused and misleading.
 
-#### Frontend — TypeScript 6
+#### Frontend â€” TypeScript 6
 
-- Removed `"ignoreDeprecations": "6.0"` from `frontend/tsconfig.json` — no longer needed after TypeScript 6 migration is complete.
+- Removed `"ignoreDeprecations": "6.0"` from `frontend/tsconfig.json` â€” no longer needed after TypeScript 6 migration is complete.
 
 ### Added
 
-#### Frontend — Sentry server-side init
+#### Frontend â€” Sentry server-side init
 
-- Added `frontend/src/instrumentation.ts` — required for `sentry.server.config.ts` to be loaded in Next.js 16. Without this file Sentry server-side error tracking was silently inactive.
+- Added `frontend/src/instrumentation.ts` â€” required for `sentry.server.config.ts` to be loaded in Next.js 16. Without this file Sentry server-side error tracking was silently inactive.
 
 #### Config
 
-- `backend/.env.example` — documented `DATABASE_MIGRATE_URL` (public TCP proxy URL used by `migrate-and-start.js`).
-- `frontend/.env.example` — created with `NEXT_PUBLIC_API_URL`, Sentry DSN vars, and app name.
-- Both `package.json` files — added `"engines": { "node": ">=20" }`.
+- `backend/.env.example` â€” documented `DATABASE_MIGRATE_URL` (public TCP proxy URL used by `migrate-and-start.js`).
+- `frontend/.env.example` â€” created with `NEXT_PUBLIC_API_URL`, Sentry DSN vars, and app name.
+- Both `package.json` files â€” added `"engines": { "node": ">=20" }`.
 
 ---
 
-## [1.0.0] — 2026-05-26 — Go-Live Sprint
+## [1.0.0] â€” 2026-05-26 â€” Go-Live Sprint
 
-### Added — 1.0.0
+### Added â€” 1.0.0
 
 #### Security & Authentication
 
-- **OTP PIN recovery** — "Forgot PIN?" on login screen sends a 6-digit SMS code via Africa's Talking; user sets new PIN after verification.
-- **Short-lived JWT (1h) + refresh token (30d)** — access tokens now expire in 1 hour; frontend silently refreshes via the secure `dukapilot_refresh` cookie; `/api/auth/refresh` endpoint added.
-- **Logout endpoint** — `POST /api/auth/logout` clears both auth cookies.
-- **Change PIN from settings** — authenticated users can change PIN by providing current PIN + new PIN via `PATCH /api/settings/pin`.
-- **Admin PIN reset** — admins can look up any user by phone and reset their PIN via `PATCH /api/admin/users/:id/reset-pin`; all resets are audit-logged.
-- **Public catalog rate limiting** — `/api/public/*` routes now have a separate limiter (30 req / 15 min per IP).
-- **`/status` endpoint** — richer than `/health`; includes DB ping latency, uptime seconds, version, and environment.
+- **OTP PIN recovery** â€” "Forgot PIN?" on login screen sends a 6-digit SMS code via Africa's Talking; user sets new PIN after verification.
+- **Short-lived JWT (1h) + refresh token (30d)** â€” access tokens now expire in 1 hour; frontend silently refreshes via the secure `uzuriliving_refresh` cookie; `/api/auth/refresh` endpoint added.
+- **Logout endpoint** â€” `POST /api/auth/logout` clears both auth cookies.
+- **Change PIN from settings** â€” authenticated users can change PIN by providing current PIN + new PIN via `PATCH /api/settings/pin`.
+- **Admin PIN reset** â€” admins can look up any user by phone and reset their PIN via `PATCH /api/admin/users/:id/reset-pin`; all resets are audit-logged.
+- **Public catalog rate limiting** â€” `/api/public/*` routes now have a separate limiter (30 req / 15 min per IP).
+- **`/status` endpoint** â€” richer than `/health`; includes DB ping latency, uptime seconds, version, and environment.
 
 #### Product Features
 
-- **Settings page** (`/settings`) — merchants can update shop name, city, district, category, display name, language, and PIN from one place.
-- **Customer orders view** (`/orders/customers`) — merchants see all inbound customer orders from their public shop catalog with status management (Confirm → Dispatch → Deliver / Cancel).
-- **CustomerOrder stock deduction** — confirming a customer order decrements inventory; cancelling a CONFIRMED order releases stock back.
-- **Registration form improvements** — registration now collects shop city, district, and category.
-- **Admin dashboard UI** (`/admin`) — system overview stats, user list, PIN reset tool, and audit log viewer.
-- **Africa's Talking OTP service** — full SMS OTP integration; falls back to console logging in dev when `AT_API_KEY` is not set.
+- **Settings page** (`/settings`) â€” merchants can update shop name, city, district, category, display name, language, and PIN from one place.
+- **Customer orders view** (`/orders/customers`) â€” merchants see all inbound customer orders from their public shop catalog with status management (Confirm â†’ Dispatch â†’ Deliver / Cancel).
+- **CustomerOrder stock deduction** â€” confirming a customer order decrements inventory; cancelling a CONFIRMED order releases stock back.
+- **Registration form improvements** â€” registration now collects shop city, district, and category.
+- **Admin dashboard UI** (`/admin`) â€” system overview stats, user list, PIN reset tool, and audit log viewer.
+- **Africa's Talking OTP service** â€” full SMS OTP integration; falls back to console logging in dev when `AT_API_KEY` is not set.
 
 #### Reliability & DevOps
 
-- **pg_dump backup script** (`backend/scripts/backup.js`) — runs `pg_dump | gzip`, retains configurable number of days, scheduled via cron or Railway cron service.
-- **Sentry error tracking** — backend `@sentry/node`; frontend `@sentry/nextjs`; both are no-ops when DSN env vars are not set.
+- **pg_dump backup script** (`backend/scripts/backup.js`) â€” runs `pg_dump | gzip`, retains configurable number of days, scheduled via cron or Supabase cron service.
+- **Sentry error tracking** â€” backend `@sentry/node`; frontend `@sentry/nextjs`; both are no-ops when DSN env vars are not set.
 - **`normalizeBaseUrl`** in frontend API client strips trailing newlines from `NEXT_PUBLIC_API_URL`.
 
-### Changed — 1.0.0
+### Changed â€” 1.0.0
 
 - JWT access token expiry changed from 30 days to 1 hour (with refresh token for transparent re-auth).
-- `dukapilot_token` cookie now holds short-lived access token; new `dukapilot_refresh` cookie added for 30-day refresh.
+- `uzuriliving_token` cookie now holds short-lived access token; new `uzuriliving_refresh` cookie added for 30-day refresh.
 
 ---
 
-## [0.9.0] — Pre-Launch
+## [0.9.0] â€” Pre-Launch
 
-### Added — 0.9.0
+### Added â€” 0.9.0
 
 - Customer orders & public shop catalog (B2B2C channel)
 - Wholesale pricing tier (retail / wholesale per product)

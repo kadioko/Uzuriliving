@@ -1,4 +1,4 @@
-# DukaPilot Outreach Messages
+# Uzuri Living Outreach Messages
 
 Use these for early founder-led outreach. Personalize the first line before sending.
 
@@ -6,21 +6,21 @@ Use these for early founder-led outreach. Personalize the first line before send
 
 Habari [Shop Name],
 
-Nimeona duka lenu mtandaoni. Naitwa [Your Name], natengeneza DukaPilot - mfumo wa duka kwenye simu kwa Kiswahili.
+Nimeona duka lenu mtandaoni. Naitwa [Your Name], natengeneza Uzuri Living - mfumo wa duka kwenye simu kwa Kiswahili.
 
-DukaPilot inasaidia kufuatilia stock, mauzo, madeni, matumizi na order za supplier. Tunasaidia pia kufanya setup ya mwanzo.
+Uzuri Living inasaidia kufuatilia stock, mauzo, madeni, matumizi na order za supplier. Tunasaidia pia kufanya setup ya mwanzo.
 
 Kwa sasa tunatafuta maduka machache Tanzania ya kujaribu bure siku 14.
 
 Je, mna muda dakika 10 nikuonyeshe jinsi inavyoweza kusaidia duka lenu?
 
-Link: https://www.dukapilot.com/
+Link: https://www.uzuriliving.com/
 
 ## WhatsApp Message - More Direct
 
 Habari [Shop Name],
 
-Nimeona mnafanya biashara ya [shop type]. DukaPilot inaweza kusaidia kuona:
+Nimeona mnafanya biashara ya [shop type]. Uzuri Living inaweza kusaidia kuona:
 
 - stock iliyobaki
 - mauzo ya siku
@@ -34,7 +34,7 @@ Tunaweza kupanga demo fupi leo au kesho?
 
 ## WhatsApp Follow-Up - 2 Days Later
 
-Habari [Name/Shop Name], nafuatilia tu ujumbe wangu kuhusu DukaPilot.
+Habari [Name/Shop Name], nafuatilia tu ujumbe wangu kuhusu Uzuri Living.
 
 Kama bado mnatumia daftari au WhatsApp kufuatilia stock na mauzo, tunaweza kuwasaidia kuanza na bidhaa 10 na mauzo 10 ya kwanza.
 
@@ -46,21 +46,21 @@ Ni saa gani nzuri nikuonyeshe demo fupi?
 
 Habari [Shop Name], hii ni follow-up yangu ya mwisho kwa sasa.
 
-Kama mtahitaji mfumo rahisi wa stock, mauzo, madeni na supplier orders kwa Kiswahili, DukaPilot iko hapa:
+Kama mtahitaji mfumo rahisi wa stock, mauzo, madeni na supplier orders kwa Kiswahili, Uzuri Living iko hapa:
 
-https://www.dukapilot.com/
+https://www.uzuriliving.com/
 
 WhatsApp: +255 743 910 580
 
 ## Email - First Touch
 
-Subject: DukaPilot for [Shop Name]
+Subject: Uzuri Living for [Shop Name]
 
 Hello [Name/Team],
 
-I found [Shop Name] online and thought DukaPilot could be useful for your shop operations.
+I found [Shop Name] online and thought Uzuri Living could be useful for your shop operations.
 
-DukaPilot is a Kiswahili-first shop management app for Tanzanian merchants. It helps shop owners track stock, sales, customer debts, expenses, supplier orders, and daily business performance from a phone.
+Uzuri Living is a Kiswahili-first shop management app for Tanzanian merchants. It helps shop owners track stock, sales, customer debts, expenses, supplier orders, and daily business performance from a phone.
 
 We are onboarding the first shops with guided setup and a 14-day free trial. The first setup goal is simple:
 
@@ -70,7 +70,7 @@ We are onboarding the first shops with guided setup and a 14-day free trial. The
 
 Would you be open to a 10-minute WhatsApp demo this week?
 
-Website: https://www.dukapilot.com/
+Website: https://www.uzuriliving.com/
 WhatsApp: +255 743 910 580
 
 Best,
@@ -82,15 +82,15 @@ Subject: Mfumo rahisi wa stock na mauzo kwa [Shop Name]
 
 Habari [Name/Team],
 
-Nimeona [Shop Name] mtandaoni na ningependa kuwatambulisha DukaPilot.
+Nimeona [Shop Name] mtandaoni na ningependa kuwatambulisha Uzuri Living.
 
-DukaPilot ni mfumo wa duka kwenye simu unaosaidia kufuatilia stock, mauzo, madeni, matumizi na order za supplier kwa Kiswahili.
+Uzuri Living ni mfumo wa duka kwenye simu unaosaidia kufuatilia stock, mauzo, madeni, matumizi na order za supplier kwa Kiswahili.
 
 Kwa maduka ya mwanzo tunatoa guided setup na jaribio bure siku 14. Lengo la kwanza ni rahisi: bidhaa 10, mauzo 10, na kurudi kutumia app siku ya pili.
 
 Je, tunaweza kupanga demo fupi ya dakika 10 wiki hii?
 
-Website: https://www.dukapilot.com/
+Website: https://www.uzuriliving.com/
 WhatsApp: +255 743 910 580
 
 Asante,
@@ -98,13 +98,13 @@ Asante,
 
 ## Email Follow-Up
 
-Subject: Re: DukaPilot for [Shop Name]
+Subject: Re: Uzuri Living for [Shop Name]
 
 Hello [Name/Team],
 
 Quick follow-up in case this got buried.
 
-DukaPilot is built for shops that want a clearer view of stock, sales, debts, expenses, and reordering without relying only on notebooks and memory.
+Uzuri Living is built for shops that want a clearer view of stock, sales, debts, expenses, and reordering without relying only on notebooks and memory.
 
 Happy to show a quick demo over WhatsApp. If it is not useful, no pressure.
 

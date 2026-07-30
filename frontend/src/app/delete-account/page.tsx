@@ -9,14 +9,14 @@ export default function DeleteAccountPage() {
 
   const steps = lang === "sw"
     ? [
-        "Tuma ombi lako kupitia support@dukapilot.com au WhatsApp +255 743 910 580.",
-        "Tumia nambari ya simu ya akaunti yako ya DukaPilot na jina la duka ili tukuthibitishe.",
+        "Tuma ombi lako kupitia support@uzuriliving.com au WhatsApp +255 743 910 580.",
+        "Tumia nambari ya simu ya akaunti yako ya Uzuri Living na jina la duka ili tukuthibitishe.",
         "Andika kama unataka kufuta akaunti yote, duka lote, au sehemu fulani ya data.",
         "Tutathibitisha ombi na kukamilisha ufutaji ndani ya siku 30, isipokuwa data inayotakiwa kuhifadhiwa kisheria au kwa usalama.",
       ]
     : [
-        "Send your request to support@dukapilot.com or WhatsApp +255 743 910 580.",
-        "Include the phone number on your DukaPilot account and your shop name so we can verify you.",
+        "Send your request to support@uzuriliving.com or WhatsApp +255 743 910 580.",
+        "Include the phone number on your Uzuri Living account and your shop name so we can verify you.",
         "Tell us whether you want the full account deleted, the full shop deleted, or only certain data deleted.",
         "We will verify the request and complete deletion within 30 days, except for data we must keep for legal, security, or fraud-prevention reasons.",
       ];
@@ -55,19 +55,19 @@ export default function DeleteAccountPage() {
             <Trash2 className="h-6 w-6" />
           </div>
           <h1 className="mt-5 max-w-3xl text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-            {lang === "sw" ? "Futa akaunti yako ya DukaPilot" : "Delete your DukaPilot account"}
+            {lang === "sw" ? "Futa akaunti yako ya Uzuri Living" : "Delete your Uzuri Living account"}
           </h1>
           <p className="mt-4 max-w-3xl text-sm leading-6 text-gray-600 sm:text-base">
             {lang === "sw"
-              ? "Ukurasa huu unaeleza jinsi ya kuomba kufuta akaunti yako na data inayohusiana na DukaPilot."
-              : "This page explains how to request deletion of your DukaPilot account and associated data."}
+              ? "Ukurasa huu unaeleza jinsi ya kuomba kufuta akaunti yako na data inayohusiana na Uzuri Living."
+              : "This page explains how to request deletion of your Uzuri Living account and associated data."}
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <a href="mailto:support@dukapilot.com?subject=Delete%20my%20DukaPilot%20account" className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-5 py-3 text-sm font-bold text-white hover:bg-brand-800">
+            <a href="mailto:support@uzuriliving.com?subject=Delete%20my%20Uzuri%20Living%20account" className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-700 px-5 py-3 text-sm font-bold text-white hover:bg-brand-800">
               <Mail className="h-4 w-4" />
-              support@dukapilot.com
+              support@uzuriliving.com
             </a>
-            <a href="https://wa.me/255743910580?text=Hello%20DukaPilot%2C%20I%20want%20to%20request%20account%20or%20data%20deletion." className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-800 hover:border-brand-300 hover:text-brand-800">
+            <a href="https://wa.me/255743910580?text=Hello%20Uzuri%20Living%2C%20I%20want%20to%20request%20account%20or%20data%20deletion." className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-800 hover:border-brand-300 hover:text-brand-800">
               <MessageCircle className="h-4 w-4" />
               WhatsApp +255 743 910 580
             </a>
@@ -117,8 +117,8 @@ export default function DeleteAccountPage() {
           <h2 className="text-lg font-bold text-gray-950">{lang === "sw" ? "Ufutaji wa sehemu ya data" : "Partial data deletion"}</h2>
           <p className="mt-3 text-sm leading-6 text-gray-600">
             {lang === "sw"
-              ? "Unaweza kuomba kufuta baadhi ya data bila kufuta akaunti yote, kama bidhaa, staff, madeni, matumizi, maagizo, au catalog. Tuma ombi hilo kwa support@dukapilot.com au WhatsApp na ueleze data unayotaka ifutwe."
-              : "You can request deletion of some data without deleting the full account, such as products, staff, debts, expenses, orders, or catalog data. Send the request to support@dukapilot.com or WhatsApp and describe the data you want deleted."}
+              ? "Unaweza kuomba kufuta baadhi ya data bila kufuta akaunti yote, kama bidhaa, staff, madeni, matumizi, maagizo, au catalog. Tuma ombi hilo kwa support@uzuriliving.com au WhatsApp na ueleze data unayotaka ifutwe."
+              : "You can request deletion of some data without deleting the full account, such as products, staff, debts, expenses, orders, or catalog data. Send the request to support@uzuriliving.com or WhatsApp and describe the data you want deleted."}
           </p>
         </section>
       </div>

@@ -25,7 +25,7 @@ function requireActiveSubscription(req, res, next) {
       return res.status(402).json({
         error: "Subscription required",
         code: "SUBSCRIPTION_REQUIRED",
-        message: "Your DukaPilot trial or subscription has expired. Contact support on WhatsApp to reactivate your shop.",
+        message: "Your Uzuri Living trial or subscription has expired. Contact support on WhatsApp to reactivate your shop.",
         whatsapp: "https://wa.me/255743910580",
       });
     })

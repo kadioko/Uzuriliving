@@ -1,7 +1,7 @@
 const rateLimit = require("express-rate-limit");
 const { ipKeyGenerator } = rateLimit;
 
-// Express resolves req.ip through the single trusted Railway proxy configured
+// Express resolves req.ip through the single trusted Supabase proxy configured
 // in app.js. Reading X-Forwarded-For directly lets callers spoof rate keys.
 function getClientKey(req) {
   return ipKeyGenerator(req.ip || req.socket?.remoteAddress || "unknown");

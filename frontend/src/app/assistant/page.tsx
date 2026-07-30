@@ -75,8 +75,8 @@ export default function AssistantPage() {
 
   async function copyOwnerSummary() {
     const message = lang === "sw"
-      ? `DukaPilot leo: ${ownerSummary}`
-      : `DukaPilot today: ${ownerSummary}`;
+      ? `Uzuri Living leo: ${ownerSummary}`
+      : `Uzuri Living today: ${ownerSummary}`;
     await navigator.clipboard?.writeText(message);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2200);
@@ -110,7 +110,7 @@ export default function AssistantPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-950">
-                  <TextReveal text="DukaPilot AI Assistant" fontSize="inherit" hoverColor="#15803d" />
+                  <TextReveal text="Uzuri Living AI Assistant" fontSize="inherit" hoverColor="#15803d" />
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600">
                   {lang === "sw"
@@ -149,7 +149,7 @@ export default function AssistantPage() {
             <div>
               <h2 className="font-semibold text-gray-950">{lang === "sw" ? "Orodha ya leo" : "Today's command list"}</h2>
               <p className="mt-1 text-sm text-gray-500">
-                {lang === "sw" ? "DukaPilot inapanga hatua muhimu kwanza." : "DukaPilot ranks the most useful next action first."}
+                {lang === "sw" ? "Uzuri Living inapanga hatua muhimu kwanza." : "Uzuri Living ranks the most useful next action first."}
               </p>
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                 <div className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
@@ -455,8 +455,8 @@ function buildRecommendations({
 function buildOwnerSummary(recommendations: Recommendation[], lang: "sw" | "en") {
   if (recommendations.length === 0) {
     return lang === "sw"
-      ? "Ongeza bidhaa na mauzo machache ili DukaPilot itoe hatua za leo."
-      : "Add a few products and sales so DukaPilot can produce today's actions.";
+      ? "Ongeza bidhaa na mauzo machache ili Uzuri Living itoe hatua za leo."
+      : "Add a few products and sales so Uzuri Living can produce today's actions.";
   }
 
   return recommendations

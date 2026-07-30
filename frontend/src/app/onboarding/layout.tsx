@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "DukaPilot Onboarding - Set Up Your Shop, Products, Staff, and Catalog",
+  title: "Uzuri Living Onboarding - Set Up Your Shop, Products, Staff, and Catalog",
   description:
-    "Start DukaPilot with a guided shop setup checklist: shop details, first products, staff, first sale, catalog link, pricing, and billing support.",
+    "Start Uzuri Living with a guided shop setup checklist: shop details, first products, staff, first sale, catalog link, pricing, and billing support.",
   keywords: [
-    "DukaPilot onboarding",
+    "Uzuri Living onboarding",
     "set up shop POS Tanzania",
     "duka setup Tanzania",
     "inventory app onboarding",
@@ -15,12 +15,12 @@ export const metadata: Metadata = {
     canonical: "/onboarding",
   },
   openGraph: {
-    title: "Start with DukaPilot",
+    title: "Start with Uzuri Living",
     description: "Follow a guided setup checklist for products, sales, staff, catalog, pricing, and billing.",
     url: "/onboarding",
-    siteName: "DukaPilot",
+    siteName: "Uzuri Living",
     type: "website",
-    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "DukaPilot onboarding" }],
+    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "Uzuri Living onboarding" }],
   },
 };
 

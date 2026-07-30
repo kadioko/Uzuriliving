@@ -10,7 +10,7 @@ test("login page has no critical accessibility violations", async ({ page }) => 
 
 test("inventory page has no critical accessibility violations with mocked auth", async ({ page }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem("dukapilot_token", "playwright-merchant-token");
+    window.localStorage.setItem("uzuriliving_token", "playwright-merchant-token");
   });
 
   await page.route("**/api/auth/me", async (route) => {

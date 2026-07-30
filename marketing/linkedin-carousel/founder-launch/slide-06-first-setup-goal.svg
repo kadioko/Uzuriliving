@@ -1,16 +1,16 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#f8fafc"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" stroke="#bbf7d0" stroke-width="4"/>
-  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">DukaPilot</text>
+  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Uzuri Living</text>
   <text x="96" y="300" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">First setup goal</text>
-  <circle cx="148" cy="480" r="34" fill="#16a34a"/>
+  <circle cx="148" cy="480" r="34" fill="#e99400"/>
   <path d="m132 480 12 12 28-32" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="210" y="495" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">10 products</text>
-  <circle cx="148" cy="620" r="34" fill="#16a34a"/>
+  <circle cx="148" cy="620" r="34" fill="#e99400"/>
   <path d="m132 620 12 12 28-32" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="210" y="635" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">10 real sales</text>
-  <circle cx="148" cy="760" r="34" fill="#16a34a"/>
+  <circle cx="148" cy="760" r="34" fill="#e99400"/>
   <path d="m132 760 12 12 28-32" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="210" y="775" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Second-day return</text>
-  <text x="96" y="936" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">Activation starts with real shop activity.</text>
+  <text x="96" y="936" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">Activation starts with real shop activity.</text>
 </svg>

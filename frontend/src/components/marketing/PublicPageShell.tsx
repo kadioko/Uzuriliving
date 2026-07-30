@@ -18,7 +18,7 @@ export default function PublicPageShell({ children }: { children: React.ReactNod
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href="/" className="flex items-center gap-3">
             <LogoMark className="h-9 w-9 rounded-xl shadow-sm" />
-            <span className="text-sm font-bold tracking-tight text-gray-950">DukaPilot</span>
+            <span className="text-sm font-bold tracking-tight text-gray-950">Uzuri Living</span>
           </Link>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <nav className="hidden items-center gap-3 text-sm font-medium text-gray-600 sm:flex">

@@ -1,12 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
-  async rewrites() {
-    return [{
-      source: "/_api/:path*",
-      destination: "https://dukapilotproduction.up.railway.app/api/:path*",
-    }];
-  },
   async headers() {
     const contentSecurityPolicy = [
       "default-src 'self'",
@@ -17,7 +11,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' https://dukapilotproduction.up.railway.app https://*.sentry.io https://*.ingest.sentry.io",
+      "connect-src 'self' https://ryadgenkvhgxjdyhbyqc.supabase.co https://*.sentry.io https://*.ingest.sentry.io",
       "worker-src 'self' blob:",
       "manifest-src 'self'",
       "upgrade-insecure-requests",

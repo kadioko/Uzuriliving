@@ -301,8 +301,8 @@ export default function InventoryPage() {
           <div className="mb-4 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-brand-900">
             <p className="font-semibold">
               {assistantAction === "restock"
-                ? (lang === "sw" ? "DukaPilot imekufungua kwenye bidhaa ya kuagiza tena." : "DukaPilot opened the product that needs restocking.")
-                : (lang === "sw" ? "DukaPilot imekufungua kwenye bidhaa ya kupromote." : "DukaPilot opened the product to promote.")}
+                ? (lang === "sw" ? "Uzuri Living imekufungua kwenye bidhaa ya kuagiza tena." : "Uzuri Living opened the product that needs restocking.")
+                : (lang === "sw" ? "Uzuri Living imekufungua kwenye bidhaa ya kupromote." : "Uzuri Living opened the product to promote.")}
             </p>
             <p className="mt-1 text-xs text-brand-700">
               {assistantAction === "restock"
@@ -487,7 +487,7 @@ export default function InventoryPage() {
             <div className="space-y-2 rounded-lg border border-gray-200 p-3">
               <div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wide text-gray-600">Barcode</p><button onClick={() => setBarcodeScannerOpen(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700"><ScanLine className="h-4 w-4" />Scan</button></div>
               <input value={form.barcode} disabled={form.generateBarcode} onChange={(e) => setForm({ ...form, barcode: e.target.value.toUpperCase() })} placeholder="EAN, UPC, or DP00000001" className={INPUT} />
-              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.generateBarcode} onChange={(e) => setForm({ ...form, generateBarcode: e.target.checked, barcode: e.target.checked ? "" : form.barcode })} />Generate DukaPilot barcode</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.generateBarcode} onChange={(e) => setForm({ ...form, generateBarcode: e.target.checked, barcode: e.target.checked ? "" : form.barcode })} />Generate Uzuri Living barcode</label>
               {form.barcode && <BarcodeLabel value={form.barcode} name={form.name || "Product"} price={form.sellingPrice ? formatTZS(Number(form.sellingPrice)) : undefined} className="max-w-[240px] border" />}
             </div>
             <div className="grid grid-cols-2 gap-3">

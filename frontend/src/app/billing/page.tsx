@@ -41,7 +41,7 @@ const paymentOptions = [
     id: "SEND_MONEY",
     title: "Send Money",
     value: "0743910580",
-    name: "DukaPilot support",
+    name: "Uzuri Living support",
   },
 ];
 
@@ -92,7 +92,7 @@ export default function BillingPage() {
   }
 
   const selectedPaymentOption = paymentOptions.find((item) => item.id === paymentOption) || paymentOptions[0];
-  const waText = encodeURIComponent(`DukaPilot payment\nPlan: ${plan}\nAmount: ${formatTZS(selectedPlan.amount)}\nPaid via: ${selectedPaymentOption.title} ${selectedPaymentOption.value}\nReference: ${reference || "(nitaweka baada ya kulipa)"}`);
+  const waText = encodeURIComponent(`Uzuri Living payment\nPlan: ${plan}\nAmount: ${formatTZS(selectedPlan.amount)}\nPaid via: ${selectedPaymentOption.title} ${selectedPaymentOption.value}\nReference: ${reference || "(nitaweka baada ya kulipa)"}`);
   const reminderCopy: Record<string, string> = {
     DUE_7_DAYS: lang === "sw" ? "Plan yako inaisha ndani ya siku 7. Lipa mapema ili huduma isiingiliwe." : "Your plan ends in 7 days. Pay early to avoid interruption.",
     DUE_3_DAYS: lang === "sw" ? "Plan yako inaisha ndani ya siku 3. Tuma malipo na reference." : "Your plan ends in 3 days. Send payment and submit the reference.",

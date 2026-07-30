@@ -57,7 +57,7 @@ export default function HelpPage() {
             : "Quick answers for setup, catalog links, staff, offline sales, payments, and the AI assistant. If you get stuck, WhatsApp support is close."}
           primaryCta={{ href: "/contact", label: lang === "sw" ? "Ongea na support" : "Talk to support" }}
           secondaryCta={{
-            href: "https://wa.me/255743910580?text=Nahitaji%20msaada%20wa%20DukaPilot",
+            href: "https://wa.me/255743910580?text=Nahitaji%20msaada%20wa%20Uzuri%20Living",
             label: "WhatsApp support",
           }}
           features={walkthrough.map(([title, body]) => ({ title, description: body }))}
@@ -89,7 +89,7 @@ export default function HelpPage() {
         <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
           <Search className="h-5 w-5 flex-shrink-0 text-gray-400" />
           <p className="text-sm text-gray-600">
-            {lang === "sw" ? "Maswali muhimu zaidi ya DukaPilot yapo hapa chini." : "The most important DukaPilot questions are answered below."}
+            {lang === "sw" ? "Maswali muhimu zaidi ya Uzuri Living yapo hapa chini." : "The most important Uzuri Living questions are answered below."}
           </p>
         </div>
 
@@ -114,7 +114,7 @@ export default function HelpPage() {
               <Sparkles className="h-6 w-6 text-brand-100" />
               <h2 className="mt-4 text-2xl font-black tracking-tight">
                 <TextReveal
-                  text={lang === "sw" ? "Jinsi DukaPilot AI inavyofikiri" : "How DukaPilot AI thinks"}
+                  text={lang === "sw" ? "Jinsi Uzuri Living AI inavyofikiri" : "How Uzuri Living AI thinks"}
                   fontSize="inherit"
                   hoverColor="#bbf7d0"
                 />
@@ -152,7 +152,7 @@ export default function HelpPage() {
         </div>
         <div className="flex flex-col gap-3 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-xl text-sm leading-6 text-gray-600">
-            {lang === "sw" ? "Bado unahitaji msaada? Tupo tayari kukusaidia kuifanya DukaPilot iwe tayari kwa duka lako." : "Still need help? We are ready to help make DukaPilot work for your shop."}
+            {lang === "sw" ? "Bado unahitaji msaada? Tupo tayari kukusaidia kuifanya Uzuri Living iwe tayari kwa duka lako." : "Still need help? We are ready to help make Uzuri Living work for your shop."}
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
           <Link href="/contact" className="inline-flex items-center justify-center rounded-xl bg-brand-700 px-5 py-3 text-sm font-bold text-white hover:bg-brand-800">

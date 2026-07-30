@@ -41,7 +41,7 @@ function requireFeature(feature) {
         error: "Pro plan required",
         code: "PLAN_UPGRADE_REQUIRED",
         feature,
-        message: "This feature is available on DukaPilot Pro. Upgrade your plan or contact support.",
+        message: "This feature is available on Uzuri Living Pro. Upgrade your plan or contact support.",
         whatsapp: "https://wa.me/255743910580",
       });
     } catch (error) {

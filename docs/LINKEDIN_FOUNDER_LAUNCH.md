@@ -1,14 +1,14 @@
-# DukaPilot Founder LinkedIn Launch Kit
+# Uzuri Living Founder LinkedIn Launch Kit
 
-Use this when posting about DukaPilot from the founder account. The goal is to explain the mission clearly, invite real shop owners and partners into the story, and drive warm WhatsApp conversations.
+Use this when posting about Uzuri Living from the founder account. The goal is to explain the mission clearly, invite real shop owners and partners into the story, and drive warm WhatsApp conversations.
 
 ## Main Founder Post
 
-I built DukaPilot for the shop owners who still run serious businesses through notebooks, WhatsApp messages, memory, and daily hustle.
+I built Uzuri Living for the shop owners who still run serious businesses through notebooks, WhatsApp messages, memory, and daily hustle.
 
 In many small shops, the owner knows something is wrong only after stock is finished, a customer debt is forgotten, or the day ends without a clear view of profit.
 
-DukaPilot is a merchant operating system for Tanzanian shops.
+Uzuri Living is a merchant operating system for Tanzanian shops.
 
 It helps a shop owner:
 
@@ -20,7 +20,7 @@ It helps a shop owner:
 - See daily business performance
 - Use the app in Kiswahili
 
-The product is live at https://www.dukapilot.com/
+The product is live at https://www.uzuriliving.com/
 
 We are starting with a simple promise:
 
@@ -30,13 +30,13 @@ For the first shops, we are offering guided setup and a 14-day free trial. The a
 
 If you run a shop in Tanzania, supply shops, work with SMEs, or know someone who owns a duka, I would love to talk.
 
-WhatsApp: https://wa.me/255743910580?text=Habari%20DukaPilot%2C%20nimeona%20LinkedIn%20post%20na%20nataka%20kujua%20zaidi.%20Aina%20ya%20duka%3A%20
+WhatsApp: https://wa.me/255743910580?text=Habari%20Uzuri%20Living%2C%20nimeona%20LinkedIn%20post%20na%20nataka%20kujua%20zaidi.%20Aina%20ya%20duka%3A%20
 
 We are building from the ground, one real shop at a time.
 
 ## Short Founder Post
 
-DukaPilot is live.
+Uzuri Living is live.
 
 It is a POS and inventory app for Tanzanian shop owners who want to track stock, sales, debts, expenses, and supplier orders from their phone.
 
@@ -46,10 +46,10 @@ We are onboarding the first shops with guided setup and a 14-day free trial.
 
 If you own a shop, supply shops, or know a merchant who still uses notebooks to track stock and sales, send them this:
 
-https://www.dukapilot.com/
+https://www.uzuriliving.com/
 
 WhatsApp setup:
-https://wa.me/255743910580?text=Habari%20DukaPilot%2C%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20
+https://wa.me/255743910580?text=Habari%20Uzuri%20Living%2C%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20
 
 ## Customer Discovery Post
 
@@ -66,17 +66,17 @@ Is it:
 - Ordering from suppliers?
 - Understanding what happened this week?
 
-We are building DukaPilot to help shop owners manage stock, sales, debts, expenses, and supplier orders from their phone, in Kiswahili.
+We are building Uzuri Living to help shop owners manage stock, sales, debts, expenses, and supplier orders from their phone, in Kiswahili.
 
 I would love honest feedback from merchants, suppliers, accountants, field sales teams, and SME operators.
 
-Product: https://www.dukapilot.com/
+Product: https://www.uzuriliving.com/
 
 ## LinkedIn Carousel Outline
 
 Slide 1:
 
-> DukaPilot is live
+> Uzuri Living is live
 
 Slide 2:
 
@@ -88,7 +88,7 @@ Slide 3:
 
 Slide 4:
 
-> DukaPilot helps shop owners track stock, sales, debts, expenses, and supplier orders.
+> Uzuri Living helps shop owners track stock, sales, debts, expenses, and supplier orders.
 
 Slide 5:
 
@@ -100,7 +100,7 @@ Slide 6:
 
 Slide 7:
 
-> Know a shop owner? Send them to dukapilot.com or WhatsApp us.
+> Know a shop owner? Send them to uzuriliving.com or WhatsApp us.
 
 Slide 8:
 
@@ -110,7 +110,7 @@ Slide 8:
 
 For an image or screenshot upload:
 
-> DukaPilot turns daily shop activity into a clear view of stock, sales, debts, expenses, and next actions.
+> Uzuri Living turns daily shop activity into a clear view of stock, sales, debts, expenses, and next actions.
 
 ## Hashtags
 
@@ -122,11 +122,11 @@ Use 3-5 only:
 - #Fintech
 - #SmallBusiness
 - #Kiswahili
-- #DukaPilot
+- #Uzuri Living
 
 ## Founder Comment To Pin
 
 If you know a shop owner in Tanzania who tracks sales or stock in a notebook, send them this setup link:
 
-https://wa.me/255743910580?text=Habari%20DukaPilot%2C%20nimeletwa%20na%20LinkedIn%20na%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20
+https://wa.me/255743910580?text=Habari%20Uzuri%20Living%2C%20nimeletwa%20na%20LinkedIn%20na%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20
 

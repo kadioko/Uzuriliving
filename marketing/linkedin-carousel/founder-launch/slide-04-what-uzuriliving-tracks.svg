@@ -1,12 +1,12 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#ecfdf5"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" stroke="#bbf7d0" stroke-width="4"/>
-  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">DukaPilot</text>
-  <text x="96" y="285" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="74" font-weight="900">DukaPilot helps</text>
+  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Uzuri Living</text>
+  <text x="96" y="285" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="74" font-weight="900">Uzuri Living helps</text>
   <text x="96" y="370" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="74" font-weight="900">shop owners track:</text>
-  <rect x="96" y="495" width="396" height="82" rx="24" fill="#16a34a"/>
+  <rect x="96" y="495" width="396" height="82" rx="24" fill="#e99400"/>
   <text x="136" y="548" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="900">Stock</text>
-  <rect x="548" y="495" width="396" height="82" rx="24" fill="#16a34a"/>
+  <rect x="548" y="495" width="396" height="82" rx="24" fill="#e99400"/>
   <text x="588" y="548" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="900">Sales</text>
   <rect x="96" y="620" width="396" height="82" rx="24" fill="#14532d"/>
   <text x="136" y="673" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="900">Debts</text>
@@ -14,5 +14,5 @@
   <text x="588" y="673" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="900">Expenses</text>
   <rect x="96" y="745" width="848" height="82" rx="24" fill="#052e16"/>
   <text x="136" y="798" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="900">Supplier orders</text>
-  <text x="96" y="936" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">The daily shop picture, in one place.</text>
+  <text x="96" y="936" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">The daily shop picture, in one place.</text>
 </svg>

@@ -1,26 +1,14 @@
 {
-  "name": "DukaPilot",
-  "short_name": "DukaPilot",
+  "name": "Uzuri Living",
+  "short_name": "Uzuri Living",
   "description": "Merchant OS for Tanzania",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#166534",
-  "theme_color": "#16a34a",
+  "background_color": "#102a43",
+  "theme_color": "#e99400",
   "icons": [
     {
-      "src": "/logo/dukapilot-icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/logo/dukapilot-icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/logo/dukapilot-logo.svg",
+      "src": "/logo/uzuriliving-logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

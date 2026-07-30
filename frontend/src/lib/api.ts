@@ -1,24 +1,19 @@
 import { t, type Lang } from "@/lib/i18n";
 
-const PROD_API_URL = "https://dukapilotproduction.up.railway.app/api";
-const BROWSER_API_PATH = "/_api";
+const PROD_API_URL = "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api";
 const REQUEST_TIMEOUT_MS = 20000;
 
 function normalizeBaseUrl(url: string): string {
   const normalized = url.trim().replace(/\n/g, "").replace(/\/$/, "");
-  const staleHost = ["dukaos", "production.up.railway.app"].join("-");
-  return normalized.includes(staleHost) ? PROD_API_URL : normalized;
+  return normalized;
 }
 
 function getBaseUrl(): string {
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
-    return BROWSER_API_PATH;
-  }
-
   if (process.env.NEXT_PUBLIC_API_URL) {
     return normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL);
   }
 
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") return PROD_API_URL;
   return normalizeBaseUrl("http://localhost:4000/api");
 }
 
@@ -37,11 +32,11 @@ export function getFriendlyErrorMessage(message: string, lang: Lang): string {
     return t("auth.error.rateLimited", lang);
   }
 
-  if (normalized === "Unable to reach the DukaPilot server. Confirm the API URL is correct and the backend is online.") {
+  if (normalized === "Unable to reach the Uzuri Living server. Confirm the API URL is correct and the backend is online.") {
     return t("auth.error.serverOffline", lang);
   }
 
-  if (normalized === "The DukaPilot server returned an unexpected response format.") {
+  if (normalized === "The Uzuri Living server returned an unexpected response format.") {
     return t("auth.error.unexpectedResponse", lang);
   }
 
@@ -49,8 +44,8 @@ export function getFriendlyErrorMessage(message: string, lang: Lang): string {
     return t("billing.subscriptionRequired", lang);
   }
 
-  if (normalized === "Pro plan required" || normalized === "PLAN_UPGRADE_REQUIRED" || normalized.includes("requires DukaPilot Pro")) {
-    return lang === "sw" ? "Sehemu hii inahitaji mpango wa DukaPilot Pro." : "This feature requires the DukaPilot Pro plan.";
+  if (normalized === "Pro plan required" || normalized === "PLAN_UPGRADE_REQUIRED" || normalized.includes("requires Uzuri Living Pro")) {
+    return lang === "sw" ? "Sehemu hii inahitaji mpango wa Uzuri Living Pro." : "This feature requires the Uzuri Living Pro plan.";
   }
 
   return normalized;
@@ -107,7 +102,7 @@ async function request<T>(
   try {
     res = await fetch(`${baseUrl}${path}`, { ...options, headers, credentials: "include", signal: controller.signal });
   } catch {
-    throw new Error("Unable to reach the DukaPilot server. Confirm the API URL is correct and the backend is online.");
+    throw new Error("Unable to reach the Uzuri Living server. Confirm the API URL is correct and the backend is online.");
   } finally {
     clearTimeout(timeoutId);
   }
@@ -141,7 +136,7 @@ async function request<T>(
   }
 
   if (!isJson) {
-    throw new Error("The DukaPilot server returned an unexpected response format.");
+    throw new Error("The Uzuri Living server returned an unexpected response format.");
   }
 
   return payload as T;
@@ -184,8 +179,7 @@ export function setToken(_token?: string) {
 
 export function clearToken() {
   if (typeof window !== "undefined") {
-    localStorage.removeItem("dukapilot_token");
-    localStorage.removeItem("dukaos_token");
+    localStorage.removeItem("uzuriliving_token");
   }
 }
 

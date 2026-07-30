@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
 
 type Preferences = { lowStock: boolean; debtDue: boolean; subscriptionExpiry: boolean; dailyAssistant: boolean };
-const DEVICE_ID_KEY = "dukapilot_push_device_id";
+const DEVICE_ID_KEY = "uzuriliving_push_device_id";
 
 function deviceId() {
   let id = localStorage.getItem(DEVICE_ID_KEY);
@@ -121,7 +121,7 @@ export default function NotificationSettings({ owner }: { owner: boolean }) {
         </button>
       </div>
       {!supported && <p className="text-xs text-amber-700">{lang === "sw" ? "Browser hii haiungi mkono alerts za push." : "This browser does not support push alerts."}</p>}
-      {!configured && <p className="text-xs text-gray-500">{lang === "sw" ? "Push delivery itawashwa baada ya DukaPilot kusanidi huduma ya notifications." : "Push delivery will become available after DukaPilot configures the notification service."}</p>}
+      {!configured && <p className="text-xs text-gray-500">{lang === "sw" ? "Push delivery itawashwa baada ya Uzuri Living kusanidi huduma ya notifications." : "Push delivery will become available after Uzuri Living configures the notification service."}</p>}
       {message && <p className="flex items-center gap-1.5 text-xs text-brand-700"><Check className="h-3.5 w-3.5" />{message}</p>}
       {owner && preferences && <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
         {labels.map(([key, en, sw]) => <label key={key} className="flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-sm text-gray-700">

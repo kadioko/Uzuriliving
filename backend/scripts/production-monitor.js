@@ -1,8 +1,7 @@
-const FRONTEND_URL = (process.env.MONITOR_FRONTEND_URL || "https://www.dukapilot.com").replace(/\/$/, "");
-const API_URL = (process.env.MONITOR_API_URL || "https://dukapilotproduction.up.railway.app").replace(/\/$/, "");
+const FRONTEND_URL = (process.env.MONITOR_FRONTEND_URL || "https://www.uzuriliving.com").replace(/\/$/, "");
+const API_URL = (process.env.MONITOR_API_URL || "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api").replace(/\/$/, "");
 const LOGIN_PHONE = process.env.MONITOR_LOGIN_PHONE || "+255700000002";
 const LOGIN_PIN = process.env.MONITOR_LOGIN_PIN || "1234";
-const STALE_RAILWAY_API_HOST = ["dukaos", "production.up.railway.app"].join("-");
 
 async function request(url, options = {}) {
   const response = await fetch(url, options);
@@ -40,31 +39,27 @@ async function run() {
   await check("backend health", async () => {
     const { response, payload } = await request(`${API_URL}/health`);
     assert(response.ok, `expected 2xx, got ${response.status}`);
-    assert(payload.status === "ok" && payload.service === "DukaPilot API", "unexpected health payload");
+    assert(payload.status === "ok" && String(payload.service).includes("Uzuri Living"), "unexpected health payload");
   });
 
   await check("frontend shell", async () => {
     const { response, payload } = await request(`${FRONTEND_URL}/`);
     assert(response.ok, `expected 2xx, got ${response.status}`);
-    assert(String(payload).includes("DukaPilot"), "frontend shell missing DukaPilot");
-    assert(!String(payload).includes(STALE_RAILWAY_API_HOST), "frontend shell includes stale Railway API URL");
+    assert(String(payload).includes("Uzuri Living"), "frontend shell missing Uzuri Living");
   });
 
   await check("catalog load", async () => {
-    const [{ response: page }, { response: products, payload }, { response: proxiedProducts, payload: proxiedPayload }] = await Promise.all([
+    const [{ response: page }, { response: products, payload }] = await Promise.all([
       request(`${FRONTEND_URL}/catalog`),
-      request(`${API_URL}/api/public/products`),
-      request(`${FRONTEND_URL}/_api/public/products`),
+      request(`${API_URL}/public/products`),
     ]);
     assert(page.ok, `catalog page expected 2xx, got ${page.status}`);
     assert(products.ok, `public products expected 2xx, got ${products.status}`);
     assert(Array.isArray(payload.products), "public products payload missing products array");
-    assert(proxiedProducts.ok, `same-origin catalog proxy expected 2xx, got ${proxiedProducts.status}`);
-    assert(Array.isArray(proxiedPayload.products), "same-origin catalog proxy payload missing products array");
   });
 
   await check("CORS preflight", async () => {
-    const { response } = await request(`${API_URL}/api/public/products`, {
+    const { response } = await request(`${API_URL}/public/products`, {
       method: "OPTIONS",
       headers: {
         Origin: FRONTEND_URL,
@@ -77,18 +72,18 @@ async function run() {
 
   let sessionCookie = "";
   await check("login", async () => {
-    const { response, payload } = await request(`${API_URL}/api/auth/login`, {
+    const { response, payload } = await request(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Origin: FRONTEND_URL },
       body: JSON.stringify({ phone: LOGIN_PHONE, pin: LOGIN_PIN }),
     });
     assert(response.ok, `login expected 2xx, got ${response.status} ${JSON.stringify(payload)}`);
     sessionCookie = cookieHeaderFrom(response);
-    assert(sessionCookie.includes("dukapilot_token="), "login response missing secure access cookie");
+    assert(sessionCookie.includes("uzuriliving_token="), "login response missing secure access cookie");
   });
 
   await check("authenticated dashboard", async () => {
-    const { response, payload } = await request(`${API_URL}/api/dashboard?period=today`, {
+    const { response, payload } = await request(`${API_URL}/dashboard?period=today`, {
       headers: { Cookie: sessionCookie, Origin: FRONTEND_URL },
     });
     assert(response.ok, `dashboard expected 2xx, got ${response.status}`);
@@ -96,7 +91,7 @@ async function run() {
   });
 
   await check("failed API path stays controlled", async () => {
-    const { response, payload } = await request(`${API_URL}/api/auth/me`, {
+    const { response, payload } = await request(`${API_URL}/auth/me`, {
       headers: { Authorization: "Bearer invalid-token", Origin: FRONTEND_URL },
     });
     assert(response.status === 401, `expected 401, got ${response.status}`);

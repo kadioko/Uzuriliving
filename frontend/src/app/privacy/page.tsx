@@ -41,8 +41,8 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-semibold text-gray-950">{lang === "sw" ? "Kufuta akaunti na data" : "Account and data deletion"}</h2>
             <p className="mt-2 leading-7 text-gray-600">
               {lang === "sw"
-                ? "Unaweza kuomba kufuta akaunti yako ya DukaPilot au baadhi ya data yako kupitia ukurasa wetu wa ufutaji."
-                : "You can request deletion of your DukaPilot account or some of your data through our deletion request page."}
+                ? "Unaweza kuomba kufuta akaunti yako ya Uzuri Living au baadhi ya data yako kupitia ukurasa wetu wa ufutaji."
+                : "You can request deletion of your Uzuri Living account or some of your data through our deletion request page."}
             </p>
             <Link href="/delete-account" className="mt-4 inline-flex rounded-xl bg-brand-700 px-5 py-3 text-sm font-bold text-white hover:bg-brand-800">
               {lang === "sw" ? "Fungua ukurasa wa ufutaji" : "Open deletion request page"}

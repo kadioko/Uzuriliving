@@ -8,28 +8,28 @@ type Intent = "setup" | "pricing" | "demo" | "help" | "contact" | "about";
 
 const messages: Record<Intent, { sw: string; en: string }> = {
   setup: {
-    sw: "Habari DukaPilot, nataka setup ya duka langu. Aina ya duka: ",
-    en: "Hello DukaPilot, I want help setting up my shop. Shop type: ",
+    sw: "Habari Uzuri Living, nataka setup ya duka langu. Aina ya duka: ",
+    en: "Hello Uzuri Living, I want help setting up my shop. Shop type: ",
   },
   pricing: {
-    sw: "Habari DukaPilot, nataka kujua plan inayofaa duka langu. Aina ya duka: ",
-    en: "Hello DukaPilot, I want help choosing a plan for my shop. Shop type: ",
+    sw: "Habari Uzuri Living, nataka kujua plan inayofaa duka langu. Aina ya duka: ",
+    en: "Hello Uzuri Living, I want help choosing a plan for my shop. Shop type: ",
   },
   demo: {
-    sw: "Habari DukaPilot, nimeona demo na nataka setup ya duka langu. Aina ya duka: ",
-    en: "Hello DukaPilot, I saw the demo and want setup help. Shop type: ",
+    sw: "Habari Uzuri Living, nimeona demo na nataka setup ya duka langu. Aina ya duka: ",
+    en: "Hello Uzuri Living, I saw the demo and want setup help. Shop type: ",
   },
   help: {
-    sw: "Habari DukaPilot, nahitaji msaada. Swali langu ni: ",
-    en: "Hello DukaPilot, I need help. My question is: ",
+    sw: "Habari Uzuri Living, nahitaji msaada. Swali langu ni: ",
+    en: "Hello Uzuri Living, I need help. My question is: ",
   },
   contact: {
-    sw: "Habari DukaPilot, nataka kuongea kuhusu setup ya duka langu. Aina ya duka: ",
-    en: "Hello DukaPilot, I want to talk about setting up my shop. Shop type: ",
+    sw: "Habari Uzuri Living, nataka kuongea kuhusu setup ya duka langu. Aina ya duka: ",
+    en: "Hello Uzuri Living, I want to talk about setting up my shop. Shop type: ",
   },
   about: {
-    sw: "Habari DukaPilot, nataka kujua kama DukaPilot inafaa duka langu. Aina ya duka: ",
-    en: "Hello DukaPilot, I want to know if DukaPilot fits my shop. Shop type: ",
+    sw: "Habari Uzuri Living, nataka kujua kama Uzuri Living inafaa duka langu. Aina ya duka: ",
+    en: "Hello Uzuri Living, I want to know if Uzuri Living fits my shop. Shop type: ",
   },
 };
 

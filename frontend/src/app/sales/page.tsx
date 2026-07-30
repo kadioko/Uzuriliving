@@ -68,10 +68,10 @@ const PAYMENT_METHODS = [
   { value: "CREDIT", labelKey: "sales.credit", color: "orange" },
 ];
 
-const PENDING_SALES_KEY = "dukapilot_pending_sales";
-const SYNC_HISTORY_KEY = "dukapilot_sales_sync_history";
-const SYNC_DEVICE_KEY = "dukapilot_sync_device_id";
-const SYNC_DEVICE_LABEL_KEY = "dukapilot_sync_device_label";
+const PENDING_SALES_KEY = "uzuriliving_pending_sales";
+const SYNC_HISTORY_KEY = "uzuriliving_sales_sync_history";
+const SYNC_DEVICE_KEY = "uzuriliving_sync_device_id";
+const SYNC_DEVICE_LABEL_KEY = "uzuriliving_sync_device_label";
 
 function readPendingSales(): PendingSale[] {
   if (typeof window === "undefined") return [];
@@ -603,8 +603,8 @@ export default function SalesPage() {
                 <div className="mb-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-brand-900">
                   <p className="font-semibold">
                     {assistantIntent === "first-sale"
-                      ? (lang === "sw" ? "DukaPilot imekufungua kwenye sale ya kwanza ya leo." : "DukaPilot opened your first sale flow for today.")
-                      : (lang === "sw" ? "DukaPilot imekufungua kwenye POS." : "DukaPilot opened the POS for this action.")}
+                      ? (lang === "sw" ? "Uzuri Living imekufungua kwenye sale ya kwanza ya leo." : "Uzuri Living opened your first sale flow for today.")
+                      : (lang === "sw" ? "Uzuri Living imekufungua kwenye POS." : "Uzuri Living opened the POS for this action.")}
                   </p>
                   <p className="mt-1 text-xs text-brand-700">
                     {lang === "sw" ? "Chagua bidhaa, hakiki malipo, kisha bonyeza kamilisha." : "Pick products, confirm payment, then complete the sale."}
@@ -797,7 +797,7 @@ export default function SalesPage() {
             className="fixed bottom-3 left-4 right-4 z-20 flex min-h-14 items-center justify-between rounded-xl bg-gray-950 px-4 text-white shadow-xl lg:hidden"
           >
             <span className="flex items-center gap-2 text-sm font-semibold"><ShoppingCart className="h-4 w-4" />{cart.reduce((sum, item) => sum + item.quantity, 0)} {lang === "sw" ? "bidhaa" : "items"}</span>
-            <span className="text-sm font-bold">{formatTZS(total)} · {lang === "sw" ? "Fungua cart" : "View cart"}</span>
+            <span className="text-sm font-bold">{formatTZS(total)} Â· {lang === "sw" ? "Fungua cart" : "View cart"}</span>
           </button>
         )}
       </div>

@@ -1,14 +1,14 @@
 <shortcuts xmlns:android='http://schemas.android.com/apk/res/android'>
     <shortcut android:shortcutId='shortcut0' android:enabled='true' android:icon='@drawable/shortcut_sale' android:shortcutShortLabel='@string/shortcut_short_name_0' android:shortcutLongLabel='@string/shortcut_name_0'>
-        <intent android:action='android.intent.action.MAIN' android:targetPackage='com.dukapilot.app' android:targetClass='com.dukapilot.app.LauncherActivity' android:data='https://www.dukapilot.com/sales?shortcut=sale' />
+        <intent android:action='android.intent.action.MAIN' android:targetPackage='com.uzuriliving.app' android:targetClass='com.uzuriliving.app.LauncherActivity' android:data='https://www.uzuriliving.com/sales?shortcut=sale' />
         <categories android:name='android.intent.category.LAUNCHER' />
     </shortcut>
     <shortcut android:shortcutId='shortcut1' android:enabled='true' android:icon='@drawable/shortcut_inventory' android:shortcutShortLabel='@string/shortcut_short_name_1' android:shortcutLongLabel='@string/shortcut_name_1'>
-        <intent android:action='android.intent.action.MAIN' android:targetPackage='com.dukapilot.app' android:targetClass='com.dukapilot.app.LauncherActivity' android:data='https://www.dukapilot.com/inventory?shortcut=inventory' />
+        <intent android:action='android.intent.action.MAIN' android:targetPackage='com.uzuriliving.app' android:targetClass='com.uzuriliving.app.LauncherActivity' android:data='https://www.uzuriliving.com/inventory?shortcut=inventory' />
         <categories android:name='android.intent.category.LAUNCHER' />
     </shortcut>
     <shortcut android:shortcutId='shortcut2' android:enabled='true' android:icon='@drawable/shortcut_debts' android:shortcutShortLabel='@string/shortcut_short_name_2' android:shortcutLongLabel='@string/shortcut_name_2'>
-        <intent android:action='android.intent.action.MAIN' android:targetPackage='com.dukapilot.app' android:targetClass='com.dukapilot.app.LauncherActivity' android:data='https://www.dukapilot.com/debts?shortcut=debts' />
+        <intent android:action='android.intent.action.MAIN' android:targetPackage='com.uzuriliving.app' android:targetClass='com.uzuriliving.app.LauncherActivity' android:data='https://www.uzuriliving.com/debts?shortcut=debts' />
         <categories android:name='android.intent.category.LAUNCHER' />
     </shortcut>
 </shortcuts>

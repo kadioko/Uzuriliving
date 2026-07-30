@@ -1,12 +1,12 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#ecfdf5"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" stroke="#bbf7d0" stroke-width="4"/>
-  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">DukaPilot</text>
+  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Uzuri Living</text>
   <text x="96" y="315" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">Know a</text>
   <text x="96" y="405" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">shop owner?</text>
-  <text x="100" y="520" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="700">Send them to DukaPilot.</text>
-  <rect x="96" y="655" width="888" height="110" rx="30" fill="#16a34a"/>
-  <text x="150" y="725" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="900">dukapilot.com</text>
+  <text x="100" y="520" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="700">Send them to Uzuri Living.</text>
+  <rect x="96" y="655" width="888" height="110" rx="30" fill="#e99400"/>
+  <text x="150" y="725" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="900">uzuriliving.com</text>
   <rect x="96" y="805" width="888" height="110" rx="30" fill="#14532d"/>
   <text x="150" y="875" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="900">or WhatsApp us</text>
 </svg>

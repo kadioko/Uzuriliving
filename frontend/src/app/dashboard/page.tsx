@@ -120,7 +120,7 @@ export default function DashboardPage() {
             <div className="p-5 sm:p-6 lg:p-7">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-brand-700">DukaPilot</p>
+                  <p className="text-sm font-semibold text-brand-700">Uzuri Living</p>
                   <h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
                     {t("dashboard.title", lang)}
                   </h1>
@@ -401,7 +401,7 @@ export default function DashboardPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-800">{formatTZS(s.totalAmount)}</p>
                     <p className="text-xs text-gray-500">
-                      {paymentLabel(s.paymentMethod)} •{" "}
+                      {paymentLabel(s.paymentMethod)} â€¢{" "}
                       {new Date(s.createdAt).toLocaleTimeString(lang === "sw" ? "sw-TZ" : "en-US", { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>

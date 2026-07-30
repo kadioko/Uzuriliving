@@ -101,7 +101,7 @@ export default function DebtsPage() {
         {assistantPrefill && (
           <div className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-900">
             <p className="font-semibold">
-              {lang === "sw" ? "DukaPilot imejaza deni hili kwa ajili ya ufuatiliaji." : "DukaPilot prefilled this debt follow-up."}
+              {lang === "sw" ? "Uzuri Living imejaza deni hili kwa ajili ya ufuatiliaji." : "Uzuri Living prefilled this debt follow-up."}
             </p>
             <p className="mt-1 text-xs text-brand-700">
               {lang === "sw" ? "Hakiki taarifa, rekodi malipo, au tuma WhatsApp kwa mteja." : "Review the details, record a payment, or WhatsApp the customer."}

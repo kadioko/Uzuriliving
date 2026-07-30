@@ -61,8 +61,8 @@ export default function ExpensesPage() {
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p className="font-semibold">
               {assistantFocus === "profit"
-                ? (lang === "sw" ? "DukaPilot imekufungua kukagua matumizi dhidi ya faida." : "DukaPilot opened expenses so you can review profit pressure.")
-                : (lang === "sw" ? "DukaPilot imekufungua kwenye ukaguzi wa matumizi ya wiki." : "DukaPilot opened your weekly expense review.")}
+                ? (lang === "sw" ? "Uzuri Living imekufungua kukagua matumizi dhidi ya faida." : "Uzuri Living opened expenses so you can review profit pressure.")
+                : (lang === "sw" ? "Uzuri Living imekufungua kwenye ukaguzi wa matumizi ya wiki." : "Uzuri Living opened your weekly expense review.")}
             </p>
             <p className="mt-1 text-xs text-amber-800">
               {lang === "sw" ? "Angalia gharama kubwa, rekodi zilizokosekana, na matumizi yanayoweza kupunguzwa." : "Check large costs, missing records, and expenses that can be reduced."}

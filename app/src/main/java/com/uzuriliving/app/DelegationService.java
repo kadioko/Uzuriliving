@@ -1,4 +1,4 @@
-package com.dukapilot.app;
+package com.uzuriliving.app;
 
 
 

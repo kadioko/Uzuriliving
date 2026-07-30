@@ -1,5 +1,5 @@
 /**
- * DukaPilot — k6 Load Test
+ * Uzuri Living â€” k6 Load Test
  *
  * Tests the most critical production endpoints under realistic concurrent load.
  *
@@ -9,12 +9,12 @@
  *
  * Run:
  *   k6 run load-tests/k6.js
- *   k6 run --env BASE_URL=https://dukapilotproduction.up.railway.app load-tests/k6.js
+ *   k6 run --env BASE_URL=https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api load-tests/k6.js
  *
  * Stages:
- *   0 → 10 VUs over 30s  (ramp-up)
+ *   0 â†’ 10 VUs over 30s  (ramp-up)
  *   10 VUs for 1m        (sustained)
- *   10 → 0 over 15s      (ramp-down)
+ *   10 â†’ 0 over 15s      (ramp-down)
  *
  * Pass thresholds:
  *   - 95% of requests complete in < 800ms
@@ -25,14 +25,14 @@ import http from "k6/http";
 import { check, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
-// ── Config ──────────────────────────────────────────────────────────────────
+// â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const BASE_URL = __ENV.BASE_URL || "https://dukapilotproduction.up.railway.app";
+const BASE_URL = __ENV.BASE_URL || "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api";
 const MERCHANT_PHONE = __ENV.MERCHANT_PHONE || "+255700000002";
 const MERCHANT_PIN   = __ENV.MERCHANT_PIN   || "1234";
 const SUPPLIER_PHONE = __ENV.SUPPLIER_PHONE || "+255700000001";
 
-// ── Options ──────────────────────────────────────────────────────────────────
+// â”€â”€ Options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const options = {
   stages: [
@@ -50,7 +50,7 @@ export const options = {
   },
 };
 
-// ── Custom metrics ────────────────────────────────────────────────────────────
+// â”€â”€ Custom metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const loginDuration     = new Trend("login_duration",     true);
 const dashboardDuration = new Trend("dashboard_duration", true);
@@ -58,7 +58,7 @@ const productsDuration  = new Trend("products_duration",  true);
 const salesDuration     = new Trend("sales_duration",     true);
 const errorRate         = new Rate("errors");
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -80,7 +80,7 @@ function authHeaders(token) {
   return { Authorization: `Bearer ${token}`, ...JSON_HEADERS };
 }
 
-// ── Default scenario ──────────────────────────────────────────────────────────
+// â”€â”€ Default scenario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function () {
   // 1. Health check (no auth)
@@ -96,7 +96,7 @@ export default function () {
 
   sleep(0.5);
 
-  // 3. Dashboard — today, week, month
+  // 3. Dashboard â€” today, week, month
   for (const period of ["today", "week", "month"]) {
     const res = http.get(`${BASE_URL}/api/dashboard?period=${period}`, { headers });
     dashboardDuration.add(res.timings.duration);
@@ -172,23 +172,23 @@ export default function () {
   sleep(1);
 }
 
-// ── Teardown: summary ─────────────────────────────────────────────────────────
+// â”€â”€ Teardown: summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function handleSummary(data) {
   const p95 = (metric) =>
     data.metrics[metric]?.values?.["p(95)"]?.toFixed(0) ?? "N/A";
 
   const summary = [
-    "╔══════════════════════════════════════════╗",
-    "║         DukaPilot Load Test Summary          ║",
-    "╠══════════════════════════════════════════╣",
-    `║  Login p95:      ${String(p95("login_duration") + "ms").padEnd(24)}║`,
-    `║  Dashboard p95:  ${String(p95("dashboard_duration") + "ms").padEnd(24)}║`,
-    `║  Products p95:   ${String(p95("products_duration") + "ms").padEnd(24)}║`,
-    `║  Sales p95:      ${String(p95("sales_duration") + "ms").padEnd(24)}║`,
-    `║  Total reqs:     ${String(data.metrics.http_reqs?.values?.count ?? "N/A").padEnd(24)}║`,
-    `║  Error rate:     ${String(((data.metrics.http_req_failed?.values?.rate ?? 0) * 100).toFixed(2) + "%").padEnd(24)}║`,
-    "╚══════════════════════════════════════════╝",
+    "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—",
+    "â•‘         Uzuri Living Load Test Summary          â•‘",
+    "â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£",
+    `â•‘  Login p95:      ${String(p95("login_duration") + "ms").padEnd(24)}â•‘`,
+    `â•‘  Dashboard p95:  ${String(p95("dashboard_duration") + "ms").padEnd(24)}â•‘`,
+    `â•‘  Products p95:   ${String(p95("products_duration") + "ms").padEnd(24)}â•‘`,
+    `â•‘  Sales p95:      ${String(p95("sales_duration") + "ms").padEnd(24)}â•‘`,
+    `â•‘  Total reqs:     ${String(data.metrics.http_reqs?.values?.count ?? "N/A").padEnd(24)}â•‘`,
+    `â•‘  Error rate:     ${String(((data.metrics.http_req_failed?.values?.rate ?? 0) * 100).toFixed(2) + "%").padEnd(24)}â•‘`,
+    "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•",
   ].join("\n");
 
   return {

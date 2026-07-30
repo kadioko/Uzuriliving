@@ -5,22 +5,22 @@ import ServiceWorkerRegistrar from "@/components/ui/ServiceWorkerRegistrar";
 import MarketingTracker from "@/components/marketing/MarketingTracker";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.dukapilot.com"),
+  metadataBase: new URL("https://www.uzuriliving.com"),
   title: {
-    default: "DukaPilot - POS Tanzania, Inventory App, Mfumo wa Duka",
-    template: "%s | DukaPilot",
+    default: "Uzuri Living - POS Tanzania, Inventory App, Mfumo wa Duka",
+    template: "%s | Uzuri Living",
   },
   description:
-    "DukaPilot is an AI-powered POS and inventory app for Tanzanian shops. Track stock, sales, debts, expenses, supplier orders, and duka stock management in Kiswahili.",
-  applicationName: "DukaPilot",
-  authors: [{ name: "Necuva Group Limited", url: "https://www.dukapilot.com" }],
+    "Uzuri Living is an AI-powered POS and inventory app for Tanzanian shops. Track stock, sales, debts, expenses, supplier orders, and duka stock management in Kiswahili.",
+  applicationName: "Uzuri Living",
+  authors: [{ name: "Necuva Group Limited", url: "https://www.uzuriliving.com" }],
   creator: "Necuva Group Limited",
   publisher: "Necuva Group Limited",
   category: "Business Software",
   keywords: [
-    "DukaPilot",
-    "Duka Pilot",
-    "dukapilot.com",
+    "Uzuri Living",
+    "Uzuri Living",
+    "uzuriliving.com",
     "POS Tanzania",
     "inventory app Tanzania",
     "AI assistant for shops Tanzania",
@@ -36,21 +36,19 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/logo/dukapilot-icon-48.png", sizes: "48x48", type: "image/png" },
-      { url: "/logo/dukapilot-icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/logo/dukapilot-icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/logo/uzuriliving-logo.svg", sizes: "any", type: "image/svg+xml" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/logo/uzuriliving-logo.svg", sizes: "any", type: "image/svg+xml" }],
   },
   alternates: {
     canonical: "/",
   },
   openGraph: {
-    title: "DukaPilot - POS and Inventory App for Tanzanian Shops",
+    title: "Uzuri Living - POS and Inventory App for Tanzanian Shops",
     description:
       "AI-powered POS for Tanzanian shops. Track stock, sales, debts, expenses, supplier orders, and profit in Kiswahili from your phone.",
     url: "/",
-    siteName: "DukaPilot",
+    siteName: "Uzuri Living",
     type: "website",
     locale: "sw_TZ",
     alternateLocale: ["en_US"],
@@ -59,13 +57,13 @@ export const metadata: Metadata = {
         url: "/marketing/phone-dashboard.png",
         width: 1200,
         height: 630,
-        alt: "DukaPilot dashboard for Tanzanian shop owners",
+        alt: "Uzuri Living dashboard for Tanzanian shop owners",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "DukaPilot - POS Tanzania, Inventory App, Mfumo wa Duka",
+    title: "Uzuri Living - POS Tanzania, Inventory App, Mfumo wa Duka",
     description:
       "AI-powered POS and inventory app for Tanzanian shops. Track stock, sales, debts, expenses, and supplier orders in Kiswahili.",
     images: ["/marketing/phone-dashboard.png"],
@@ -84,7 +82,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#16a34a",
+  themeColor: "#e99400",
   width: "device-width",
   initialScale: 1,
 };
@@ -94,13 +92,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     {
       "@context": "https://schema.org",
       "@type": "Organization",
-      name: "DukaPilot",
+      name: "Uzuri Living",
       legalName: "Necuva Group Limited",
-      url: "https://www.dukapilot.com",
-      logo: "https://www.dukapilot.com/logo/dukapilot-icon-512.png",
-      email: "support@dukapilot.com",
+      url: "https://www.uzuriliving.com",
+      logo: "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
+      email: "support@uzuriliving.com",
       telephone: "+255743910580",
-      sameAs: ["https://www.instagram.com/dukapilot/"],
+      sameAs: ["https://www.instagram.com/uzuriliving/"],
       contactPoint: [
         {
           "@type": "ContactPoint",
@@ -114,12 +112,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: "DukaPilot",
-      alternateName: "Duka Pilot",
+      name: "Uzuri Living",
+      alternateName: "Uzuri Living",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, Android",
-      url: "https://www.dukapilot.com",
-      image: "https://www.dukapilot.com/marketing/phone-dashboard.png",
+      url: "https://www.uzuriliving.com",
+      image: "https://www.uzuriliving.com/marketing/phone-dashboard.png",
       description:
         "AI-powered POS and inventory app for Tanzanian shops. Track stock, sales, debts, expenses, supplier orders, and profit in Kiswahili.",
       offers: [
@@ -128,14 +126,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           name: "Basic",
           price: "15000",
           priceCurrency: "TZS",
-          url: "https://www.dukapilot.com/pricing",
+          url: "https://www.uzuriliving.com/pricing",
         },
         {
           "@type": "Offer",
           name: "Pro",
           price: "35000",
           priceCurrency: "TZS",
-          url: "https://www.dukapilot.com/pricing",
+          url: "https://www.uzuriliving.com/pricing",
         },
       ],
       publisher: {
@@ -146,13 +144,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      name: "DukaPilot",
-      alternateName: "Duka Pilot",
-      url: "https://www.dukapilot.com",
+      name: "Uzuri Living",
+      alternateName: "Uzuri Living",
+      url: "https://www.uzuriliving.com",
       inLanguage: ["sw-TZ", "en"],
       potentialAction: {
         "@type": "SearchAction",
-        target: "https://www.dukapilot.com/catalog?search={search_term_string}",
+        target: "https://www.uzuriliving.com/catalog?search={search_term_string}",
         "query-input": "required name=search_term_string",
       },
     },

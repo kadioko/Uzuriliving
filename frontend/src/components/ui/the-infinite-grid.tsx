@@ -61,11 +61,11 @@ export function TheInfiniteGrid({
   const maskImage = useMotionTemplate`radial-gradient(320px circle at ${mouseX}px ${mouseY}px, black, transparent)`;
 
   const resolvedHeadline = headline || (lang === "sw"
-    ? "DukaPilot inaona mwenendo wa duka lako"
-    : "DukaPilot sees the pattern in your shop");
+    ? "Uzuri Living inaona mwenendo wa duka lako"
+    : "Uzuri Living sees the pattern in your shop");
   const resolvedBody = body || (lang === "sw"
-    ? "Tunajenga DukaPilot kwa wafanyabiashara wa Tanzania: bidhaa, mauzo, madeni, matumizi, wafanyakazi, supplier orders na AI inayokuambia hatua ya kufanya sasa."
-    : "We are building DukaPilot for Tanzanian shop owners: inventory, sales, debts, expenses, staff, supplier orders, and an AI assistant that tells you what to do next.");
+    ? "Tunajenga Uzuri Living kwa wafanyabiashara wa Tanzania: bidhaa, mauzo, madeni, matumizi, wafanyakazi, supplier orders na AI inayokuambia hatua ya kufanya sasa."
+    : "We are building Uzuri Living for Tanzanian shop owners: inventory, sales, debts, expenses, staff, supplier orders, and an AI assistant that tells you what to do next.");
   const resolvedFeatures = features || [
     [lang === "sw" ? "Mauzo" : "Sales", lang === "sw" ? "Rekodi mauzo ya cash, M-Pesa na credit." : "Record cash, M-Pesa, and credit sales."],
     [lang === "sw" ? "Stock" : "Stock", lang === "sw" ? "Jua kinachokwisha kabla hujakosa mauzo." : "Know what is running out before sales stop."],
@@ -74,10 +74,10 @@ export function TheInfiniteGrid({
   ].map(([title, description]) => ({ title, description }));
   const resolvedPrimaryCta = primaryCta || {
     href: "/register",
-    label: lang === "sw" ? "Anza kutumia DukaPilot" : "Start using DukaPilot",
+    label: lang === "sw" ? "Anza kutumia Uzuri Living" : "Start using Uzuri Living",
   };
   const resolvedSecondaryCta = secondaryCta || {
-    href: "https://wa.me/255743910580?text=Nataka%20kujua%20zaidi%20kuhusu%20DukaPilot",
+    href: "https://wa.me/255743910580?text=Nataka%20kujua%20zaidi%20kuhusu%20Uzuri%20Living",
     label: "WhatsApp",
   };
   const primaryIsExternal = /^(https?:|mailto:|tel:)/.test(resolvedPrimaryCta.href);
@@ -166,7 +166,7 @@ function GridPattern({
     <svg className="h-full w-full" aria-hidden="true">
       <defs>
         <motion.pattern
-          id="dukapilot-grid-pattern"
+          id="uzuriliving-grid-pattern"
           width="40"
           height="40"
           patternUnits="userSpaceOnUse"
@@ -181,7 +181,7 @@ function GridPattern({
           />
         </motion.pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#dukapilot-grid-pattern)" />
+      <rect width="100%" height="100%" fill="url(#uzuriliving-grid-pattern)" />
     </svg>
   );
 }

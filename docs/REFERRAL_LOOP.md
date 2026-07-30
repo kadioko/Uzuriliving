@@ -1,4 +1,4 @@
-# DukaPilot Referral Loop
+# Uzuri Living Referral Loop
 
 The referral loop starts manually. The goal is to turn every activated merchant into 2 warm introductions.
 
@@ -13,7 +13,7 @@ Best moments:
 - After they return on a second day.
 - After you help them solve a real stock, debt, or supplier-order problem.
 
-Do not ask immediately after signup unless they already know other shop owners who asked about DukaPilot.
+Do not ask immediately after signup unless they already know other shop owners who asked about Uzuri Living.
 
 ## Referral Offer
 
@@ -28,11 +28,11 @@ Track manually in Admin notes until referral tracking exists in-product.
 
 Swahili:
 
-> Nimeanza kutumia DukaPilot kufuatilia stock, mauzo na madeni ya duka. Kama una duka, jaribu hapa: https://www.dukapilot.com/ au tuma WhatsApp kwa support: https://wa.me/255743910580?text=Habari%20DukaPilot%2C%20nimeletwa%20na%20rafiki%20na%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20
+> Nimeanza kutumia Uzuri Living kufuatilia stock, mauzo na madeni ya duka. Kama una duka, jaribu hapa: https://www.uzuriliving.com/ au tuma WhatsApp kwa support: https://wa.me/255743910580?text=Habari%20Uzuri%20Living%2C%20nimeletwa%20na%20rafiki%20na%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20
 
 English:
 
-> I started using DukaPilot to track shop stock, sales, and customer debts. If you run a shop, try it here: https://www.dukapilot.com/ or WhatsApp support: https://wa.me/255743910580?text=Hello%20DukaPilot%2C%20a%20friend%20referred%20me%20and%20I%20want%20shop%20setup%20help.%20Shop%20type%3A%20
+> I started using Uzuri Living to track shop stock, sales, and customer debts. If you run a shop, try it here: https://www.uzuriliving.com/ or WhatsApp support: https://wa.me/255743910580?text=Hello%20Uzuri%20Living%2C%20a%20friend%20referred%20me%20and%20I%20want%20shop%20setup%20help.%20Shop%20type%3A%20
 
 ## Founder Ask Script
 

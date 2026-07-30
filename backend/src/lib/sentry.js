@@ -1,9 +1,9 @@
 /**
- * Sentry error tracking — DukaPilot Backend
+ * Sentry error tracking â€” Uzuri Living Backend
  *
  * Required env var:
- *   SENTRY_DSN — your Sentry project DSN
- *   NODE_ENV   — 'production' | 'development'
+ *   SENTRY_DSN â€” your Sentry project DSN
+ *   NODE_ENV   â€” 'production' | 'development'
  *
  * If SENTRY_DSN is not set, Sentry is disabled silently.
  */
@@ -25,7 +25,7 @@ if (dsn) {
   });
   console.log("[sentry] Initialized");
 } else {
-  console.log("[sentry] SENTRY_DSN not set — error tracking disabled");
+  console.log("[sentry] SENTRY_DSN not set â€” error tracking disabled");
 }
 
 module.exports = Sentry;

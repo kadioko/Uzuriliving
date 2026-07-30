@@ -1,7 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 
-// Limit pool to 5 connections to avoid exhausting Railway Hobby PostgreSQL.
+// Limit pool to 5 connections to avoid exhausting Supabase Hobby PostgreSQL.
 // Use DATABASE_URL directly — connection_limit is set via Pool options.
 const { Pool } = require("pg");
 

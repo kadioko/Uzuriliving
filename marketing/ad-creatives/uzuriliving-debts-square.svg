@@ -1,23 +1,23 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#f8fafc"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" stroke="#d1fae5" stroke-width="4"/>
-  <rect x="96" y="96" width="72" height="72" rx="22" fill="#16a34a"/>
+  <rect x="96" y="96" width="72" height="72" rx="22" fill="#e99400"/>
   <path d="M133 119c-10 0-18 8-18 18v21c0 4.4 3.6 8 8 8h21c4.4 0 8-3.6 8-8v-21c0-10-8-18-19-18Zm0 10c5 0 9 4 9 9v5h-18v-5c0-5 4-9 9-9Z" fill="#ffffff"/>
   <path d="m125 153 6 6 15-18" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="190" y="142" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">DukaPilot</text>
+  <text x="190" y="142" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Uzuri Living</text>
   <text x="96" y="310" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="80" font-weight="900">Madeni ya</text>
   <text x="96" y="402" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="80" font-weight="900">wateja yasipotee.</text>
-  <text x="100" y="492" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Rekodi deni, kiasi kilicholipwa,</text>
-  <text x="100" y="540" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">na kilichobaki kwenye simu.</text>
+  <text x="100" y="492" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Rekodi deni, kiasi kilicholipwa,</text>
+  <text x="100" y="540" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">na kilichobaki kwenye simu.</text>
   <rect x="96" y="638" width="888" height="260" rx="34" fill="#ecfdf5" stroke="#bbf7d0" stroke-width="3"/>
   <rect x="146" y="694" width="790" height="56" rx="18" fill="#ffffff"/>
   <rect x="146" y="770" width="790" height="56" rx="18" fill="#ffffff"/>
   <rect x="146" y="846" width="790" height="56" rx="18" fill="#ffffff"/>
   <text x="178" y="732" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="900">Asha - TZS 18,000</text>
-  <text x="650" y="732" fill="#16a34a" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900">Partial</text>
+  <text x="650" y="732" fill="#e99400" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900">Partial</text>
   <text x="178" y="808" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="900">Salum - TZS 7,500</text>
-  <text x="650" y="808" fill="#16a34a" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900">Open</text>
+  <text x="650" y="808" fill="#e99400" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900">Open</text>
   <text x="178" y="884" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="900">Neema - TZS 4,000</text>
-  <text x="650" y="884" fill="#16a34a" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900">Paid</text>
+  <text x="650" y="884" fill="#e99400" font-family="Inter, Arial, sans-serif" font-size="25" font-weight="900">Paid</text>
   <text x="96" y="976" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="900">WhatsApp +255 743 910 580</text>
 </svg>

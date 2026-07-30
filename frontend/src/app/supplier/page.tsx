@@ -41,7 +41,7 @@ interface SupplierProduct {
 const emptyProductForm = { name: "", sku: "", unit: "pcs", price: "", minOrderQty: "1", note: "" };
 
 const copy = {
-  title: { sw: "DukaPilot - Msambazaji", en: "DukaPilot - Supplier" },
+  title: { sw: "Uzuri Living - Msambazaji", en: "Uzuri Living - Supplier" },
   subtitle: { sw: "Portal ya Wasambazaji", en: "Supplier Portal" },
   backAdmin: { sw: "Rudi Admin", en: "Back to Admin" },
   logout: { sw: "Toka", en: "Log out" },
@@ -379,7 +379,7 @@ export default function SupplierPortal() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {order.shop.location}{order.shop.district ? `, ${order.shop.district}` : ""} •{" "}
+                        {order.shop.location}{order.shop.district ? `, ${order.shop.district}` : ""} â€¢{" "}
                         #{order.id.slice(-6).toUpperCase()}
                       </p>
                       {order.totalAmount && (

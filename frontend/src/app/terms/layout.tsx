@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "DukaPilot Terms of Service",
+  title: "Uzuri Living Terms of Service",
   description:
-    "Read the DukaPilot terms of service for using the POS, inventory, sales, debts, expenses, supplier orders, catalog, and AI assistant features.",
+    "Read the Uzuri Living terms of service for using the POS, inventory, sales, debts, expenses, supplier orders, catalog, and AI assistant features.",
   alternates: {
     canonical: "/terms",
   },
   openGraph: {
-    title: "DukaPilot Terms of Service",
-    description: "Terms for using DukaPilot POS, inventory, catalog, supplier orders, and AI assistant features.",
+    title: "Uzuri Living Terms of Service",
+    description: "Terms for using Uzuri Living POS, inventory, catalog, supplier orders, and AI assistant features.",
     url: "/terms",
-    siteName: "DukaPilot",
+    siteName: "Uzuri Living",
     type: "website",
-    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "DukaPilot dashboard" }],
+    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "Uzuri Living dashboard" }],
   },
 };
 

@@ -5,7 +5,7 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.dukapilot.app",
+      "package_name": "com.uzuriliving.app",
       "sha256_cert_fingerprints": [
         "F7:FB:49:AE:75:B8:AA:D7:F0:BD:BA:10:C4:FC:EB:43:EA:68:3C:14:99:0E:06:8E:58:12:B5:90:E6:84:E8:3C"
       ]

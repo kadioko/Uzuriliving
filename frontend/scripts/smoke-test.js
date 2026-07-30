@@ -1,4 +1,4 @@
-const FRONTEND_URL = process.env.FRONTEND_SMOKE_URL || "https://www.dukapilot.com";
+const FRONTEND_URL = process.env.FRONTEND_SMOKE_URL || "https://www.uzuriliving.com";
 
 async function request(path = "/") {
   const response = await fetch(`${FRONTEND_URL}${path}`);
@@ -17,14 +17,14 @@ async function run() {
 
   const home = await request("/");
   assert(home.response.ok, `Home page failed: ${home.response.status}`);
-  assert(home.html.includes("DukaPilot"), "Home page does not include the DukaPilot heading");
+  assert(home.html.includes("Uzuri Living"), "Home page does not include the Uzuri Living heading");
   assert(home.html.includes("POS Tanzania"), "Home page does not include the public product metadata");
-  console.log("✓ Home page shell passed");
+  console.log("âœ“ Home page shell passed");
 
   const manifest = await request("/manifest.json");
   assert(manifest.response.ok, `Manifest request failed: ${manifest.response.status}`);
-  assert(manifest.html.includes("DukaPilot"), "Manifest does not include the DukaPilot app name");
-  console.log("✓ Manifest passed");
+  assert(manifest.html.includes("Uzuri Living"), "Manifest does not include the Uzuri Living app name");
+  console.log("âœ“ Manifest passed");
 
   console.log("Frontend smoke test completed successfully.");
 }

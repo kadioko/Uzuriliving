@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "DukaPilot Help - Programu ya Stock, POS Tanzania, Mfumo wa Duka",
+  title: "Uzuri Living Help - Programu ya Stock, POS Tanzania, Mfumo wa Duka",
   description:
-    "Help for using DukaPilot: setup, POS sales, inventory, duka stock management, catalog links, staff, offline sales, subscription payments, and AI Assistant.",
+    "Help for using Uzuri Living: setup, POS sales, inventory, duka stock management, catalog links, staff, offline sales, subscription payments, and AI Assistant.",
   keywords: [
-    "DukaPilot help",
+    "Uzuri Living help",
     "programu ya stock",
     "POS Tanzania",
     "inventory app Tanzania",
@@ -17,13 +17,13 @@ export const metadata: Metadata = {
     canonical: "/help",
   },
   openGraph: {
-    title: "DukaPilot Help",
+    title: "Uzuri Living Help",
     description:
       "Get help with setup, sales, inventory, debts, catalog links, staff access, offline sales, payments, and AI Assistant.",
     url: "/help",
-    siteName: "DukaPilot",
+    siteName: "Uzuri Living",
     type: "website",
-    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "DukaPilot help and dashboard" }],
+    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "Uzuri Living help and dashboard" }],
   },
 };
 

@@ -1,6 +1,7 @@
 /**
- * One-shot script: upsert DukaPilot admin users.
- * Run via: railway run --service DukaPilot node scripts/upsert-admin.js
+ * One-shot script: upsert Uzuri Living admin users.
+ * Run locally with the backend environment loaded:
+ *   node scripts/upsert-admin.js
  * Uses DATABASE_MIGRATE_URL (public proxy) if set, else DATABASE_URL.
  */
 const { Pool } = require("pg");
@@ -13,7 +14,7 @@ async function main() {
 
   const pool = new Pool({
     connectionString: connStr,
-    ssl: connStr && connStr.includes("railway.internal") ? false : { rejectUnauthorized: false },
+    ssl: connStr && connStr.includes("Supabase.internal") ? false : { rejectUnauthorized: false },
   });
 
   try {
@@ -29,8 +30,8 @@ async function main() {
     }
     const pin = await bcrypt.hash(adminPin, 10);
     const admins = [
-      { phone: "+255743910580", name: "Admin DukaPilot" },
-      { phone: "+255713712057", name: "Admin DukaPilot 2" },
+      { phone: "+255743910580", name: "Admin Uzuri Living" },
+      { phone: "+255713712057", name: "Admin Uzuri Living 2" },
     ];
     const { randomUUID } = require("crypto");
 

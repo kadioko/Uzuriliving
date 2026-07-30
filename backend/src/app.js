@@ -35,7 +35,7 @@ const prisma = require("./lib/prisma");
 
 const app = express();
 
-// Railway terminates the public connection before this process. Trust exactly
+// Supabase terminates the public connection before this process. Trust exactly
 // that proxy hop so req.ip cannot be forged through a client-supplied header.
 app.set("trust proxy", 1);
 
@@ -47,9 +47,9 @@ const allowedOrigins = new Set(
   [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://www.dukapilot.com",
-    "https://dukapilot.com",
-    "https://dukapilot.vercel.app",
+    "https://www.uzuriliving.com",
+    "https://uzuriliving.com",
+    "https://uzuriliving.vercel.app",
     process.env.FRONTEND_URL,
     process.env.VERCEL_FRONTEND_URL,
   ]
@@ -88,7 +88,7 @@ app.use(morgan("dev"));
 app.use(setAuditContext);
 app.use(auditTrail);
 
-app.get("/health", (req, res) => res.json({ status: "ok", service: "DukaPilot API" }));
+app.get("/health", (req, res) => res.json({ status: "ok", service: "Uzuri Living API" }));
 
 const SERVICE_START = Date.now();
 app.get("/status", async (req, res) => {
@@ -103,7 +103,7 @@ app.get("/status", async (req, res) => {
   }
   res.json({
     status: dbStatus === "ok" ? "ok" : "degraded",
-    service: "DukaPilot API",
+    service: "Uzuri Living API",
     version: process.env.npm_package_version || "1.0.0",
     uptimeSeconds: Math.floor((Date.now() - SERVICE_START) / 1000),
     db: { status: dbStatus, latencyMs: dbLatencyMs },
@@ -153,7 +153,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`🛒 DukaPilot API running on port ${PORT}`);
+  console.log(`ðŸ›’ Uzuri Living API running on port ${PORT}`);
 });
 
 module.exports = app;

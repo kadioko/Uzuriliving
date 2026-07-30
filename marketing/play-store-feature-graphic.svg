@@ -2,24 +2,24 @@
   <rect width="1024" height="500" fill="#F8FAFC"/>
   <rect x="0" y="0" width="1024" height="500" fill="#F8FAFC"/>
   <path d="M640 0H1024V500H548C607 414 636 321 634 220C633 139 635 66 640 0Z" fill="#14532D"/>
-  <circle cx="893" cy="84" r="132" fill="#16A34A" opacity="0.18"/>
+  <circle cx="893" cy="84" r="132" fill="#E99400" opacity="0.18"/>
   <circle cx="717" cy="429" r="96" fill="#22C55E" opacity="0.16"/>
-  <rect x="72" y="92" width="112" height="112" rx="26" fill="#16A34A"/>
+  <rect x="72" y="92" width="112" height="112" rx="26" fill="#E99400"/>
   <rect x="101.4" y="128.4" width="53.2" height="49" rx="11.2" fill="white"/>
   <path d="M114.7 130.5V123.5C114.7 116.1 120.6 110.1 128 110.1C135.4 110.1 141.3 116.1 141.3 123.5V130.5" stroke="white" stroke-width="7" stroke-linecap="round"/>
-  <path d="M114.7 132.6V125.6C114.7 118.2 120.6 112.2 128 112.2C135.4 112.2 141.3 118.2 141.3 125.6V132.6" stroke="#16A34A" stroke-width="5.6" stroke-linecap="round"/>
-  <path d="M116.1 149.4L125.2 158.5L141.3 141" stroke="#16A34A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M114.7 132.6V125.6C114.7 118.2 120.6 112.2 128 112.2C135.4 112.2 141.3 118.2 141.3 125.6V132.6" stroke="#E99400" stroke-width="5.6" stroke-linecap="round"/>
+  <path d="M116.1 149.4L125.2 158.5L141.3 141" stroke="#E99400" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M108.4 136.1H147.6" stroke="#DCFCE7" stroke-width="4.2" stroke-linecap="round"/>
-  <text x="208" y="132" fill="#052E16" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800">DukaPilot</text>
+  <text x="208" y="132" fill="#052E16" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800">Uzuri Living</text>
   <text x="72" y="282" fill="#020617" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="850" letter-spacing="0">AI assistant for</text>
   <text x="72" y="348" fill="#020617" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="850" letter-spacing="0">Tanzanian shops</text>
   <text x="74" y="404" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="500">Sales, stock, debts, expenses and staff.</text>
   <rect x="676" y="108" width="268" height="284" rx="28" fill="white" opacity="0.96"/>
   <rect x="700" y="132" width="220" height="58" rx="16" fill="#F0FDF4"/>
-  <circle cx="730" cy="161" r="14" fill="#16A34A"/>
+  <circle cx="730" cy="161" r="14" fill="#E99400"/>
   <path d="M724 161L729 166L738 155" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="756" y="155" fill="#052E16" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="800">Restock Unga</text>
-  <text x="756" y="176" fill="#15803D" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600">Before Friday</text>
+  <text x="756" y="176" fill="#B56600" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600">Before Friday</text>
   <rect x="700" y="210" width="220" height="58" rx="16" fill="#F8FAFC"/>
   <circle cx="730" cy="239" r="14" fill="#DCFCE7"/>
   <text x="756" y="233" fill="#0F172A" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="800">Collect debt</text>

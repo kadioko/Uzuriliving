@@ -81,7 +81,7 @@ const plans: Plan[] = [
 
 const competitors = [
   {
-    name: "DukaPilot",
+    name: "Uzuri Living",
     price: { sw: "TZS 15,000/mwezi", en: "TZS 15,000/month" },
     highlight: true,
   },
@@ -129,7 +129,7 @@ const copy = {
   subtitle: { sw: "Hakuna gharama zilizofichwa. Chagua mpango unaolingana na duka lako.", en: "No hidden fees. Choose the plan that fits your shop." },
   free: { sw: "BURE", en: "FREE" },
   for: { sw: "kwa", en: "for" },
-  comparison: { sw: "DukaPilot dhidi ya washindani", en: "DukaPilot compared to competitors" },
+  comparison: { sw: "Uzuri Living dhidi ya washindani", en: "Uzuri Living compared to competitors" },
   app: { sw: "Programu", en: "App" },
   price: { sw: "Bei", en: "Price" },
   swahili: { sw: "Kiswahili", en: "Swahili" },
@@ -179,7 +179,7 @@ export default function PricingPage() {
       <nav className="px-4 py-4 flex flex-wrap items-center justify-between gap-3 max-w-5xl mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 text-xl font-bold text-brand-700">
           <LogoMark className="h-9 w-9 rounded-xl" />
-          DukaPilot
+          Uzuri Living
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-1">
@@ -304,7 +304,7 @@ export default function PricingPage() {
                 {plan.cta[lang]}
               </Link>
               <a
-                href={`https://wa.me/255743910580?text=${encodeURIComponent(`Nataka kujua kuhusu mpango wa ${plan.name.sw} wa DukaPilot`)}`}
+                href={`https://wa.me/255743910580?text=${encodeURIComponent(`Nataka kujua kuhusu mpango wa ${plan.name.sw} wa Uzuri Living`)}`}
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-green-300 hover:text-green-700"
               >
                 <Phone className="h-4 w-4" />
@@ -381,11 +381,11 @@ export default function PricingPage() {
             </Link>
           </section>
           <section className="bg-white rounded-2xl border border-brand-200 p-6">
-            <h2 className="text-base font-bold text-gray-900 mb-2">{lang === "sw" ? "Kwa nini DukaPilot" : "Why DukaPilot"}</h2>
+            <h2 className="text-base font-bold text-gray-900 mb-2">{lang === "sw" ? "Kwa nini Uzuri Living" : "Why Uzuri Living"}</h2>
             <p className="text-sm leading-6 text-gray-600">
               {lang === "sw"
-                ? "DukaPilot si POS tu. Ni AI assistant inayokuambia cha kufanya: agiza bidhaa, fuatilia deni, punguza gharama, na promote bidhaa yenye margin."
-                : "DukaPilot is not just POS. It is an AI assistant that tells you what to do: restock, collect debt, reduce costs, and promote high-margin products."}
+                ? "Uzuri Living si POS tu. Ni AI assistant inayokuambia cha kufanya: agiza bidhaa, fuatilia deni, punguza gharama, na promote bidhaa yenye margin."
+                : "Uzuri Living is not just POS. It is an AI assistant that tells you what to do: restock, collect debt, reduce costs, and promote high-margin products."}
             </p>
             <Link href="/assistant" className="mt-4 inline-flex rounded-xl border border-brand-200 px-5 py-3 text-sm font-bold text-brand-700 hover:bg-brand-50">
               {lang === "sw" ? "Ona AI Assistant" : "See AI Assistant"}

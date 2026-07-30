@@ -44,20 +44,20 @@ export default function ProductProofSection({ compact = false }: { compact?: boo
     <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
       <div className="grid gap-7 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
         <div>
-          <p className="text-sm font-bold text-brand-700">DukaPilot</p>
+          <p className="text-sm font-bold text-brand-700">Uzuri Living</p>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
             {lang === "sw" ? "Ona kazi halisi kabla ya kuanza." : "See the real workflows before you start."}
           </h2>
           <p className="mt-3 text-sm leading-6 text-gray-600 sm:text-base">
             {lang === "sw"
-              ? "DukaPilot si bei tu. Hizi ndizo sehemu ambazo mfanyabiashara hutumia kila siku: dashboard, mauzo, stock, madeni, supplier orders na AI Assistant."
-              : "DukaPilot is more than pricing. These are the daily workflows a shop owner uses: dashboard, sales, inventory, debts, supplier orders, and the AI Assistant."}
+              ? "Uzuri Living si bei tu. Hizi ndizo sehemu ambazo mfanyabiashara hutumia kila siku: dashboard, mauzo, stock, madeni, supplier orders na AI Assistant."
+              : "Uzuri Living is more than pricing. These are the daily workflows a shop owner uses: dashboard, sales, inventory, debts, supplier orders, and the AI Assistant."}
           </p>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-brand-100 bg-brand-50 p-3">
             <Image
               src="/marketing/phone-dashboard.png"
-              alt={lang === "sw" ? "Screenshot ya dashboard ya DukaPilot" : "DukaPilot dashboard screenshot"}
+              alt={lang === "sw" ? "Screenshot ya dashboard ya Uzuri Living" : "Uzuri Living dashboard screenshot"}
               width={640}
               height={1138}
               className="h-72 w-full rounded-xl object-cover object-top sm:h-80"

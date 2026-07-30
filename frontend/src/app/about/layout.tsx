@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "About DukaPilot - AI POS and Inventory App for Tanzanian Shops",
+  title: "About Uzuri Living - AI POS and Inventory App for Tanzanian Shops",
   description:
-    "Learn about DukaPilot, the AI-powered POS, inventory, debts, expenses, staff, supplier order, and duka stock management app built for Tanzanian shop owners.",
+    "Learn about Uzuri Living, the AI-powered POS, inventory, debts, expenses, staff, supplier order, and duka stock management app built for Tanzanian shop owners.",
   keywords: [
-    "about DukaPilot",
-    "DukaPilot Tanzania",
-    "Duka Pilot",
+    "about Uzuri Living",
+    "Uzuri Living Tanzania",
+    "Uzuri Living",
     "POS Tanzania",
     "inventory app Tanzania",
     "AI assistant for shops Tanzania",
@@ -17,13 +17,13 @@ export const metadata: Metadata = {
     canonical: "/about",
   },
   openGraph: {
-    title: "About DukaPilot",
+    title: "About Uzuri Living",
     description:
-      "DukaPilot helps Tanzanian shop owners track stock, sales, debts, expenses, staff, supplier orders, and the next best action.",
+      "Uzuri Living helps Tanzanian shop owners track stock, sales, debts, expenses, staff, supplier orders, and the next best action.",
     url: "/about",
-    siteName: "DukaPilot",
+    siteName: "Uzuri Living",
     type: "website",
-    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "DukaPilot dashboard" }],
+    images: [{ url: "/marketing/phone-dashboard.png", width: 1200, height: 630, alt: "Uzuri Living dashboard" }],
   },
 };
 

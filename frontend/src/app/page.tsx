@@ -283,18 +283,18 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(135deg,#0b5d34_0%,#13763f_44%,#0d342c_100%)] px-4 py-3 lg:px-8 lg:py-4">
-      <header className="sticky top-3 z-20 mx-auto flex w-full max-w-6xl items-center justify-between gap-3 rounded-2xl border border-white/15 bg-[#0d6b3c]/90 p-3 text-white shadow-xl shadow-black/15 backdrop-blur">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#102a43_0%,#1f6f78_44%,#0c1f33_100%)] px-4 py-3 lg:px-8 lg:py-4">
+      <header className="sticky top-3 z-20 mx-auto flex w-full max-w-6xl items-center justify-between gap-3 rounded-2xl border border-white/15 bg-[#163d5c]/90 p-3 text-white shadow-xl shadow-black/15 backdrop-blur">
         <Link href="/" className="flex items-center gap-3">
           <img
-            src="/logo/dukapilot-icon-192.png"
-            alt="DukaPilot"
+            src="/logo/uzuriliving-logo.svg"
+            alt="Uzuri Living"
             width={40}
             height={40}
             className="h-10 w-10 rounded-xl bg-white/10 shadow-sm ring-1 ring-white/20"
           />
           <div>
-            <p className="text-sm font-bold leading-tight">DukaPilot</p>
+            <p className="text-sm font-bold leading-tight">Uzuri Living</p>
             <p className="text-xs text-brand-100">Merchant OS - Tanzania</p>
           </div>
         </Link>
@@ -364,7 +364,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
           </button>
         </div>
         {mobileNavOpen && (
-          <div className="absolute left-0 right-0 top-full mt-2 rounded-2xl border border-white/15 bg-[#0d6b3c] p-3 shadow-xl md:hidden">
+          <div className="absolute left-0 right-0 top-full mt-2 rounded-2xl border border-white/15 bg-[#163d5c] p-3 shadow-xl md:hidden">
             <nav className="grid grid-cols-2 gap-1 text-sm font-semibold text-brand-50">
               {publicNav.map((item) => (
                 <Link key={item.href} href={item.href} onClick={() => setMobileNavOpen(false)} className="rounded-lg px-3 py-3 hover:bg-white/15">
@@ -385,7 +385,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
             <LogoMark className="h-12 w-12 rounded-2xl bg-white shadow-lg" />
             <div>
               <p className="text-2xl font-bold tracking-tight">
-                <TextReveal text="DukaPilot" hoverColor="#dcfce7" staggerDelay={18} />
+                <TextReveal text="Uzuri Living" hoverColor="#dcfce7" staggerDelay={18} />
               </p>
               <p className="text-sm font-medium text-brand-100">Merchant OS - Tanzania</p>
             </div>
@@ -403,8 +403,8 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-brand-50 sm:text-lg">
               {lang === "sw"
-                ? "DukaPilot husaidia wafanyabiashara Tanzania kujua bidhaa zilizobaki, faida ya leo, madeni ya wateja na muda wa kuagiza tena kwa Kiswahili."
-                : "DukaPilot helps Tanzanian merchants track what is in stock, today's profit, customer debts, and when to reorder in Swahili or English."}
+                ? "Uzuri Living husaidia wafanyabiashara Tanzania kujua bidhaa zilizobaki, faida ya leo, madeni ya wateja na muda wa kuagiza tena kwa Kiswahili."
+                : "Uzuri Living helps Tanzanian merchants track what is in stock, today's profit, customer debts, and when to reorder in Swahili or English."}
             </p>
           </div>
 
@@ -456,7 +456,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
             <div className="overflow-hidden rounded-2xl border border-white/15 bg-white/95 p-3 shadow-2xl shadow-black/20">
               <Image
                 src="/marketing/phone-dashboard.png"
-                alt={lang === "sw" ? "Muonekano wa dashboard ya DukaPilot" : "DukaPilot dashboard preview"}
+                alt={lang === "sw" ? "Muonekano wa dashboard ya Uzuri Living" : "Uzuri Living dashboard preview"}
                 width={420}
                 height={744}
                 className="h-56 w-full rounded-xl object-cover object-top sm:h-64"
@@ -785,7 +785,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
         </Link>
 
         <p className="text-center text-brand-200 text-xs mt-4">
-          DukaPilot - Kujenga biashara Tanzania
+          Uzuri Living - Kujenga biashara Tanzania
         </p>
         <div className="mt-3 flex flex-wrap justify-center gap-3 text-xs text-brand-200">
           <Link href="/about" className="hover:text-white">{lang === "sw" ? "Kuhusu" : "About"}</Link>
@@ -807,15 +807,15 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
               </div>
               <h2 className="mt-5 text-2xl font-black tracking-tight sm:text-3xl">
                 <TextReveal
-                  text={lang === "sw" ? "DukaPilot AI hufikiria hatua inayofuata" : "DukaPilot AI thinks about the next step"}
+                  text={lang === "sw" ? "Uzuri Living AI hufikiria hatua inayofuata" : "Uzuri Living AI thinks about the next step"}
                   fontSize="inherit"
                   hoverColor="#bbf7d0"
                 />
               </h2>
               <p className="mt-4 text-sm leading-6 text-brand-100 sm:text-base">
                 {lang === "sw"
-                  ? "Si POS tu. DukaPilot inageuza data ya kila siku kuwa orodha ya vipaumbele: nini uagize, nani umfuatilie, na gharama zipi zipunguzwe."
-                  : "It is not just POS. DukaPilot turns daily data into a priority list: what to restock, who to follow up, and which costs to reduce."}
+                  ? "Si POS tu. Uzuri Living inageuza data ya kila siku kuwa orodha ya vipaumbele: nini uagize, nani umfuatilie, na gharama zipi zipunguzwe."
+                  : "It is not just POS. Uzuri Living turns daily data into a priority list: what to restock, who to follow up, and which costs to reduce."}
               </p>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <Link href="/assistant" className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-brand-800 hover:bg-brand-50">

@@ -1,6 +1,6 @@
-# DukaPilot Load Tests
+# Uzuri Living Load Tests
 
-Uses [k6](https://k6.io/) — an open-source load testing tool.
+Uses [k6](https://k6.io/) â€” an open-source load testing tool.
 
 ## Install k6
 
@@ -30,7 +30,7 @@ With overrides:
 
 ```bash
 k6 run \
-  --env BASE_URL=https://dukapilotproduction.up.railway.app \
+  --env BASE_URL=https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api \
   --env MERCHANT_PHONE=+255700000002 \
   --env MERCHANT_PIN=1234 \
   load-tests/k6.js
@@ -40,9 +40,9 @@ k6 run \
 
 | Stage | VUs | Duration |
 | ------- | ----- | ---------- |
-| Ramp-up | 0 → 10 | 30s |
+| Ramp-up | 0 â†’ 10 | 30s |
 | Sustained | 10 | 1m |
-| Ramp-down | 10 → 0 | 15s |
+| Ramp-down | 10 â†’ 0 | 15s |
 
 Total duration: ~1m 45s
 
@@ -61,16 +61,16 @@ k6 exits with code 1 if any threshold is breached.
 
 ## Endpoints tested
 
-1. `GET /health` — unauthenticated health check
-2. `POST /api/auth/login` — merchant + supplier login
-3. `GET /api/dashboard?period=today|week|month` — dashboard (3 calls per VU)
-4. `GET /api/products?limit=20` — inventory list
-5. `GET /api/sales?limit=20` — sales list
-6. `GET /api/orders` — supplier orders list
-7. `GET /api/products/low-stock` — low-stock alerts
-8. `GET /api/suppliers/portal/orders` — supplier portal (every other VU)
-9. `GET /api/public/shops` — public catalog (unauthenticated)
-10. Invalid token → verify 401 response
+1. `GET /health` â€” unauthenticated health check
+2. `POST /api/auth/login` â€” merchant + supplier login
+3. `GET /api/dashboard?period=today|week|month` â€” dashboard (3 calls per VU)
+4. `GET /api/products?limit=20` â€” inventory list
+5. `GET /api/sales?limit=20` â€” sales list
+6. `GET /api/orders` â€” supplier orders list
+7. `GET /api/products/low-stock` â€” low-stock alerts
+8. `GET /api/suppliers/portal/orders` â€” supplier portal (every other VU)
+9. `GET /api/public/shops` â€” public catalog (unauthenticated)
+10. Invalid token â†’ verify 401 response
 
 ## Results
 
@@ -78,14 +78,14 @@ Results are saved to `load-tests/results.json` after each run (gitignored).
 A summary is printed to stdout:
 
 ```
-╔══════════════════════════════════════════╗
-║         DukaPilot Load Test Summary          ║
-╠══════════════════════════════════════════╣
-║  Login p95:      312ms                   ║
-║  Dashboard p95:  245ms                   ║
-║  Products p95:   180ms                   ║
-║  Sales p95:      190ms                   ║
-║  Total reqs:     1840                    ║
-║  Error rate:     0.00%                   ║
-╚══════════════════════════════════════════╝
+â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+â•‘         Uzuri Living Load Test Summary          â•‘
+â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£
+â•‘  Login p95:      312ms                   â•‘
+â•‘  Dashboard p95:  245ms                   â•‘
+â•‘  Products p95:   180ms                   â•‘
+â•‘  Sales p95:      190ms                   â•‘
+â•‘  Total reqs:     1840                    â•‘
+â•‘  Error rate:     0.00%                   â•‘
+â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 ```

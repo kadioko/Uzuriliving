@@ -1,4 +1,4 @@
--- DukaPilot uses Tanzanian shillings. Store all money as whole TZS to avoid
+-- Uzuri Living uses Tanzanian shillings. Store all money as whole TZS to avoid
 -- floating-point drift in sales, debts, expenses, orders, and subscriptions.
 ALTER TABLE "subscription_payments" ALTER COLUMN "amount" TYPE INTEGER USING ROUND("amount")::INTEGER;
 ALTER TABLE "offline_sync_events" ALTER COLUMN "total" TYPE INTEGER USING CASE WHEN "total" IS NULL THEN NULL ELSE ROUND("total")::INTEGER END;

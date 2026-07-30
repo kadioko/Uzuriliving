@@ -472,7 +472,7 @@ export default function AdminPage() {
 
   async function handleRemoveSubscription(shop: Subscription) {
     const confirmed = window.confirm(
-      `Remove the paid subscription for ${shop.name}?\n\nThis will clear the active paid plan and paid valid-until date. The shop, customer account, products, sales, and payment history will stay in DukaPilot.\n\nUse this only for reversals, mistakes, or support cases.`
+      `Remove the paid subscription for ${shop.name}?\n\nThis will clear the active paid plan and paid valid-until date. The shop, customer account, products, sales, and payment history will stay in Uzuri Living.\n\nUse this only for reversals, mistakes, or support cases.`
     );
     if (!confirmed) return;
 
@@ -662,7 +662,7 @@ export default function AdminPage() {
       : user.supplier?.name
         ? `\n\nThis removes the supplier login for ${user.supplier.name}. The supplier profile stays available for product/order history.`
         : "";
-    const confirmed = window.confirm(`Remove ${user.name} (${user.phone}) from DukaPilot?${relationship}\n\nThis action cannot be undone.`);
+    const confirmed = window.confirm(`Remove ${user.name} (${user.phone}) from Uzuri Living?${relationship}\n\nThis action cannot be undone.`);
     if (!confirmed) return;
 
     try {
@@ -677,7 +677,7 @@ export default function AdminPage() {
     const orderCount = supplier._count?.orders || 0;
     const productCount = supplier._count?.products || 0;
     if (orderCount > 0) {
-      window.alert("This supplier has order history, so DukaPilot will not delete it. Reject the supplier instead to keep order records safe.");
+      window.alert("This supplier has order history, so Uzuri Living will not delete it. Reject the supplier instead to keep order records safe.");
       return;
     }
     const confirmed = window.confirm(
@@ -725,7 +725,7 @@ export default function AdminPage() {
 
   function whatsappLeadHref(shop: Subscription) {
     const phone = shop.user?.phone?.replace(/[^\d]/g, "") || "";
-    const text = encodeURIComponent(`Habari ${shop.user?.name || ""}, hapa ni DukaPilot. Tunaweza kukusaidia kumalizia setup ya ${shop.name}: bidhaa 10, mauzo 10, na kurudi siku ya pili.`);
+    const text = encodeURIComponent(`Habari ${shop.user?.name || ""}, hapa ni Uzuri Living. Tunaweza kukusaidia kumalizia setup ya ${shop.name}: bidhaa 10, mauzo 10, na kurudi siku ya pili.`);
     return `https://wa.me/${phone}?text=${text}`;
   }
 
@@ -1049,7 +1049,7 @@ export default function AdminPage() {
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Launch Analytics</h2>
-                  <p className="text-xs text-gray-500">Core activation signals to watch while DukaPilot is live.</p>
+                  <p className="text-xs text-gray-500">Core activation signals to watch while Uzuri Living is live.</p>
                 </div>
                 <span className="text-xs text-gray-400">Derived from app data</span>
               </div>
@@ -1082,7 +1082,7 @@ export default function AdminPage() {
                   {overview.marketingAnalytics?.topSources.map((source) => (
                     <div key={source.source} className="rounded-lg border border-indigo-100 bg-white p-3 text-xs text-gray-700">
                       <p className="font-bold text-gray-950">{source.source}</p>
-                      <p className="mt-1">{source.registrations} registrations · {source.activated} activated</p>
+                      <p className="mt-1">{source.registrations} registrations Â· {source.activated} activated</p>
                     </div>
                   ))}
                 </div>
@@ -1402,7 +1402,7 @@ export default function AdminPage() {
                         inputMode="numeric"
                         value={resetPin}
                         onChange={(e) => setResetPin(e.target.value)}
-                        placeholder="••••"
+                        placeholder="â€¢â€¢â€¢â€¢"
                         maxLength={8}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         required

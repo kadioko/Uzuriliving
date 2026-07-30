@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("live login smoke test", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "DukaPilot" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Uzuri Living" })).toBeVisible();
 
   const phoneInput = page.locator('input[type="tel"]').first();
   const pinInput = page.locator('input[inputmode="numeric"]').first();
@@ -29,12 +29,12 @@ test("live login smoke test", async ({ page }) => {
     await expect(page.getByRole("heading", { name: /sales|mauzo/i })).toBeVisible();
     await page.getByRole("button", { name: /log out|toka/i }).click();
     await page.waitForURL(/\/$/, { timeout: 15000 });
-    await expect(page.getByRole("heading", { name: "DukaPilot" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Uzuri Living" })).toBeVisible();
     return;
   }
 
   await expect(page.getByText(/portal ya wasambazaji|supplier/i)).toBeVisible();
   await page.getByRole("button", { name: /toka|log out/i }).click();
   await page.waitForURL(/\/$/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "DukaPilot" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Uzuri Living" })).toBeVisible();
 });

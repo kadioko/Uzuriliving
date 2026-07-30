@@ -12,8 +12,8 @@ export default function ContactPage() {
   const lang = useLang();
   const whatsappSetupHref = `https://wa.me/255743910580?text=${encodeURIComponent(
     lang === "sw"
-      ? "Habari DukaPilot, nataka setup ya duka langu. Aina ya duka: "
-      : "Hello DukaPilot, I want help setting up my shop. Shop type: "
+      ? "Habari Uzuri Living, nataka setup ya duka langu. Aina ya duka: "
+      : "Hello Uzuri Living, I want help setting up my shop. Shop type: "
   )}`;
   const channels = [
     {
@@ -33,9 +33,9 @@ export default function ContactPage() {
     {
       Icon: Mail,
       title: "Email",
-      value: "support@dukapilot.com",
+      value: "support@uzuriliving.com",
       detail: lang === "sw" ? "Tuma ujumbe rasmi au maelezo marefu." : "Send formal requests or longer details.",
-      href: "mailto:support@dukapilot.com",
+      href: "mailto:support@uzuriliving.com",
     },
   ];
 
@@ -44,7 +44,7 @@ export default function ContactPage() {
       <div className="space-y-8">
         <TheInfiniteGrid
           lang={lang}
-          headline={lang === "sw" ? "Support ya DukaPilot ipo karibu" : "DukaPilot support is close"}
+          headline={lang === "sw" ? "Support ya Uzuri Living ipo karibu" : "Uzuri Living support is close"}
           body={lang === "sw"
             ? "Tuma swali, screenshot, payment reference au ombi la setup. Tutakusaidia bidhaa, mauzo, staff, catalog, billing na AI assistant."
             : "Send a question, screenshot, payment reference, or setup request. We help with products, sales, staff, catalog, billing, and the AI assistant."}
@@ -53,7 +53,7 @@ export default function ContactPage() {
             label: lang === "sw" ? "Tuma WhatsApp" : "Send WhatsApp",
           }}
           secondaryCta={{
-            href: "mailto:support@dukapilot.com",
+            href: "mailto:support@uzuriliving.com",
             label: "Email support",
           }}
           features={channels.map(({ title, value, detail }) => ({
@@ -65,7 +65,7 @@ export default function ContactPage() {
           <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="p-6 sm:p-8 lg:p-10">
               <p className="text-sm font-semibold text-brand-700">
-                <TextReveal text="DukaPilot support" fontSize="inherit" hoverColor="#15803d" />
+                <TextReveal text="Uzuri Living support" fontSize="inherit" hoverColor="#15803d" />
               </p>
               <h1 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
                 {lang === "sw" ? "Wasiliana na watu wanaoelewa duka lako." : "Talk to people who understand your shop."}
@@ -77,9 +77,9 @@ export default function ContactPage() {
               </p>
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <WhatsAppCTA intent="contact" label="WhatsApp support" />
-                <a href="mailto:support@dukapilot.com" className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-800 hover:border-brand-300 hover:text-brand-800">
+                <a href="mailto:support@uzuriliving.com" className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-800 hover:border-brand-300 hover:text-brand-800">
                   <Mail className="h-4 w-4" />
-                  support@dukapilot.com
+                  support@uzuriliving.com
                 </a>
               </div>
             </div>

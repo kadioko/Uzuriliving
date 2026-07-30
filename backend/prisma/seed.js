@@ -15,25 +15,25 @@ async function main() {
   const adminSeedPin = process.env.SEED_ADMIN_PIN || process.env.ADMIN_PIN || "1234";
   const adminPinHash = await bcrypt.hash(adminSeedPin, 10);
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   // ADMIN
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   await prisma.user.upsert({
     where: { phone: "+255743910580" },
-    update: { pin: adminPinHash, role: "ADMIN", name: "Admin DukaPilot" },
-    create: { phone: "+255743910580", pin: adminPinHash, name: "Admin DukaPilot", role: "ADMIN", language: "sw" },
+    update: { pin: adminPinHash, role: "ADMIN", name: "Admin Uzuri Living" },
+    create: { phone: "+255743910580", pin: adminPinHash, name: "Admin Uzuri Living", role: "ADMIN", language: "sw" },
   });
   await prisma.user.upsert({
     where: { phone: "+255713712057" },
-    update: { pin: adminPinHash, role: "ADMIN", name: "Admin DukaPilot 2" },
-    create: { phone: "+255713712057", pin: adminPinHash, name: "Admin DukaPilot 2", role: "ADMIN", language: "sw" },
+    update: { pin: adminPinHash, role: "ADMIN", name: "Admin Uzuri Living 2" },
+    create: { phone: "+255713712057", pin: adminPinHash, name: "Admin Uzuri Living 2", role: "ADMIN", language: "sw" },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SUPPLIER 1 — Jumla Traders Ltd  ★ FEATURED SUPPLIER (all order statuses)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SUPPLIER 1 â€” Jumla Traders Ltd  â˜… FEATURED SUPPLIER (all order statuses)
   //   Portal shows: PENDING order from Amina, CONFIRMED from Hassan,
   //   OUT_FOR_DELIVERY from Salum, DELIVERED (historical), CANCELLED
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const supplierUser = await prisma.user.upsert({
     where: { phone: "+255700000001" },
     update: {},
@@ -45,9 +45,9 @@ async function main() {
     create: { name: "Jumla Traders Ltd", phone: "+255700000001", address: "Kariakoo, Dar es Salaam", userId: supplierUser.id },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SUPPLIER 2 — Rafiki Beverages Ltd (beverages wholesaler)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SUPPLIER 2 â€” Rafiki Beverages Ltd (beverages wholesaler)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const supplierUser2 = await prisma.user.upsert({
     where: { phone: "+255700000006" },
     update: {},
@@ -59,9 +59,9 @@ async function main() {
     create: { name: "Rafiki Beverages Ltd", phone: "+255700000006", address: "Posta / Kisutu, Dar es Salaam", userId: supplierUser2.id },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SUPPLIER 3 — Beauty Supplies TZ (cosmetics wholesaler)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SUPPLIER 3 â€” Beauty Supplies TZ (cosmetics wholesaler)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const supplierUser3 = await prisma.user.upsert({
     where: { phone: "+255700000007" },
     update: {},
@@ -73,17 +73,17 @@ async function main() {
     create: { name: "Beauty Supplies TZ", phone: "+255700000007", address: "Ilala, Dar es Salaam", userId: supplierUser3.id },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // MERCHANT 1 — Duka la Amina  ★ FEATURED MERCHANT (every scenario)
-  //   Products   : good stock · low stock · out of stock · expiring soon ·
-  //                urgent expiry · doesNotExpire · wholesale price · high margin
-  //   Sales      : all 7 payment methods · RETAIL + WHOLESALE pricing ·
-  //                POS + ONLINE channels · multi-item + single-item ·
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // MERCHANT 1 â€” Duka la Amina  â˜… FEATURED MERCHANT (every scenario)
+  //   Products   : good stock Â· low stock Â· out of stock Â· expiring soon Â·
+  //                urgent expiry Â· doesNotExpire Â· wholesale price Â· high margin
+  //   Sales      : all 7 payment methods Â· RETAIL + WHOLESALE pricing Â·
+  //                POS + ONLINE channels Â· multi-item + single-item Â·
   //                today / week / older history
-  //   Sup orders : PENDING · CONFIRMED · OUT_FOR_DELIVERY · DELIVERED · CANCELLED
-  //   Cust orders: PENDING · CONFIRMED · OUT_FOR_DELIVERY · DELIVERED · CANCELLED
-  //   Stock mvts : IN (delivery) · OUT (sale) · ADJUSTMENT (manual correction)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //   Sup orders : PENDING Â· CONFIRMED Â· OUT_FOR_DELIVERY Â· DELIVERED Â· CANCELLED
+  //   Cust orders: PENDING Â· CONFIRMED Â· OUT_FOR_DELIVERY Â· DELIVERED Â· CANCELLED
+  //   Stock mvts : IN (delivery) Â· OUT (sale) Â· ADJUSTMENT (manual correction)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const merchantUser = await prisma.user.upsert({
     where: { phone: "+255700000002" },
     update: {},
@@ -95,9 +95,9 @@ async function main() {
     create: { name: "Duka la Amina", location: "Mbagala", district: "Temeke", category: "grocery", userId: merchantUser.id, trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), plan: "FREE_TRIAL", isActive: true },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // MERCHANT 2 — Salum Pharmacy
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // MERCHANT 2 â€” Salum Pharmacy
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const merchantUser2 = await prisma.user.upsert({
     where: { phone: "+255700000003" },
     update: {},
@@ -109,9 +109,9 @@ async function main() {
     create: { name: "Salum Pharmacy", location: "Sinza", district: "Kinondoni", category: "pharmacy", userId: merchantUser2.id, trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), plan: "FREE_TRIAL", isActive: true },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // MERCHANT 3 — Hassan Bar & Wines (wholesale sales, bar category)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // MERCHANT 3 â€” Hassan Bar & Wines (wholesale sales, bar category)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const merchantUser3 = await prisma.user.upsert({
     where: { phone: "+255700000004" },
     update: {},
@@ -123,9 +123,9 @@ async function main() {
     create: { name: "Hassan Bar & Wines", location: "Buguruni", district: "Ilala", category: "bar", userId: merchantUser3.id, trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), plan: "FREE_TRIAL", isActive: true },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // MERCHANT 4 — Fatuma Beauty Shop (online channel, out-of-stock scenario)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // MERCHANT 4 â€” Fatuma Beauty Shop (online channel, out-of-stock scenario)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const merchantUser4 = await prisma.user.upsert({
     where: { phone: "+255700000005" },
     update: {},
@@ -137,65 +137,65 @@ async function main() {
     create: { name: "Fatuma Beauty Shop", location: "Tegeta", district: "Kinondoni", category: "beauty", userId: merchantUser4.id, trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), plan: "FREE_TRIAL", isActive: true },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   // DATE HELPERS
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const daysFromNow = (n) => new Date(Date.now() + n * 24 * 60 * 60 * 1000);
   const daysAgo     = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
-  const expiryUrgent = daysFromNow(5);   // 5 days  — very urgent
-  const expirySoon   = daysFromNow(14);  // 14 days — dashboard warning
-  const expiryFar    = daysFromNow(180); // 6 months — healthy
+  const expiryUrgent = daysFromNow(5);   // 5 days  â€” very urgent
+  const expirySoon   = daysFromNow(14);  // 14 days â€” dashboard warning
+  const expiryFar    = daysFromNow(180); // 6 months â€” healthy
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // PRODUCTS — Duka la Amina  (every stock/expiry scenario)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // PRODUCTS â€” Duka la Amina  (every stock/expiry scenario)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const productDefs = [
-    // [0] GOOD STOCK · wholesale price · doesNotExpire
+    // [0] GOOD STOCK Â· wholesale price Â· doesNotExpire
     { name: "Unga wa Sembe (2kg)", sku: "UNG001", unit: "bag",
       buyingPrice: 2800, sellingPrice: 3200, wholesalePrice: 2950, wholesaleMinQty: 10,
       currentStock: 30, minimumStock: 10, doesNotExpire: true },
-    // [1] LOW STOCK (4 < min 10) · wholesale · doesNotExpire
+    // [1] LOW STOCK (4 < min 10) Â· wholesale Â· doesNotExpire
     { name: "Mchele (1kg)", sku: "MCH001", unit: "kg",
       buyingPrice: 1800, sellingPrice: 2200, wholesalePrice: 1950, wholesaleMinQty: 5,
       currentStock: 4, minimumStock: 10, doesNotExpire: true },
-    // [2] GOOD STOCK · expiry 6 months · no wholesale
+    // [2] GOOD STOCK Â· expiry 6 months Â· no wholesale
     { name: "Mafuta ya Kupikia (1L)", sku: "MAF001", unit: "litre",
       buyingPrice: 3500, sellingPrice: 4000,
       currentStock: 12, minimumStock: 5, expiryDate: expiryFar },
-    // [3] LOW STOCK (3 < min 8) · wholesale · doesNotExpire
+    // [3] LOW STOCK (3 < min 8) Â· wholesale Â· doesNotExpire
     { name: "Sukari (1kg)", sku: "SUK001", unit: "kg",
       buyingPrice: 2200, sellingPrice: 2600, wholesalePrice: 2300, wholesaleMinQty: 5,
       currentStock: 3, minimumStock: 8, doesNotExpire: true },
-    // [4] GOOD STOCK · doesNotExpire · no wholesale
+    // [4] GOOD STOCK Â· doesNotExpire Â· no wholesale
     { name: "Sabuni ya Kufulia (bar)", sku: "SAB001", unit: "bar",
       buyingPrice: 600, sellingPrice: 800,
       currentStock: 25, minimumStock: 10, doesNotExpire: true },
-    // [5] GOOD STOCK · doesNotExpire · no wholesale
+    // [5] GOOD STOCK Â· doesNotExpire Â· no wholesale
     { name: "Chumvi (500g)", sku: "CHU001", unit: "pkt",
       buyingPrice: 300, sellingPrice: 500,
       currentStock: 20, minimumStock: 10, doesNotExpire: true },
-    // [6] EXPIRING SOON (14 days) · no wholesale
+    // [6] EXPIRING SOON (14 days) Â· no wholesale
     { name: "Maziwa Freshi (500ml)", sku: "MAZ001", unit: "pcs",
       buyingPrice: 1000, sellingPrice: 1300,
       currentStock: 8, minimumStock: 5, expiryDate: expirySoon },
-    // [7] GOOD STOCK · wholesale (bulk buyer) · doesNotExpire
+    // [7] GOOD STOCK Â· wholesale (bulk buyer) Â· doesNotExpire
     { name: "Soda (Fanta 300ml)", sku: "SOD001", unit: "pcs",
       buyingPrice: 700, sellingPrice: 1000, wholesalePrice: 750, wholesaleMinQty: 24,
       currentStock: 48, minimumStock: 12, doesNotExpire: true },
-    // [8] GOOD STOCK · wholesale · doesNotExpire (eggs tray — doesNotExpire edge case)
+    // [8] GOOD STOCK Â· wholesale Â· doesNotExpire (eggs tray â€” doesNotExpire edge case)
     { name: "Mayai (tray 30)", sku: "MAY001", unit: "tray",
       buyingPrice: 7500, sellingPrice: 9000, wholesalePrice: 8000, wholesaleMinQty: 5,
       currentStock: 10, minimumStock: 3, doesNotExpire: true },
-    // [9] URGENT EXPIRY (5 days) · fresh produce · no wholesale
+    // [9] URGENT EXPIRY (5 days) Â· fresh produce Â· no wholesale
     { name: "Nyanya (kg)", sku: "NYA001", unit: "kg",
       buyingPrice: 1000, sellingPrice: 1500,
       currentStock: 15, minimumStock: 5, expiryDate: expiryUrgent },
-    // [10] OUT OF STOCK (0) · no wholesale — depleted scenario
+    // [10] OUT OF STOCK (0) Â· no wholesale â€” depleted scenario
     { name: "Uji wa Mtoto (500g)", sku: "UJI001", unit: "pkt",
       buyingPrice: 1800, sellingPrice: 2500,
       currentStock: 0, minimumStock: 10, expiryDate: expiryFar },
-    // [11] HIGH MARGIN (100%+) · good stock · doesNotExpire
+    // [11] HIGH MARGIN (100%+) Â· good stock Â· doesNotExpire
     { name: "Siagi (Blue Band 250g)", sku: "SIA001", unit: "pcs",
       buyingPrice: 2000, sellingPrice: 4200,
       currentStock: 18, minimumStock: 5, doesNotExpire: true },
@@ -211,9 +211,9 @@ async function main() {
     products.push(p);
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // PRODUCTS — Salum Pharmacy
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // PRODUCTS â€” Salum Pharmacy
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const pharmDefs = [
     { name: "Panadol (tab x 10)", sku: "PAN001", unit: "pkt",
       buyingPrice: 500, sellingPrice: 800, currentStock: 50, minimumStock: 20, expiryDate: expiryFar },
@@ -236,9 +236,9 @@ async function main() {
     pharmProducts.push(p);
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // PRODUCTS — Hassan Bar & Wines
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // PRODUCTS â€” Hassan Bar & Wines
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const barDefs = [
     { name: "Safari Lager (crate 24)", sku: "BEE001", unit: "crate",
       buyingPrice: 28000, sellingPrice: 36000, wholesalePrice: 30000, wholesaleMinQty: 3,
@@ -262,9 +262,9 @@ async function main() {
     barProducts.push(p);
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // PRODUCTS — Fatuma Beauty Shop
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // PRODUCTS â€” Fatuma Beauty Shop
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const beautyDefs = [
     { name: "Dark & Lovely Relaxer Kit", sku: "RLX001", unit: "pcs",
       buyingPrice: 6500, sellingPrice: 9500, wholesalePrice: 7500, wholesaleMinQty: 6,
@@ -286,38 +286,38 @@ async function main() {
     beautyProducts.push(p);
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SALES — Duka la Amina  (all 7 payment methods, both pricing tiers, both channels)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SALES â€” Duka la Amina  (all 7 payment methods, both pricing tiers, both channels)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   const salesData = [
-    // 13 days ago — CASH · RETAIL · POS · single item (old history)
+    // 13 days ago â€” CASH Â· RETAIL Â· POS Â· single item (old history)
     { createdAt: daysAgo(13), paymentMethod: "CASH", pricingTier: "RETAIL", channel: "POS",
       items: [{ product: products[4], qty: 5 }] },
-    // 10 days ago — BANK · WHOLESALE · POS · multi-item (bulk buyer, two weeks back)
+    // 10 days ago â€” BANK Â· WHOLESALE Â· POS Â· multi-item (bulk buyer, two weeks back)
     { createdAt: daysAgo(10), paymentMethod: "BANK", pricingTier: "WHOLESALE", channel: "POS",
       items: [{ product: products[0], qty: 15 }, { product: products[7], qty: 48 }] },
-    // 8 days ago — CREDIT · RETAIL · POS (credit sale scenario)
+    // 8 days ago â€” CREDIT Â· RETAIL Â· POS (credit sale scenario)
     { createdAt: daysAgo(8), paymentMethod: "CREDIT", pricingTier: "RETAIL", channel: "POS",
       items: [{ product: products[2], qty: 2 }, { product: products[5], qty: 10 }] },
-    // 6 days ago — CASH · RETAIL · POS
+    // 6 days ago â€” CASH Â· RETAIL Â· POS
     { createdAt: daysAgo(6), paymentMethod: "CASH", pricingTier: "RETAIL", channel: "POS",
       items: [{ product: products[0], qty: 2 }, { product: products[3], qty: 1 }] },
-    // 5 days ago — MPESA · RETAIL · POS
+    // 5 days ago â€” MPESA Â· RETAIL Â· POS
     { createdAt: daysAgo(5), paymentMethod: "MPESA", pricingTier: "RETAIL", channel: "POS",
       items: [{ product: products[2], qty: 1 }, { product: products[4], qty: 3 }] },
-    // 4 days ago — TIGOPESA · RETAIL · POS
+    // 4 days ago â€” TIGOPESA Â· RETAIL Â· POS
     { createdAt: daysAgo(4), paymentMethod: "TIGOPESA", pricingTier: "RETAIL", channel: "POS",
       items: [{ product: products[5], qty: 5 }, { product: products[1], qty: 2 }] },
-    // 3 days ago — AIRTEL_MONEY · RETAIL · ONLINE (customer placed order online)
+    // 3 days ago â€” AIRTEL_MONEY Â· RETAIL Â· ONLINE (customer placed order online)
     { createdAt: daysAgo(3), paymentMethod: "AIRTEL_MONEY", pricingTier: "RETAIL", channel: "ONLINE",
       items: [{ product: products[8], qty: 1 }, { product: products[11], qty: 2 }] },
-    // 2 days ago — HALOPESA · RETAIL · POS (CRDB mobile money)
+    // 2 days ago â€” HALOPESA Â· RETAIL Â· POS (CRDB mobile money)
     { createdAt: daysAgo(2), paymentMethod: "HALOPESA", pricingTier: "RETAIL", channel: "POS",
       items: [{ product: products[6], qty: 2 }, { product: products[9], qty: 3 }] },
-    // yesterday — BANK · WHOLESALE · POS (second wholesale, different items)
+    // yesterday â€” BANK Â· WHOLESALE Â· POS (second wholesale, different items)
     { createdAt: daysAgo(1), paymentMethod: "BANK", pricingTier: "WHOLESALE", channel: "POS",
       items: [{ product: products[0], qty: 10 }, { product: products[3], qty: 5 }] },
-    // today — MPESA · RETAIL · ONLINE (online channel, high-margin product)
+    // today â€” MPESA Â· RETAIL Â· ONLINE (online channel, high-margin product)
     { createdAt: daysAgo(0), paymentMethod: "MPESA", pricingTier: "RETAIL", channel: "ONLINE",
       items: [{ product: products[11], qty: 1 }, { product: products[8], qty: 2 }, { product: products[0], qty: 1 }] },
   ];
@@ -340,12 +340,12 @@ async function main() {
     });
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SALES — Hassan Bar & Wines (wholesale)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SALES â€” Hassan Bar & Wines (wholesale)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   for (const [wsItems, paymentMethod, note, daysBack] of [
-    [[{ product: barProducts[0], qty: 4 }, { product: barProducts[1], qty: 24 }], "BANK",  "Minibar Buguruni — bulk order", 2],
-    [[{ product: barProducts[0], qty: 3 }, { product: barProducts[2], qty: 2 }], "MPESA", "Resto Buguruni — vitu vya wiki",  0],
+    [[{ product: barProducts[0], qty: 4 }, { product: barProducts[1], qty: 24 }], "BANK",  "Minibar Buguruni â€” bulk order", 2],
+    [[{ product: barProducts[0], qty: 3 }, { product: barProducts[2], qty: 2 }], "MPESA", "Resto Buguruni â€” vitu vya wiki",  0],
   ]) {
     let totalAmount = 0; let profit = 0;
     const items = wsItems.map(({ product, qty }) => {
@@ -361,28 +361,28 @@ async function main() {
     });
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SUPPLIER ORDERS — Duka la Amina → Jumla Traders  (ALL 5 statuses)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SUPPLIER ORDERS â€” Duka la Amina â†’ Jumla Traders  (ALL 5 statuses)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-  // 1. PENDING — rice + sugar urgent restock (low-stock products)
+  // 1. PENDING â€” rice + sugar urgent restock (low-stock products)
   await prisma.order.create({
     data: {
       shopId: shop.id, supplierId: supplier.id, status: "PENDING",
-      totalAmount: 28000, note: "Haraka — mchele na sukari vimeisha karibu",
+      totalAmount: 28000, note: "Haraka â€” mchele na sukari vimeisha karibu",
       createdAt: daysAgo(0),
       items: { create: [
-        { productId: products[1].id, quantity: 20, unitPrice: 1800 }, // rice — low stock
-        { productId: products[3].id, quantity: 10, unitPrice: 2200 }, // sugar — low stock
+        { productId: products[1].id, quantity: 20, unitPrice: 1800 }, // rice â€” low stock
+        { productId: products[3].id, quantity: 10, unitPrice: 2200 }, // sugar â€” low stock
       ]},
     },
   });
 
-  // 2. CONFIRMED — flour + soda confirmed by Jumla Traders, awaiting dispatch
+  // 2. CONFIRMED â€” flour + soda confirmed by Jumla Traders, awaiting dispatch
   await prisma.order.create({
     data: {
       shopId: shop.id, supplierId: supplier.id, status: "CONFIRMED",
-      totalAmount: 72000, note: "Agizo la wiki — Jumla wamethibitisha",
+      totalAmount: 72000, note: "Agizo la wiki â€” Jumla wamethibitisha",
       createdAt: daysAgo(2),
       items: { create: [
         { productId: products[0].id, quantity: 20, unitPrice: 2800 }, // flour
@@ -391,11 +391,11 @@ async function main() {
     },
   });
 
-  // 3. OUT_FOR_DELIVERY — cooking oil + salt on the way
+  // 3. OUT_FOR_DELIVERY â€” cooking oil + salt on the way
   await prisma.order.create({
     data: {
       shopId: shop.id, supplierId: supplier.id, status: "OUT_FOR_DELIVERY",
-      totalAmount: 53000, note: "Gari iko njiani — mafuta na chumvi",
+      totalAmount: 53000, note: "Gari iko njiani â€” mafuta na chumvi",
       createdAt: daysAgo(4),
       items: { create: [
         { productId: products[2].id, quantity: 10, unitPrice: 3500 }, // cooking oil
@@ -404,11 +404,11 @@ async function main() {
     },
   });
 
-  // 4. DELIVERED — soap + baby porridge received last week (also creates stock IN movements)
+  // 4. DELIVERED â€” soap + baby porridge received last week (also creates stock IN movements)
   const deliveredOrder = await prisma.order.create({
     data: {
       shopId: shop.id, supplierId: supplier.id, status: "DELIVERED",
-      totalAmount: 19500, note: "Received — sabuni na uji",
+      totalAmount: 19500, note: "Received â€” sabuni na uji",
       createdAt: daysAgo(9),
       items: { create: [
         { productId: products[4].id,  quantity: 15, unitPrice: 600  }, // soap
@@ -426,11 +426,11 @@ async function main() {
       note: `Order delivery #${deliveredOrder.id.slice(-6)}` },
   });
 
-  // 5. CANCELLED — old tomato order cancelled because supplier couldn't supply
+  // 5. CANCELLED â€” old tomato order cancelled because supplier couldn't supply
   await prisma.order.create({
     data: {
       shopId: shop.id, supplierId: supplier.id, status: "CANCELLED",
-      totalAmount: 15000, note: "Ilifutwa — msambazaji hakuwa na nyanya",
+      totalAmount: 15000, note: "Ilifutwa â€” msambazaji hakuwa na nyanya",
       createdAt: daysAgo(14),
       items: { create: [
         { productId: products[9].id, quantity: 15, unitPrice: 1000 }, // tomatoes
@@ -438,12 +438,12 @@ async function main() {
     },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SUPPLIER ORDERS — other merchants → Jumla Traders
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SUPPLIER ORDERS â€” other merchants â†’ Jumla Traders
   // (so Jumla's portal shows orders from multiple shops)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-  // Salum Pharmacy → Jumla Traders — CONFIRMED (Panadol restock)
+  // Salum Pharmacy â†’ Jumla Traders â€” CONFIRMED (Panadol restock)
   await prisma.order.create({
     data: {
       shopId: shop2.id, supplierId: supplier.id, status: "CONFIRMED",
@@ -456,7 +456,7 @@ async function main() {
     },
   });
 
-  // Salum Pharmacy → Jumla Traders — OUT_FOR_DELIVERY (Vitamin C on the way)
+  // Salum Pharmacy â†’ Jumla Traders â€” OUT_FOR_DELIVERY (Vitamin C on the way)
   await prisma.order.create({
     data: {
       shopId: shop2.id, supplierId: supplier.id, status: "OUT_FOR_DELIVERY",
@@ -468,15 +468,15 @@ async function main() {
     },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // SUPPLIER ORDERS — other merchants (Hassan, Fatuma) → their own suppliers
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // SUPPLIER ORDERS â€” other merchants (Hassan, Fatuma) â†’ their own suppliers
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-  // Hassan Bar → Rafiki Beverages — PENDING (urgent Coke restock)
+  // Hassan Bar â†’ Rafiki Beverages â€” PENDING (urgent Coke restock)
   await prisma.order.create({
     data: {
       shopId: shop3.id, supplierId: supplier2.id, status: "PENDING",
-      totalAmount: 130000, note: "Haraka — Coca-Cola imekwisha",
+      totalAmount: 130000, note: "Haraka â€” Coca-Cola imekwisha",
       createdAt: daysAgo(0),
       items: { create: [
         { productId: barProducts[0].id, quantity: 5,  unitPrice: 28000 },
@@ -485,11 +485,11 @@ async function main() {
     },
   });
 
-  // Fatuma Beauty → Beauty Supplies TZ — PENDING (lotion + lip balm out of stock)
+  // Fatuma Beauty â†’ Beauty Supplies TZ â€” PENDING (lotion + lip balm out of stock)
   await prisma.order.create({
     data: {
       shopId: shop4.id, supplierId: supplier3.id, status: "PENDING",
-      totalAmount: 81500, note: "Lotion na Lip Balm imekwisha — haraka",
+      totalAmount: 81500, note: "Lotion na Lip Balm imekwisha â€” haraka",
       createdAt: daysAgo(0),
       items: { create: [
         { productId: beautyProducts[1].id, quantity: 20, unitPrice: 4000 },
@@ -498,11 +498,11 @@ async function main() {
     },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // CUSTOMER ORDERS — Duka la Amina  (ALL 5 statuses)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // CUSTOMER ORDERS â€” Duka la Amina  (ALL 5 statuses)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-  // 1. PENDING — new online order, not yet reviewed by Amina
+  // 1. PENDING â€” new online order, not yet reviewed by Amina
   await prisma.customerOrder.create({
     data: {
       shopId: shop.id, customerName: "Ali Hassan", customerPhone: "+255712000111",
@@ -516,7 +516,7 @@ async function main() {
     },
   });
 
-  // 2. CONFIRMED — Amina accepted, stock reserved, awaiting packing
+  // 2. CONFIRMED â€” Amina accepted, stock reserved, awaiting packing
   await prisma.customerOrder.create({
     data: {
       shopId: shop.id, customerName: "John Mwangi", customerPhone: "+255712345678",
@@ -530,7 +530,7 @@ async function main() {
     },
   });
 
-  // 3. CONFIRMED (second) — eggs + tomatoes fresh produce delivery order
+  // 3. CONFIRMED (second) â€” eggs + tomatoes fresh produce delivery order
   await prisma.customerOrder.create({
     data: {
       shopId: shop.id, customerName: "Neema Shaban", customerPhone: "+255789001122",
@@ -544,12 +544,12 @@ async function main() {
     },
   });
 
-  // 4. OUT_FOR_DELIVERY — driver has picked up the order
+  // 4. OUT_FOR_DELIVERY â€” driver has picked up the order
   await prisma.customerOrder.create({
     data: {
       shopId: shop.id, customerName: "Grace Mwacha", customerPhone: "+255754888777",
       status: "OUT_FOR_DELIVERY", totalAmount: 15600,
-      note: "Mbagala Kwa Azizi — maziwa na sabuni",
+      note: "Mbagala Kwa Azizi â€” maziwa na sabuni",
       createdAt: daysAgo(2),
       items: { create: [
         { productId: products[6].id, quantity: 4, unitPrice: 1300, pricingTier: "RETAIL" }, // milk
@@ -558,12 +558,12 @@ async function main() {
     },
   });
 
-  // 5. DELIVERED — completed wholesale online order
+  // 5. DELIVERED â€” completed wholesale online order
   await prisma.customerOrder.create({
     data: {
       shopId: shop.id, customerName: "Jumanne Kipanga", customerPhone: "+255765444333",
       status: "DELIVERED", totalAmount: 42600,
-      note: "Imetolewa — unga na soda kwa jumla",
+      note: "Imetolewa â€” unga na soda kwa jumla",
       createdAt: daysAgo(5),
       items: { create: [
         { productId: products[0].id, quantity: 10, unitPrice: 2950, pricingTier: "WHOLESALE" }, // flour wholesale
@@ -572,12 +572,12 @@ async function main() {
     },
   });
 
-  // 6. CANCELLED — customer changed their mind
+  // 6. CANCELLED â€” customer changed their mind
   await prisma.customerOrder.create({
     data: {
       shopId: shop.id, customerName: "Said Othman", customerPhone: "+255700999888",
       status: "CANCELLED", totalAmount: 5400,
-      note: "Ilifutwa — mteja alibadili mawazo",
+      note: "Ilifutwa â€” mteja alibadili mawazo",
       createdAt: daysAgo(7),
       items: { create: [
         { productId: products[1].id, quantity: 3, unitPrice: 2200, pricingTier: "RETAIL" }, // rice
@@ -585,9 +585,9 @@ async function main() {
     },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // CUSTOMER ORDERS — Hassan Bar (CONFIRMED + PENDING)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // CUSTOMER ORDERS â€” Hassan Bar (CONFIRMED + PENDING)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   await prisma.customerOrder.create({
     data: {
       shopId: shop3.id, customerName: "Musa Omari", customerPhone: "+255765009988",
@@ -601,32 +601,32 @@ async function main() {
     },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // STOCK MOVEMENTS — Duka la Amina  (IN · OUT · ADJUSTMENT)
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+  // STOCK MOVEMENTS â€” Duka la Amina  (IN Â· OUT Â· ADJUSTMENT)
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   // These supplement the sale-generated OUT movements and delivery IN movements above.
 
-  // ADJUSTMENT — counted flour during stocktake, found 2 bags more than recorded
+  // ADJUSTMENT â€” counted flour during stocktake, found 2 bags more than recorded
   await prisma.stockMovement.create({
     data: { type: "ADJUSTMENT", quantity: 32, productId: products[0].id,
-      note: "Uhesabuji wa bidhaa — zipatikane zaidi (2 magunia)" },
+      note: "Uhesabuji wa bidhaa â€” zipatikane zaidi (2 magunia)" },
   });
 
-  // OUT — 3 milks sold directly at counter (not via POS, manual record)
+  // OUT â€” 3 milks sold directly at counter (not via POS, manual record)
   await prisma.stockMovement.create({
     data: { type: "OUT", quantity: 3, productId: products[6].id,
-      note: "Mauzo ya haraka — bila risiti" },
+      note: "Mauzo ya haraka â€” bila risiti" },
   });
 
-  // IN — returned 5 soaps from a cancelled order (reshelved)
+  // IN â€” returned 5 soaps from a cancelled order (reshelved)
   await prisma.stockMovement.create({
     data: { type: "IN", quantity: 5, productId: products[4].id,
-      note: "Bidhaa zilizorudishwa — agizo lililofutwa" },
+      note: "Bidhaa zilizorudishwa â€” agizo lililofutwa" },
   });
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   // SUMMARY
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
   console.log("Seed complete");
   console.log("+------------------------------------------------------------------+");
   console.log("|                   TEST LOGIN CREDENTIALS                        |");
@@ -645,14 +645,14 @@ async function main() {
   console.log("|  3 stock movements: IN/OUT/ADJUSTMENT                           |");
   console.log("|                                                                  |");
   console.log("| MERCHANT   +255700000003  PIN: 1234                              |");
-  console.log("|  Salum Pharmacy (Kinondoni/Sinza) — 5 products                  |");
+  console.log("|  Salum Pharmacy (Kinondoni/Sinza) â€” 5 products                  |");
   console.log("|                                                                  |");
   console.log("| MERCHANT   +255700000004  PIN: 1234                              |");
-  console.log("|  Hassan Bar & Wines (Ilala/Buguruni) — 4 products               |");
+  console.log("|  Hassan Bar & Wines (Ilala/Buguruni) â€” 4 products               |");
   console.log("|  2 wholesale sales | 1 PENDING order | 1 CONFIRMED customer ord  |");
   console.log("|                                                                  |");
   console.log("| MERCHANT   +255700000005  PIN: 1234                              |");
-  console.log("|  Fatuma Beauty Shop (Kinondoni/Tegeta) — 4 products              |");
+  console.log("|  Fatuma Beauty Shop (Kinondoni/Tegeta) â€” 4 products              |");
   console.log("|  1 PENDING restock order                                        |");
   console.log("|                                                                  |");
   console.log("| SUPPLIER   +255700000001  PIN: 1234   *** FEATURED SUPPLIER ***  |");
@@ -661,10 +661,10 @@ async function main() {
   console.log("|    DELIVERED/CANCELLED) + Salum (CONFIRMED/OUT_FOR_DELIVERY)    |");
   console.log("|                                                                  |");
   console.log("| SUPPLIER   +255700000006  PIN: 1234                              |");
-  console.log("|  Rafiki Beverages Ltd (Posta) — Hassan's supplier               |");
+  console.log("|  Rafiki Beverages Ltd (Posta) â€” Hassan's supplier               |");
   console.log("|                                                                  |");
   console.log("| SUPPLIER   +255700000007  PIN: 1234                              |");
-  console.log("|  Beauty Supplies TZ (Ilala) — Fatuma's supplier                 |");
+  console.log("|  Beauty Supplies TZ (Ilala) â€” Fatuma's supplier                 |");
   console.log("+------------------------------------------------------------------+");
 }
 

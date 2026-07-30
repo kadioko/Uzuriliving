@@ -22,18 +22,18 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'com.dukapilot.app',
-    hostName: 'www.dukapilot.com', // The domain being opened in the TWA.
+    applicationId: 'com.uzuriliving.app',
+    hostName: 'www.uzuriliving.com', // The domain being opened in the TWA.
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
-    name: 'DukaPilot', // The application name.
-    launcherName: 'DukaPilot', // The name shown on the Android Launcher.
-    themeColor: '#16A34A', // The color used for the status bar.
-    themeColorDark: '#166534', // The color used for the dark status bar.
-    navigationColor: '#166534', // The color used for the navigation bar.
-    navigationColorDark: '#166534', // The color used for the dark navbar.
-    navigationDividerColor: '#166534', // The navbar divider color.
-    navigationDividerColorDark: '#166534', // The dark navbar divider color.
-    backgroundColor: '#166534', // The color used for the splash screen background.
+    name: 'Uzuri Living', // The application name.
+    launcherName: 'Uzuri Living', // The name shown on the Android Launcher.
+    themeColor: '#E99400', // The color used for the status bar.
+    themeColorDark: '#102A43', // The color used for the dark status bar.
+    navigationColor: '#102A43', // The color used for the navigation bar.
+    navigationColorDark: '#102A43', // The color used for the dark navbar.
+    navigationDividerColor: '#102A43', // The navbar divider color.
+    navigationDividerColorDark: '#102A43', // The dark navbar divider color.
+    backgroundColor: '#102A43', // The color used for the splash screen background.
     enableNotifications: false, // Re-enable when delegated push notifications are implemented.
     // Every shortcut must include the following fields:
     // - name: String that will show up in the shortcut.
@@ -41,9 +41,9 @@ def twaManifest = [
     // - url: Absolute path of the URL to launch the app with (e.g '/create').
     // - icon: Name of the resource in the drawable folder to use as an icon.
     shortcuts: [
-        [name: 'Record sale', short_name: 'Sale', url: 'https://www.dukapilot.com/sales?shortcut=sale', icon: 'shortcut_sale'],
-        [name: 'Inventory', short_name: 'Stock', url: 'https://www.dukapilot.com/inventory?shortcut=inventory', icon: 'shortcut_inventory'],
-        [name: 'Customer debts', short_name: 'Debts', url: 'https://www.dukapilot.com/debts?shortcut=debts', icon: 'shortcut_debts'],
+        [name: 'Record sale', short_name: 'Sale', url: 'https://www.uzuriliving.com/sales?shortcut=sale', icon: 'shortcut_sale'],
+        [name: 'Inventory', short_name: 'Stock', url: 'https://www.uzuriliving.com/inventory?shortcut=inventory', icon: 'shortcut_inventory'],
+        [name: 'Customer debts', short_name: 'Debts', url: 'https://www.uzuriliving.com/debts?shortcut=debts', icon: 'shortcut_debts'],
     ],
     // The duration of fade out animation in milliseconds to be played when removing splash screen.
     splashScreenFadeOutDuration: 300,
@@ -65,16 +65,16 @@ def signingValue = { environmentName, propertyName ->
     System.getenv(environmentName) ?: signingProperties.getProperty(propertyName)
 }
 
-def uploadStoreFile = signingValue("DUKAPILOT_UPLOAD_STORE_FILE", "storeFile")
-def uploadStorePassword = signingValue("DUKAPILOT_UPLOAD_STORE_PASSWORD", "storePassword")
-def uploadKeyAlias = signingValue("DUKAPILOT_UPLOAD_KEY_ALIAS", "keyAlias")
-def uploadKeyPassword = signingValue("DUKAPILOT_UPLOAD_KEY_PASSWORD", "keyPassword")
+def uploadStoreFile = signingValue("UZURILIVING_UPLOAD_STORE_FILE", "storeFile")
+def uploadStorePassword = signingValue("UZURILIVING_UPLOAD_STORE_PASSWORD", "storePassword")
+def uploadKeyAlias = signingValue("UZURILIVING_UPLOAD_KEY_ALIAS", "keyAlias")
+def uploadKeyPassword = signingValue("UZURILIVING_UPLOAD_KEY_PASSWORD", "keyPassword")
 
 android {
     compileSdkVersion 36
-    namespace "com.dukapilot.app"
+    namespace "com.uzuriliving.app"
     defaultConfig {
-        applicationId "com.dukapilot.app"
+        applicationId "com.uzuriliving.app"
         minSdkVersion 23
         // Google Play requires Android 16 / API 36 for app updates from 31 August 2026.
         targetSdkVersion 36
@@ -97,7 +97,7 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://www.dukapilot.com/manifest.json'
+            resValue "string", "webManifestUrl", 'https://www.uzuriliving.com/manifest.json'
         
 
         

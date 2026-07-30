@@ -1,7 +1,7 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#14532d"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
-  <text x="88" y="142" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="900">DukaPilot</text>
+  <text x="88" y="142" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="900">Uzuri Living</text>
   <text x="88" y="300" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="900">Agiza stock</text>
   <text x="88" y="392" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="900">kwa supplier haraka.</text>
   <text x="92" y="478" fill="#d1fae5" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Order ya bidhaa inakuwa ujumbe</text>
@@ -11,7 +11,7 @@
   <path d="M150 750h760" stroke="#e5e7eb" stroke-width="3"/>
   <text x="150" y="810" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">Sukari 1kg x 24</text>
   <text x="150" y="860" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">Mafuta 1L x 12</text>
-  <rect x="600" y="790" width="310" height="74" rx="22" fill="#16a34a"/>
+  <rect x="600" y="790" width="310" height="74" rx="22" fill="#e99400"/>
   <text x="636" y="838" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="27" font-weight="900">Tuma WhatsApp</text>
   <text x="88" y="976" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="31" font-weight="900">Jaribu bure siku 14</text>
 </svg>

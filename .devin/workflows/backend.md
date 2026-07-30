@@ -1,4 +1,4 @@
-# DukaPilot Backend — Development Workflow
+# Uzuri Living Backend â€” Development Workflow
 
 ## Stack
 
@@ -32,19 +32,19 @@ npm run dev        # nodemon on :4000
 
 | File | Purpose |
 | --- | --- |
-| `src/app.js` | Express entry point — routes, CORS, middleware, error handler |
+| `src/app.js` | Express entry point â€” routes, CORS, middleware, error handler |
 | `prisma/schema.prisma` | Full data model |
 | `prisma.config.js` | Prisma 7 datasource config (read by CLI from CWD = `backend/`) |
 | `prisma/seed.js` | Seeds 4 test accounts + demo data |
-| `scripts/migrate-and-start.js` | Railway startup: `prisma migrate deploy` then `node src/app.js` |
+| `scripts/migrate-and-start.js` | Supabase startup: `prisma migrate deploy` then `node src/app.js` |
 | `scripts/backup.js` | `pg_dump \| gzip` database backup |
 | `scripts/smoke-test.js` | Production smoke test against live API |
 | `src/middleware/auth.js` | JWT authentication middleware |
-| `src/middleware/audit.js` | Audit trail — logs every mutating request to `AuditLog` |
+| `src/middleware/audit.js` | Audit trail â€” logs every mutating request to `AuditLog` |
 | `src/middleware/rateLimit.js` | Rate limiters (API, auth, public) |
 | `src/lib/prisma.js` | Prisma client singleton (pg adapter) |
-| `src/lib/sentry.js` | Sentry init — no-op when `SENTRY_DSN` is unset |
-| `src/services/otp.service.js` | Africa's Talking OTP — logs to console in dev |
+| `src/lib/sentry.js` | Sentry init â€” no-op when `SENTRY_DSN` is unset |
+| `src/services/otp.service.js` | Africa's Talking OTP â€” logs to console in dev |
 | `src/services/whatsapp.service.js` | WhatsApp message builder (Kiswahili) |
 
 ---
@@ -101,10 +101,10 @@ npm run db:studio                               # Prisma Studio UI at localhost:
 ### Migrations (production)
 
 ```bash
-npm run db:deploy   # prisma migrate deploy — applies pending migrations only
+npm run db:deploy   # prisma migrate deploy â€” applies pending migrations only
 ```
 
-The Railway startup script (`scripts/migrate-and-start.js`) runs this automatically. It uses `DATABASE_MIGRATE_URL` (public TCP proxy) because Railway's private network isn't available at container startup.
+The Supabase startup script (`scripts/migrate-and-start.js`) runs this automatically. It uses `DATABASE_MIGRATE_URL` (public TCP proxy) because Supabase's private network isn't available at container startup.
 
 ### Seeding
 
@@ -114,7 +114,7 @@ node prisma/seed.js
 npm run db:seed
 ```
 
-Seed uses `DATABASE_MIGRATE_URL` (falls back to `DATABASE_URL`) so it works both locally and via Railway's public URL.
+Seed uses `DATABASE_MIGRATE_URL` (falls back to `DATABASE_URL`) so it works both locally and via Supabase's public URL.
 
 ### Test accounts (PIN: 1234)
 
@@ -132,7 +132,7 @@ Seed uses `DATABASE_MIGRATE_URL` (falls back to `DATABASE_URL`) so it works both
 Copy `.env.example` to `.env`. Minimum required for local dev:
 
 ```env
-DATABASE_URL="postgresql://user:pass@localhost:5432/dukapilot"
+DATABASE_URL="postgresql://user:pass@localhost:5432/uzuriliving"
 JWT_SECRET="any-long-random-string"
 ```
 
@@ -172,8 +172,8 @@ Without `AT_API_KEY`, OTP codes are printed to the console instead of sent via S
 
 ### Add a new route
 
-1. Create `src/controllers/foo.controller.js` — export asyncHandler-wrapped functions.
-2. Create `src/routes/foo.routes.js` — mount the controller with `authenticateToken` and role guards.
+1. Create `src/controllers/foo.controller.js` â€” export asyncHandler-wrapped functions.
+2. Create `src/routes/foo.routes.js` â€” mount the controller with `authenticateToken` and role guards.
 3. Mount in `src/app.js`: `app.use("/api/foo", fooRoutes)`.
 
 ### Add a new Prisma model
@@ -195,7 +195,7 @@ npm run smoke:prod    # Smoke test against live production API
 
 ```bash
 # Build the backend image
-docker build -t dukapilot-backend .
+docker build -t uzuriliving-backend .
 
 # Or run everything with docker-compose from the repo root
 docker-compose up --build
@@ -206,13 +206,13 @@ The Dockerfile:
 - Base: `node:24-alpine`
 - Installs `postgresql-client` for `pg_dump` backup support
 - Copies `prisma.config.js` before `prisma generate`
-- Default CMD: `node src/app.js` (Railway overrides this via `railway.toml` to use `migrate-and-start.js`)
+- Default CMD: `node src/app.js` (Supabase overrides this via `Supabase.toml` to use `migrate-and-start.js`)
 
 ---
 
-## Deployment (Railway)
+## Deployment (Supabase)
 
-1. Railway reads `backend/railway.toml` for the start command.
+1. Supabase reads `backend/Supabase.toml` for the start command.
 2. `scripts/migrate-and-start.js` runs `prisma migrate deploy` using `DATABASE_MIGRATE_URL`, then starts the app.
-3. Set all required env vars in the Railway service dashboard (see `README.md` → Production Environment Variables).
-4. Healthcheck: Railway pings `/health` every 30s.
+3. Set all required env vars in the Supabase service dashboard (see `README.md` â†’ Production Environment Variables).
+4. Healthcheck: Supabase pings `/health` every 30s.

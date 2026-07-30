@@ -1,10 +1,10 @@
 /**
- * OTP Service — Africa's Talking SMS integration
+ * OTP Service â€” Africa's Talking SMS integration
  *
  * Required env vars:
- *   AT_API_KEY     — Africa's Talking API key
- *   AT_USERNAME    — Africa's Talking username (use 'sandbox' for testing)
- *   AT_SENDER_ID   — Short code or alphanumeric sender (optional, leave blank to use shared)
+ *   AT_API_KEY     â€” Africa's Talking API key
+ *   AT_USERNAME    â€” Africa's Talking username (use 'sandbox' for testing)
+ *   AT_SENDER_ID   â€” Short code or alphanumeric sender (optional, leave blank to use shared)
  *
  * If AT_API_KEY is not set, OTP codes are logged to console only (dev mode).
  */
@@ -33,7 +33,7 @@ async function sendSms(phone, message) {
 
   if (!apiKey) {
     console.log(`[OTP DEV] SMS to ${phone}: ${message}`);
-    return { sent: false, reason: "AT_API_KEY not configured — OTP logged to console" };
+    return { sent: false, reason: "AT_API_KEY not configured â€” OTP logged to console" };
   }
 
   const normalizedPhone = phone.startsWith("+") ? phone : `+${phone.replace(/\D/g, "")}`;
@@ -71,14 +71,14 @@ async function sendSms(phone, message) {
 
 /**
  * Issue and send an OTP to the given phone number.
- * Returns { sent, reason? } — reason only when not sent.
+ * Returns { sent, reason? } â€” reason only when not sent.
  */
 async function issueOtp(phone) {
   cleanExpired();
   const code = generateCode();
   otpStore.set(phone, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
 
-  const message = `Nambari yako ya DukaPilot ni: ${code}. Inatumika kwa dakika 10. / Your DukaPilot code: ${code}. Valid 10 mins.`;
+  const message = `Nambari yako ya Uzuri Living ni: ${code}. Inatumika kwa dakika 10. / Your Uzuri Living code: ${code}. Valid 10 mins.`;
   return sendSms(phone, message);
 }
 

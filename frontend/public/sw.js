@@ -1,7 +1,7 @@
-// DukaPilot Service Worker — offline support
+// Uzuri Living Service Worker â€” offline support
 // Strategy: cache-first for static assets, network-first for API calls
 
-const CACHE_NAME = "dukapilot-v3";
+const CACHE_NAME = "uzuriliving-v1";
 
 // Static assets to pre-cache on install
 const PRECACHE_URLS = [
@@ -9,7 +9,7 @@ const PRECACHE_URLS = [
   "/offline.html",
 ];
 
-// ── Install: pre-cache shell ────────────────────────────────────────────────
+// â”€â”€ Install: pre-cache shell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
@@ -17,7 +17,7 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// ── Activate: clean old caches ──────────────────────────────────────────────
+// â”€â”€ Activate: clean old caches â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -31,7 +31,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// ── Fetch ────────────────────────────────────────────────────────────────────
+// â”€â”€ Fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -85,12 +85,12 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() }; }
-  const title = payload.title || "DukaPilot";
+  const title = payload.title || "Uzuri Living";
   const options = {
     body: payload.body || "You have a new shop alert.",
-    icon: "/logo/dukapilot-icon-192.png",
-    badge: "/logo/dukapilot-icon-48.png",
-    tag: payload.tag || "dukapilot-alert",
+    icon: "/logo/uzuriliving-logo.svg",
+    badge: "/logo/uzuriliving-logo.svg",
+    tag: payload.tag || "uzuriliving-alert",
     data: { href: payload.href || "/notifications" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

@@ -161,7 +161,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           (!user?.staff || !item.permission || user.staff.permissions[item.permission]) &&
           (!item.feature || user?.features?.[item.feature] !== false)
         );
-  const displayName = user?.shop?.name || user?.supplier?.name || user?.name || "DukaPilot";
+  const displayName = user?.shop?.name || user?.supplier?.name || user?.name || "Uzuri Living";
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -185,7 +185,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <LogoMark className="h-10 w-10 rounded-xl bg-white shadow-sm" />
           <div className="min-w-0">
             <p className="font-bold text-sm leading-tight truncate">{displayName}</p>
-            <p className="text-brand-300 text-xs">DukaPilot</p>
+            <p className="text-brand-300 text-xs">Uzuri Living</p>
           </div>
           <button
             onClick={() => setSidebarOpen(false)}

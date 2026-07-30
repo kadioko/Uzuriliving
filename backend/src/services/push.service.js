@@ -62,7 +62,7 @@ async function queueShopAlerts() {
     const lowStock = shop.products.filter((product) => product.currentStock <= product.minimumStock);
     if (preference.lowStock && lowStock.length) {
       queued += Number(await queueForShop(shop.id, "LOW_STOCK", {
-        title: "DukaPilot: stock needs attention",
+        title: "Uzuri Living: stock needs attention",
         body: `${lowStock[0].name}${lowStock.length > 1 ? ` and ${lowStock.length - 1} more item${lowStock.length === 2 ? "" : "s"}` : ""} need restocking.`,
         href: "/inventory?lowStock=true",
       }));
@@ -72,7 +72,7 @@ async function queueShopAlerts() {
     if (preference.debtDue && overdue.length) {
       const outstanding = overdue.reduce((total, debt) => total + debt.amount - debt.amountPaid, 0);
       queued += Number(await queueForShop(shop.id, "DEBT_DUE", {
-        title: "DukaPilot: collect customer debt",
+        title: "Uzuri Living: collect customer debt",
         body: `TZS ${outstanding.toLocaleString("en-TZ")} is due from ${overdue.length} customer${overdue.length === 1 ? "" : "s"}.`,
         href: "/debts?status=open",
       }));
@@ -81,7 +81,7 @@ async function queueShopAlerts() {
     const expiry = shop.plan === "FREE_TRIAL" ? shop.trialEndsAt : shop.subscriptionEndsAt;
     if (preference.subscriptionExpiry && (!isSubscriptionActive(shop) || (expiry && expiry <= expiryWindow))) {
       queued += Number(await queueForShop(shop.id, "SUBSCRIPTION", {
-        title: "DukaPilot: subscription action needed",
+        title: "Uzuri Living: subscription action needed",
         body: !isSubscriptionActive(shop) ? "Your shop needs reactivation to keep recording sales." : "Your plan ends soon. Send payment details to keep the shop active.",
         href: "/billing",
       }));
@@ -90,7 +90,7 @@ async function queueShopAlerts() {
     const action = shop.assistantActions[0];
     if (preference.dailyAssistant && action) {
       queued += Number(await queueForShop(shop.id, "DAILY_ASSISTANT", {
-        title: "DukaPilot AI priority",
+        title: "Uzuri Living AI priority",
         body: action.title,
         href: action.href || "/assistant",
       }));

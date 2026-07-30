@@ -1,12 +1,12 @@
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1920" fill="#0f7a3b"/>
   <rect x="72" y="84" width="936" height="1752" rx="64" fill="#ffffff"/>
-  <text x="116" y="170" fill="#16a34a" font-family="Inter, Arial, sans-serif" font-size="46" font-weight="900">DukaPilot</text>
+  <text x="116" y="170" fill="#e99400" font-family="Inter, Arial, sans-serif" font-size="46" font-weight="900">Uzuri Living</text>
   <text x="116" y="375" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="86" font-weight="900">Stock ikiisha</text>
   <text x="116" y="475" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="86" font-weight="900">bila kujua,</text>
   <text x="116" y="575" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="86" font-weight="900">faida inapotea.</text>
-  <text x="120" y="680" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">Ona bidhaa zilizo chini kabla</text>
-  <text x="120" y="740" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">hazijaisha dukani.</text>
+  <text x="120" y="680" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">Ona bidhaa zilizo chini kabla</text>
+  <text x="120" y="740" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">hazijaisha dukani.</text>
   <rect x="116" y="870" width="848" height="460" rx="38" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="4"/>
   <text x="166" y="950" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900">Low stock alerts</text>
   <rect x="166" y="1018" width="748" height="74" rx="22" fill="#ffffff"/>
@@ -15,7 +15,7 @@
   <text x="206" y="1066" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900">Mafuta 1L - 4 left</text>
   <text x="206" y="1168" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900">Mchele 5kg - 2 left</text>
   <text x="206" y="1270" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900">Sukari 1kg - agiza leo</text>
-  <rect x="116" y="1480" width="848" height="132" rx="34" fill="#16a34a"/>
+  <rect x="116" y="1480" width="848" height="132" rx="34" fill="#e99400"/>
   <text x="176" y="1562" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="43" font-weight="900">Tuma WhatsApp tupange setup</text>
   <text x="116" y="1718" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900">+255 743 910 580</text>
 </svg>

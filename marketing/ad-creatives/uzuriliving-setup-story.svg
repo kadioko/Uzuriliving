@@ -1,23 +1,23 @@
 <svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1920" fill="#14532d"/>
   <rect x="72" y="84" width="936" height="1752" rx="64" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
-  <text x="116" y="170" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="46" font-weight="900">DukaPilot</text>
+  <text x="116" y="170" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="46" font-weight="900">Uzuri Living</text>
   <text x="116" y="365" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="86" font-weight="900">Tunaanza na</text>
   <text x="116" y="465" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="86" font-weight="900">setup ya duka.</text>
   <text x="120" y="570" fill="#d1fae5" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">Tunakuongoza kuongeza bidhaa,</text>
   <text x="120" y="630" fill="#d1fae5" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="700">mauzo na matumizi ya kwanza.</text>
   <rect x="116" y="790" width="848" height="520" rx="42" fill="#ffffff"/>
   <text x="166" y="880" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="900">Activation ya kwanza</text>
-  <circle cx="190" cy="980" r="30" fill="#16a34a"/>
+  <circle cx="190" cy="980" r="30" fill="#e99400"/>
   <path d="m176 980 10 10 20-24" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="242" y="992" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">Ongeza bidhaa 10</text>
-  <circle cx="190" cy="1100" r="30" fill="#16a34a"/>
+  <circle cx="190" cy="1100" r="30" fill="#e99400"/>
   <path d="m176 1100 10 10 20-24" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="242" y="1112" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">Rekodi mauzo 10</text>
-  <circle cx="190" cy="1220" r="30" fill="#16a34a"/>
+  <circle cx="190" cy="1220" r="30" fill="#e99400"/>
   <path d="m176 1220 10 10 20-24" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="242" y="1232" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">Rudi siku ya pili</text>
-  <rect x="116" y="1480" width="848" height="132" rx="34" fill="#16a34a"/>
+  <rect x="116" y="1480" width="848" height="132" rx="34" fill="#e99400"/>
   <text x="176" y="1562" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="43" font-weight="900">Jaribu bure siku 14</text>
   <text x="116" y="1718" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="900">WhatsApp +255 743 910 580</text>
 </svg>

@@ -26,7 +26,7 @@ export default function AboutPage() {
             },
             {
               title: lang === "sw" ? "Msaidizi wa AI" : "AI assistant",
-              body: lang === "sw" ? "DukaPilot inalenga kukupa tahadhari na ushauri unaotokana na data ya duka lako." : "DukaPilot is positioned to turn shop data into alerts and practical recommendations.",
+              body: lang === "sw" ? "Uzuri Living inalenga kukupa tahadhari na ushauri unaotokana na data ya duka lako." : "Uzuri Living is positioned to turn shop data into alerts and practical recommendations.",
             },
           ].map((item) => (
             <section key={item.title} className="rounded-lg border border-gray-200 p-5">
@@ -38,15 +38,15 @@ export default function AboutPage() {
 
         <section className="rounded-lg border border-gray-200 bg-white p-6">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-700">
-            <TextReveal text="DukaPilot" fontSize="inherit" hoverColor="#15803d" />
+            <TextReveal text="Uzuri Living" fontSize="inherit" hoverColor="#15803d" />
           </p>
           <h2 className="mt-3 text-2xl font-bold tracking-normal text-gray-950">
             {lang === "sw" ? "Rubani wa duka lako la kila siku" : "The daily pilot for your shop"}
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-7 text-gray-600">
             {lang === "sw"
-              ? "DukaPilot husaidia wafanyabiashara Tanzania kufuatilia bidhaa, mauzo, madeni, matumizi, maagizo na wafanyakazi kwa lugha wanayoitumia kazini."
-              : "DukaPilot helps Tanzanian merchants track inventory, sales, debts, expenses, orders, and staff in the language they use at work."}
+              ? "Uzuri Living husaidia wafanyabiashara Tanzania kufuatilia bidhaa, mauzo, madeni, matumizi, maagizo na wafanyakazi kwa lugha wanayoitumia kazini."
+              : "Uzuri Living helps Tanzanian merchants track inventory, sales, debts, expenses, orders, and staff in the language they use at work."}
           </p>
           <div className="mt-6">
             <WhatsAppCTA intent="about" label={lang === "sw" ? "Uliza kama inafaa duka langu" : "Ask if it fits my shop"} />

@@ -29,7 +29,7 @@ export default function DemoPage() {
             : "Use demo accounts to see sales, stock, orders, debts, expenses, staff, billing, and the AI Assistant. All PINs are 1234."}
           primaryCta={{ href: "/", label: lang === "sw" ? "Fungua login" : "Open login" }}
           secondaryCta={{
-            href: "https://wa.me/255743910580?text=Nataka%20setup%20baada%20ya%20demo%20ya%20DukaPilot",
+            href: "https://wa.me/255743910580?text=Nataka%20setup%20baada%20ya%20demo%20ya%20Uzuri%20Living",
             label: lang === "sw" ? "Nataka setup" : "I want setup",
           }}
           features={[
@@ -41,7 +41,7 @@ export default function DemoPage() {
         />
         <div>
           <h1 className="text-3xl font-bold text-gray-950">
-            <TextReveal text={lang === "sw" ? "Demo ya DukaPilot" : "DukaPilot Demo"} hoverColor="#15803d" />
+            <TextReveal text={lang === "sw" ? "Demo ya Uzuri Living" : "Uzuri Living Demo"} hoverColor="#15803d" />
           </h1>
         </div>
         <section className="rounded-xl border border-brand-200 bg-brand-50 p-5">

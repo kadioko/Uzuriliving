@@ -63,7 +63,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     try {
-      setDone(JSON.parse(localStorage.getItem("dukapilot_onboarding_done") || "{}"));
+      setDone(JSON.parse(localStorage.getItem("uzuriliving_onboarding_done") || "{}"));
     } catch {
       setDone({});
     }
@@ -72,7 +72,7 @@ export default function OnboardingPage() {
   function toggleDone(href: string) {
     setDone((current) => {
       const next = { ...current, [href]: !current[href] };
-      localStorage.setItem("dukapilot_onboarding_done", JSON.stringify(next));
+      localStorage.setItem("uzuriliving_onboarding_done", JSON.stringify(next));
       return next;
     });
   }
@@ -80,22 +80,22 @@ export default function OnboardingPage() {
   const completeCount = steps.filter((step) => done[step.href]).length;
   const referralText = encodeURIComponent(
     lang === "sw"
-      ? "Nimeanza kutumia DukaPilot kufuatilia stock, mauzo na madeni ya duka. Kama una duka, jaribu hapa: https://www.dukapilot.com/ au tuma WhatsApp kwa support: https://wa.me/255743910580?text=Habari%20DukaPilot%2C%20nimeletwa%20na%20rafiki%20na%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20"
-      : "I started using DukaPilot to track shop stock, sales, and customer debts. If you run a shop, try it here: https://www.dukapilot.com/ or WhatsApp support: https://wa.me/255743910580?text=Hello%20DukaPilot%2C%20a%20friend%20referred%20me%20and%20I%20want%20shop%20setup%20help.%20Shop%20type%3A%20"
+      ? "Nimeanza kutumia Uzuri Living kufuatilia stock, mauzo na madeni ya duka. Kama una duka, jaribu hapa: https://www.uzuriliving.com/ au tuma WhatsApp kwa support: https://wa.me/255743910580?text=Habari%20Uzuri%20Living%2C%20nimeletwa%20na%20rafiki%20na%20nataka%20setup%20ya%20duka%20langu.%20Aina%20ya%20duka%3A%20"
+      : "I started using Uzuri Living to track shop stock, sales, and customer debts. If you run a shop, try it here: https://www.uzuriliving.com/ or WhatsApp support: https://wa.me/255743910580?text=Hello%20Uzuri%20Living%2C%20a%20friend%20referred%20me%20and%20I%20want%20shop%20setup%20help.%20Shop%20type%3A%20"
   );
 
   return (
     <AppShell>
       <div className="mx-auto max-w-5xl space-y-6">
         <section className="rounded-2xl bg-brand-700 p-6 text-white">
-          <p className="text-sm font-semibold text-brand-100">DukaPilot</p>
+          <p className="text-sm font-semibold text-brand-100">Uzuri Living</p>
           <h1 className="mt-2 text-2xl font-bold">
             {lang === "sw" ? "Anzisha duka lako kwa hatua 5" : "Set up your shop in 5 steps"}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-100">
             {lang === "sw"
-              ? "Ukimaliza hatua hizi, DukaPilot itaweza kukuonyesha mauzo, stock, madeni, matumizi na mapendekezo ya AI."
-              : "Once these steps are done, DukaPilot can show sales, stock, debts, expenses, and AI recommendations."}
+              ? "Ukimaliza hatua hizi, Uzuri Living itaweza kukuonyesha mauzo, stock, madeni, matumizi na mapendekezo ya AI."
+              : "Once these steps are done, Uzuri Living can show sales, stock, debts, expenses, and AI recommendations."}
           </p>
           <div className="mt-4 h-2 rounded-full bg-white/20">
             <div className="h-2 rounded-full bg-white" style={{ width: `${Math.round((completeCount / steps.length) * 100)}%` }} />

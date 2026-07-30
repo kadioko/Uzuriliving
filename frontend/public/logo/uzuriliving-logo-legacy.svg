@@ -1,10 +1,10 @@
 <svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">DukaPilot logo</title>
-  <desc id="desc">Green DukaPilot shop bag logo with a check mark.</desc>
-  <rect width="160" height="160" rx="36" fill="#16A34A"/>
+  <title id="title">Uzuri Living logo</title>
+  <desc id="desc">Green Uzuri Living shop bag logo with a check mark.</desc>
+  <rect width="160" height="160" rx="36" fill="#E99400"/>
   <rect x="42" y="52" width="76" height="70" rx="16" fill="white"/>
   <path d="M61 55V47C61 36.5066 69.5066 28 80 28C90.4934 28 99 36.5066 99 47V55" stroke="white" stroke-width="10" stroke-linecap="round"/>
-  <path d="M61 58V48C61 37.5066 69.5066 29 80 29C90.4934 29 99 37.5066 99 48V58" stroke="#16A34A" stroke-width="8" stroke-linecap="round"/>
-  <path d="M63 82L76 95L99 70" stroke="#16A34A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M61 58V48C61 37.5066 69.5066 29 80 29C90.4934 29 99 37.5066 99 48V58" stroke="#E99400" stroke-width="8" stroke-linecap="round"/>
+  <path d="M63 82L76 95L99 70" stroke="#E99400" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M52 63H108" stroke="#DCFCE7" stroke-width="6" stroke-linecap="round"/>
 </svg>

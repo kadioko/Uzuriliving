@@ -1,26 +1,26 @@
-# DukaPilot Launch Playbook
+# Uzuri Living Launch Playbook
 
 Last updated: 2026-07-10
 
-This is the working plan for turning the live DukaPilot product into active merchants, paid shops, and supplier relationships.
+This is the working plan for turning the live Uzuri Living product into active merchants, paid shops, and supplier relationships.
 
 ## Live Site Review
 
 Production is live at:
 
-- App: https://www.dukapilot.com/
-- API health: https://dukapilotproduction.up.railway.app/health
-- API status: https://dukapilotproduction.up.railway.app/status
+- App: https://www.uzuriliving.com/
+- API health: https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api/health
+- API status: https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api/status
 
 What is strong:
 
-- The domain, HTTPS redirect, Vercel hosting, Railway API, and production database are working.
-- Push launch: deploy migration `20260722001000_push_notifications_and_app_usage`, set `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, and `VAPID_PRIVATE_KEY` in Railway, then create a dedicated Railway cron service with start command `npm run push:process` and schedule `0 5 * * *` UTC. Do not expose or commit the private VAPID key.
+- The domain, HTTPS redirect, Vercel hosting, Supabase API, and production database are working.
+- Push launch: deploy migration `20260722001000_push_notifications_and_app_usage`, set `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, and `VAPID_PRIVATE_KEY` in Supabase, then create a dedicated Supabase cron service with start command `npm run push:process` and schedule `0 5 * * *` UTC. Do not expose or commit the private VAPID key.
 - The product already has the critical merchant workflow: registration, inventory, sales, debts, expenses, staff, billing, catalog, supplier orders, AI assistant, Swahili/English, and WhatsApp support.
 - Pricing is understandable for Tanzania: free trial, TZS 15,000/month Basic, TZS 35,000/month Pro.
 - The product has a natural sales motion: WhatsApp support plus M-Pesa payment reference verification.
 - Admin support now has subscription controls, supplier verification, assistant action analytics, and offline sync resolution by shop/device.
-- The assistant direction is stronger: DukaPilot should be sold as the app that tells a shop owner what to do next, not only as POS/inventory.
+- The assistant direction is stronger: Uzuri Living should be sold as the app that tells a shop owner what to do next, not only as POS/inventory.
 
 What should improve before scaling ads:
 
@@ -35,11 +35,11 @@ What should improve before scaling ads:
 
 One-line promise:
 
-> DukaPilot helps Tanzanian shop owners track stock, sales, debts, expenses, and supplier orders in Kiswahili from their phone.
+> Uzuri Living helps Tanzanian shop owners track stock, sales, debts, expenses, and supplier orders in Kiswahili from their phone.
 
 Short Swahili version:
 
-> DukaPilot hukusaidia kufuatilia stock, mauzo, madeni, matumizi na maagizo ya bidhaa kwa Kiswahili kwenye simu.
+> Uzuri Living hukusaidia kufuatilia stock, mauzo, madeni, matumizi na maagizo ya bidhaa kwa Kiswahili kwenye simu.
 
 Primary buyer:
 
@@ -84,12 +84,12 @@ Start with channels where trust is already high.
 
 ## SEO Launch Checklist
 
-- Confirm `https://www.dukapilot.com/robots.txt` allows public pages and points to `https://www.dukapilot.com/sitemap.xml`.
-- Submit `https://www.dukapilot.com/sitemap.xml` in Google Search Console after each major public-page release.
+- Confirm `https://www.uzuriliving.com/robots.txt` allows public pages and points to `https://www.uzuriliving.com/sitemap.xml`.
+- Submit `https://www.uzuriliving.com/sitemap.xml` in Google Search Console after each major public-page release.
 - Request indexing for the homepage, `/pricing`, `/about`, `/help`, `/contact`, `/catalog`, and `/demo`.
 - Keep private app pages out of the sitemap; focus crawlers on public, useful pages.
 - Build branded backlinks from Instagram, WhatsApp business profile, field-sales materials, partner/supplier pages, and local business directories.
-- Use the same entity details everywhere: DukaPilot, Necuva Group Limited, `support@dukapilot.com`, `+255743910580`, and `https://www.dukapilot.com`.
+- Use the same entity details everywhere: Uzuri Living, Necuva Group Limited, `support@uzuriliving.com`, `+255743910580`, and `https://www.uzuriliving.com`.
 
 ### 1. Direct Field Sales
 
@@ -116,13 +116,13 @@ Best first locations:
 
 Field pitch:
 
-> Unaandika stock na mauzo kwenye daftari? DukaPilot inakusaidia kujua stock iliyobaki, faida ya leo, madeni ya wateja, na muda wa kuagiza bidhaa tena. Ni Kiswahili, inatumika kwenye simu, na unaweza kujaribu bure siku 14.
+> Unaandika stock na mauzo kwenye daftari? Uzuri Living inakusaidia kujua stock iliyobaki, faida ya leo, madeni ya wateja, na muda wa kuagiza bidhaa tena. Ni Kiswahili, inatumika kwenye simu, na unaweza kujaribu bure siku 14.
 
 ### 2. WhatsApp Referrals
 
 Every onboarded merchant should receive a share message:
 
-> Nimeanza kutumia DukaPilot kufuatilia stock, mauzo na madeni ya duka. Kama una duka, jaribu hapa: https://www.dukapilot.com/
+> Nimeanza kutumia Uzuri Living kufuatilia stock, mauzo na madeni ya duka. Kama una duka, jaribu hapa: https://www.uzuriliving.com/
 
 Referral offer:
 
@@ -146,7 +146,7 @@ Ad angle examples:
 - "Unajua faida ya leo?"
 - "Stock ikiisha bila kujua, faida inapotea."
 - "Duka lako kwenye simu: mauzo, stock, madeni na maagizo."
-- "Acha daftari peke yake. Tumia DukaPilot."
+- "Acha daftari peke yake. Tumia Uzuri Living."
 
 ### 4. Supplier Partnerships
 
@@ -181,7 +181,7 @@ Week 1: Trust and funnel cleanup
 - Add stronger public homepage copy above the login form.
 - Add screenshots/video to pricing, demo, and help pages.
 - Add WhatsApp CTA to every public page.
-- Confirm support@dukapilot.com and WhatsApp response process.
+- Confirm support@uzuriliving.com and WhatsApp response process.
 - Prepare one-page setup checklist for field onboarding.
 
 Week 2: Manual onboarding sprint
@@ -232,7 +232,7 @@ Do not optimize for signups alone. Optimize for activated shops and paid convers
 - Merchants forget to return after first setup. Fix with day-1, day-3, and day-7 WhatsApp follow-up.
 - Payment friction. Keep M-Pesa reference flow simple and respond fast.
 - Feature overload. In demos, show only the workflow that fits the shop.
-- Deployment order. Railway must complete pending migrations before Vercel users reach frontend features that depend on new columns.
+- Deployment order. Supabase must complete pending migrations before Vercel users reach frontend features that depend on new columns.
 - Catalog trust. Keep demo/QA shops unpublished and review wholesale prices before sharing a merchant catalog.
 - Plan leakage. Test Basic and Pro entitlements after every billing or authorization change.
 - Shared mobile IPs. Avoid repeated production login tests; use local unit/browser tests and one controlled production monitor.
@@ -240,8 +240,8 @@ Do not optimize for signups alone. Optimize for activated shops and paid convers
 
 ## Release Gate - 1.3.0
 
-- Railway migration: `20260710001000_launch_hardening`.
-- Production monitor passes once after Railway and Vercel deploy.
+- Supabase migration: `20260710001000_launch_hardening`.
+- Production monitor passes once after Supabase and Vercel deploy.
 - Basic account cannot use staff or AI routes; Pro and active trial can.
 - Duplicate payment reference returns the existing confirmation without extending time again.
 - Customer orders follow `PENDING -> CONFIRMED -> OUT_FOR_DELIVERY -> DELIVERED`.

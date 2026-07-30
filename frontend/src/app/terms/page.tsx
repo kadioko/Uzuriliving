@@ -8,14 +8,14 @@ export default function TermsPage() {
 
   const sections = lang === "sw"
     ? [
-        ["Matumizi ya huduma", "DukaPilot hutolewa kusaidia uendeshaji wa duka. Unawajibika kuhakikisha taarifa unazoingiza ni sahihi na unatumia mfumo kwa njia halali."],
+        ["Matumizi ya huduma", "Uzuri Living hutolewa kusaidia uendeshaji wa duka. Unawajibika kuhakikisha taarifa unazoingiza ni sahihi na unatumia mfumo kwa njia halali."],
         ["Akaunti na usalama", "Linda PIN yako na vifaa vyako. Tuarifu haraka ukihisi akaunti yako imetumika bila ruhusa."],
         ["Malipo na mipango", "Bei, muda wa majaribio, na huduma zilizopo zinaweza kuonyeshwa kwenye ukurasa wa bei. Mabadiliko yoyote muhimu yatawasilishwa kabla hayajaanza."],
         ["Upatikanaji", "Tunajitahidi kuweka huduma hewani, lakini mtandao, vifaa, au huduma za wahusika wengine zinaweza kuathiri upatikanaji."],
         ["Mipaka ya uwajibikaji", "Ripoti na mapendekezo ni zana za kusaidia maamuzi. Wewe unabaki na jukumu la mwisho la maamuzi ya biashara yako."],
       ]
     : [
-        ["Use of service", "DukaPilot is provided to help operate a shop. You are responsible for keeping entered information accurate and using the platform lawfully."],
+        ["Use of service", "Uzuri Living is provided to help operate a shop. You are responsible for keeping entered information accurate and using the platform lawfully."],
         ["Account and security", "Protect your PIN and devices. Tell us quickly if you believe your account was used without permission."],
         ["Plans and payments", "Pricing, trial periods, and included services may be shown on the pricing page. Important changes will be communicated before they take effect."],
         ["Availability", "We work to keep the service online, but networks, devices, and third-party services can affect availability."],

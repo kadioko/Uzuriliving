@@ -131,7 +131,7 @@ export default function CatalogPage() {
       <main className="max-w-5xl mx-auto p-4 pb-12">
         <div className="mb-5">
           <h1 className="text-xl font-bold text-gray-950">{lang === "sw" ? "Bidhaa za maduka" : "Shop products near you"}</h1>
-          <p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Tafuta bidhaa kutoka maduka yanayotumia DukaPilot." : "Browse products from shops that use DukaPilot."}</p>
+          <p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Tafuta bidhaa kutoka maduka yanayotumia Uzuri Living." : "Browse products from shops that use Uzuri Living."}</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 mb-5">
           <div className="relative flex-1">
@@ -175,8 +175,8 @@ export default function CatalogPage() {
               <p className="mt-2 text-sm leading-6 text-gray-600">
                 {hasNoMarketplace
                   ? lang === "sw"
-                    ? "DukaPilot huonyesha bidhaa hapa pale mfanyabiashara anapoongeza bidhaa na kushare link ya catalog yake."
-                    : "DukaPilot shows products here once a merchant adds inventory and shares their catalog link."
+                    ? "Uzuri Living huonyesha bidhaa hapa pale mfanyabiashara anapoongeza bidhaa na kushare link ya catalog yake."
+                    : "Uzuri Living shows products here once a merchant adds inventory and shares their catalog link."
                   : lang === "sw"
                     ? "Jaribu kuondoa utafutaji au uchague duka jingine. Bidhaa zinaweza kuwa zimeisha au hazijawekwa hadharani."
                     : "Try clearing the search or choosing another shop. Products may be out of stock or not public yet."}

@@ -1,7 +1,7 @@
 <svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1080" height="1080" fill="#f8fafc"/>
   <rect x="64" y="64" width="952" height="952" rx="56" fill="#ffffff" stroke="#bbf7d0" stroke-width="4"/>
-  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">DukaPilot</text>
+  <text x="96" y="144" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="900">Uzuri Living</text>
   <text x="96" y="300" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">Many shops</text>
   <text x="96" y="390" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">still run on...</text>
   <rect x="96" y="540" width="270" height="230" rx="34" fill="#ecfdf5" stroke="#bbf7d0" stroke-width="3"/>
@@ -9,11 +9,11 @@
   <path d="M132 682h160M132 724h120" stroke="#86efac" stroke-width="10" stroke-linecap="round"/>
   <rect x="405" y="540" width="270" height="230" rx="34" fill="#f8fafc" stroke="#d1d5db" stroke-width="3"/>
   <text x="444" y="630" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="900">Memory</text>
-  <path d="M462 704c40-54 116-54 156 0" stroke="#16a34a" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="540" cy="694" r="20" fill="#16a34a"/>
+  <path d="M462 704c40-54 116-54 156 0" stroke="#e99400" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="540" cy="694" r="20" fill="#e99400"/>
   <rect x="714" y="540" width="270" height="230" rx="34" fill="#ecfdf5" stroke="#bbf7d0" stroke-width="3"/>
   <text x="750" y="630" fill="#14532d" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="900">WhatsApp</text>
-  <rect x="750" y="678" width="170" height="62" rx="24" fill="#16a34a"/>
+  <rect x="750" y="678" width="170" height="62" rx="24" fill="#e99400"/>
   <text x="786" y="719" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="900">order?</text>
-  <text x="96" y="936" fill="#166534" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">That works, until the shop grows.</text>
+  <text x="96" y="936" fill="#102a43" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="900">That works, until the shop grows.</text>
 </svg>
