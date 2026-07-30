@@ -100,6 +100,7 @@ interface AdminUser {
   phone: string;
   name: string;
   role: string;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
   language?: string;
   createdAt: string;
   shop?: { id: string; name: string } | null;
@@ -333,6 +334,7 @@ export default function AdminPage() {
   const [billingDrafts, setBillingDrafts] = useState<Record<string, BillingDraft>>({});
   const [supplierNotes, setSupplierNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [updatingUser, setUpdatingUser] = useState<string | null>(null);
 
   // User search / PIN reset
   const [searchPhone, setSearchPhone] = useState("");
@@ -671,6 +673,18 @@ export default function AdminPage() {
       setUsers((prev) => prev.filter((item) => item.id !== user.id));
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to remove user");
+    }
+  }
+
+  async function handleApproval(user: AdminUser, approvalStatus: "APPROVED" | "REJECTED") {
+    setUpdatingUser(user.id);
+    try {
+      const data = await api.patch<{ user: AdminUser }>(`/admin/users/${user.id}/approval`, { approvalStatus });
+      setUsers((prev) => prev.map((item) => item.id === user.id ? { ...item, ...data.user } : item));
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to update account approval");
+    } finally {
+      setUpdatingUser(null);
     }
   }
 
@@ -1308,6 +1322,26 @@ export default function AdminPage() {
 
         {/* USERS */}
         {tab === "users" && (
+          <div className="space-y-4">
+            {users.filter((user) => user.approvalStatus === "PENDING").length > 0 && (
+              <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-sm font-bold text-amber-950">Pending account approvals</h2>
+                    <p className="text-xs text-amber-800">Review new merchant and supplier registrations before they can sign in.</p>
+                  </div>
+                  <span className="rounded-full bg-amber-200 px-2.5 py-1 text-xs font-bold text-amber-900">{users.filter((user) => user.approvalStatus === "PENDING").length} waiting</span>
+                </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                  {users.filter((user) => user.approvalStatus === "PENDING").map((user) => (
+                    <div key={user.id} className="flex flex-col gap-3 rounded-lg border border-amber-100 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div><p className="text-sm font-semibold text-gray-950">{user.name}</p><p className="text-xs text-gray-500">{user.phone} · {user.role} · {user.shop?.name || user.supplier?.name || "No business profile"}</p></div>
+                      <div className="flex gap-2"><button onClick={() => handleApproval(user, "APPROVED")} disabled={updatingUser === user.id} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-700 disabled:opacity-50">Approve</button><button onClick={() => handleApproval(user, "REJECTED")} disabled={updatingUser === user.id} className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-200 disabled:opacity-50">Reject</button></div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
               <h2 className="font-semibold text-gray-800 text-sm">All Users ({users.length})</h2>
@@ -1319,6 +1353,7 @@ export default function AdminPage() {
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Name</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Phone</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Role</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Approval</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Shop / Supplier</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Subscription</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Joined</th>
@@ -1338,6 +1373,9 @@ export default function AdminPage() {
                         }`}>
                           {u.role}
                         </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        <span className={`rounded-full px-2 py-0.5 font-semibold ${u.approvalStatus === "APPROVED" ? "bg-green-100 text-green-700" : u.approvalStatus === "REJECTED" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"}`}>{u.approvalStatus || "APPROVED"}</span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">
                         {u.shop?.name || u.supplier?.name || "-"}
@@ -1372,6 +1410,7 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+          </div>
           </div>
         )}
 

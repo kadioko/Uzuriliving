@@ -109,6 +109,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [name, setName] = useState("");
   const [shopName, setShopName] = useState("");
   const [shopLocation, setShopLocation] = useState("");
@@ -137,6 +138,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
 
   function resetForms() {
     setError("");
+    setMessage("");
     setForgotMsg("");
     setForgotStep("phone");
     setForgotPhone(TANZANIA_PREFIX);
@@ -152,6 +154,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setMessage("");
 
     const normalizedPhone = normalizePhone(phone);
     const normalizedPin = pin.trim();
@@ -192,6 +195,8 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
           : { phone: normalizedPhone, pin: normalizedPin };
 
       const data = await api.post<{
+        pendingApproval?: boolean;
+        message?: string;
         user: {
           role: string;
           staff?: {
@@ -204,6 +209,13 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
           };
         };
       }>(endpoint, body, lang);
+
+      if (data.pendingApproval) {
+        setMessage(data.message || "Registration received. An admin must approve your account before you can sign in.");
+        setPin("");
+        setView("login");
+        return;
+      }
 
       if (data.user.role === "SUPPLIER") {
         router.push("/supplier");
@@ -459,6 +471,9 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
 
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">{error}</div>
+              )}
+              {message && (
+                <div className="bg-green-50 border border-green-200 text-green-800 rounded-lg p-3 mb-4 text-sm">{message}</div>
               )}
               {forgotMsg && (
                 <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">{forgotMsg}</div>

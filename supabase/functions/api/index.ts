@@ -146,7 +146,7 @@ function clearAuthHeaders() {
 }
 
 async function profile(client: SupabaseClient, userId: string) {
-  const { data: user, error } = await client.from("users").select("id,phone,name,role,language,createdAt").eq("id", userId).maybeSingle();
+  const { data: user, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt").eq("id", userId).maybeSingle();
   if (error) throw error;
   if (!user) return null;
   const [{ data: shop }, { data: supplier }] = await Promise.all([
@@ -171,7 +171,7 @@ async function authRegister(client: SupabaseClient, request: Request) {
   if (existing) return json({ error: "Phone number already registered" }, 409);
   const userId = crypto.randomUUID();
   const now = new Date().toISOString();
-  const { data: user, error } = await client.from("users").insert({ id: userId, phone, pin: await bcrypt.hash(pin, 10), name, role, createdAt: now, updatedAt: now }).select("id,phone,name,role,language,createdAt").single();
+  const { data: user, error } = await client.from("users").insert({ id: userId, phone, pin: await bcrypt.hash(pin, 10), name, role, approvalStatus: "PENDING", createdAt: now, updatedAt: now }).select("id,phone,name,role,language,approvalStatus,createdAt").single();
   if (error) throw error;
 
   if (role === "MERCHANT") {
@@ -186,9 +186,7 @@ async function authRegister(client: SupabaseClient, request: Request) {
     if (supplierError) throw supplierError;
   }
 
-  const access = await token({ userId, phone, role }, "1h");
-  const refresh = await token({ userId, role, type: "refresh" }, "30d");
-  return json({ user: await profile(client, user.id) }, 201, authHeaders(access, refresh));
+  return json({ pendingApproval: true, message: "Registration received. An admin must approve your account before you can sign in.", user: await profile(client, user.id) }, 202);
 }
 
 async function authLogin(client: SupabaseClient, request: Request) {
@@ -197,9 +195,11 @@ async function authLogin(client: SupabaseClient, request: Request) {
   const pin = String(body.pin ?? "").trim();
   if (!phone || !pin) return json({ error: "Phone and PIN required" }, 400);
   if (!validPhone(phone) || !validPin(pin)) return json({ error: "Invalid phone or PIN" }, 401);
-  const { data: user, error } = await client.from("users").select("id,phone,name,role,language,createdAt,pin").eq("phone", phone).maybeSingle();
+  const { data: user, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,pin").eq("phone", phone).maybeSingle();
   if (error) throw error;
   if (!user || !(await bcrypt.compare(pin, user.pin))) return json({ error: "Invalid phone or PIN" }, 401);
+  if (user.approvalStatus === "PENDING") return json({ error: "Your account is waiting for admin approval" }, 403);
+  if (user.approvalStatus === "REJECTED") return json({ error: "Your registration was not approved. Contact Uzuri Living support" }, 403);
   const access = await token({ userId: user.id, phone: user.phone, role: user.role }, "1h");
   const refresh = await token({ userId: user.id, role: user.role, type: "refresh" }, "30d");
   return json({ user: await profile(client, user.id) }, 200, authHeaders(access, refresh));
@@ -632,7 +632,7 @@ async function push(client: SupabaseClient, user: Record<string, unknown>, shop:
 
 async function supplierPortal(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { const { data: supplier } = await client.from("suppliers").select("*").eq("userId", user.userId).maybeSingle(); if (!supplier) return json({ error: "Supplier profile not found" }, 404); if (path === "/suppliers/portal/dashboard") { const { data: orders } = await client.from("orders").select("status").eq("supplierId", supplier.id); const ordersByStatus: Record<string, number> = {}; for (const order of orders ?? []) ordersByStatus[order.status] = (ordersByStatus[order.status] ?? 0) + 1; return json({ ordersByStatus, pendingOrders: [], topMerchantIds: [] }); } if (path === "/suppliers/portal/orders" || path.startsWith("/suppliers/portal/orders/")) { const orderId = path === "/suppliers/portal/orders" ? null : path.split("/").pop(); if (request.method === "GET") { let query = client.from("orders").select("*,shop:shops(id,name,location,district),items:order_items(*,product:products(id,name,unit))").eq("supplierId", supplier.id).order("createdAt", { ascending: false }); if (orderId) query = query.eq("id", orderId); const { data, error } = await query; if (error) throw error; return orderId ? data?.[0] ? json({ order: data[0] }) : json({ error: "Order not found" }, 404) : json({ orders: data ?? [], total: data?.length ?? 0, limit: 100, offset: 0 }); } const body = await request.json().catch(() => ({})); const { data, error } = await client.from("orders").update({ status: String(body.status ?? "").toUpperCase(), updatedAt: new Date().toISOString() }).eq("id", orderId).eq("supplierId", supplier.id).select("*").single(); if (error) throw error; return json({ order: data }); } if (path === "/suppliers/portal/products" || path.startsWith("/suppliers/portal/products/")) { const productId = path === "/suppliers/portal/products" ? null : path.split("/").pop(); if (request.method === "GET") { const { data, error } = await client.from("supplier_catalog_products").select("*").eq("supplierId", supplier.id).order("name"); if (error) throw error; return json({ products: data ?? [] }); } const body = await request.json().catch(() => ({})); if (request.method === "DELETE" && productId) { const { data, error } = await client.from("supplier_catalog_products").update({ isAvailable: false, updatedAt: new Date().toISOString() }).eq("id", productId).eq("supplierId", supplier.id).select("*").single(); if (error) throw error; return json({ product: data, message: "Supplier product marked unavailable" }); } const update = { ...(body.name !== undefined ? { name: body.name } : {}), ...(body.sku !== undefined ? { sku: body.sku || null } : {}), ...(body.unit !== undefined ? { unit: body.unit || "pcs" } : {}), ...(body.price !== undefined ? { price: Number(body.price) } : {}), ...(body.minOrderQty !== undefined ? { minOrderQty: Math.max(1, Number(body.minOrderQty)) } : {}), ...(body.note !== undefined ? { note: body.note || null } : {}), ...(body.isAvailable !== undefined ? { isAvailable: Boolean(body.isAvailable) } : {}), updatedAt: new Date().toISOString() }; const { data, error } = productId ? await client.from("supplier_catalog_products").update(update).eq("id", productId).eq("supplierId", supplier.id).select("*").single() : await client.from("supplier_catalog_products").insert({ id: crypto.randomUUID(), supplierId: supplier.id, name: body.name, sku: body.sku || null, unit: body.unit || "pcs", price: Number(body.price), minOrderQty: Math.max(1, Number(body.minOrderQty) || 1), note: body.note || null, isAvailable: body.isAvailable !== false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).select("*").single(); if (error) throw error; return json({ product: data }, productId ? 200 : 201); } return json({ error: "Supplier portal route not found" }, 404); }
 
-async function admin(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { if (user.role !== "ADMIN") return json({ error: "Forbidden" }, 403); const normalizeUsers = (rows: Record<string, unknown>[] | null) => (rows ?? []).map((row) => ({ ...row, shop: Array.isArray(row.shop) ? row.shop[0] ?? null : row.shop, supplier: Array.isArray(row.supplier) ? row.supplier[0] ?? null : row.supplier })); if (path === "/admin/users") { const { data, error } = await client.from("users").select("id,phone,name,role,language,createdAt,shop:shops(id,name),supplier:suppliers(id,name)").order("createdAt", { ascending: false }).limit(200); if (error) throw error; return json({ users: normalizeUsers(data as Record<string, unknown>[] | null) }); } if (path === "/admin/users/search") { const phone = new URL(request.url).searchParams.get("phone") ?? ""; const { data, error } = await client.from("users").select("id,phone,name,role,language,createdAt,shop:shops(id,name),supplier:suppliers(id,name)").ilike("phone", `%${phone}%`).limit(10); if (error) throw error; const users = normalizeUsers(data as Record<string, unknown>[] | null); return json({ user: users[0] ?? null, users }); } if (path === "/admin/staff/search") { const phone = new URL(request.url).searchParams.get("phone") ?? ""; const { data, error } = await client.from("staff_members").select("id,name,phone,role,isActive,shopId").ilike("phone", `%${phone}%`).limit(10); if (error) throw error; return json({ staff: data?.[0] ?? null }); } if (path === "/admin/audit-logs") { const { data, error } = await client.from("audit_logs").select("*").order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ logs: data ?? [] }); } if (path === "/admin/overview") { const tables = ["users", "shops", "products", "sales", "orders", "debts", "expenses"]; const counts: Record<string, number> = {}; for (const table of tables) { const { count } = await client.from(table).select("id", { count: "exact", head: true }); counts[table] = count ?? 0; } const [{ count: merchants }, { count: suppliers }, { count: admins }, { count: auditLogs }] = await Promise.all([client.from("users").select("id", { count: "exact", head: true }).eq("role", "MERCHANT"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "SUPPLIER"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "ADMIN"), client.from("audit_logs").select("id", { count: "exact", head: true })]); return json({ summary: { users: counts.users, merchants: merchants ?? 0, suppliers: suppliers ?? 0, admins: admins ?? 0, shops: counts.shops, products: counts.products, sales: counts.sales, orders: counts.orders, debts: counts.debts, expenses: counts.expenses, paidShops: 0, auditLogs: auditLogs ?? 0 } }); } if (request.method === "POST" && path.startsWith("/admin/users/") && path.endsWith("/reset-pin")) { const id = path.split("/")[3]; const body = await request.json().catch(() => ({})); if (!validPin(String(body.newPin ?? ""))) return json({ error: "New PIN must be 4 to 8 digits" }, 400); const { error } = await client.from("users").update({ pin: await bcrypt.hash(String(body.newPin), 10), updatedAt: new Date().toISOString() }).eq("id", id); if (error) throw error; return json({ message: "PIN reset successfully" }); } return json({ error: "Admin route not found" }, 404); }
+async function admin(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { if (user.role !== "ADMIN") return json({ error: "Forbidden" }, 403); const normalizeUsers = (rows: Record<string, unknown>[] | null) => (rows ?? []).map((row) => ({ ...row, shop: Array.isArray(row.shop) ? row.shop[0] ?? null : row.shop, supplier: Array.isArray(row.supplier) ? row.supplier[0] ?? null : row.supplier })); if (path === "/admin/users") { const { data, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,shop:shops(id,name),supplier:suppliers(id,name)").order("createdAt", { ascending: false }).limit(200); if (error) throw error; return json({ users: normalizeUsers(data as Record<string, unknown>[] | null) }); } if (path === "/admin/users/search") { const phone = new URL(request.url).searchParams.get("phone") ?? ""; const { data, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,shop:shops(id,name),supplier:suppliers(id,name)").ilike("phone", `%${phone}%`).limit(10); if (error) throw error; const users = normalizeUsers(data as Record<string, unknown>[] | null); return json({ user: users[0] ?? null, users }); } if (path === "/admin/staff/search") { const phone = new URL(request.url).searchParams.get("phone") ?? ""; const { data, error } = await client.from("staff_members").select("id,name,phone,role,isActive,shopId").ilike("phone", `%${phone}%`).limit(10); if (error) throw error; return json({ staff: data?.[0] ?? null }); } if (path === "/admin/audit-logs") { const { data, error } = await client.from("audit_logs").select("*").order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ logs: data ?? [] }); } if (path === "/admin/overview") { const tables = ["users", "shops", "products", "sales", "orders", "debts", "expenses"]; const counts: Record<string, number> = {}; for (const table of tables) { const { count } = await client.from(table).select("id", { count: "exact", head: true }); counts[table] = count ?? 0; } const [{ count: merchants }, { count: suppliers }, { count: admins }, { count: auditLogs }] = await Promise.all([client.from("users").select("id", { count: "exact", head: true }).eq("role", "MERCHANT"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "SUPPLIER"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "ADMIN"), client.from("audit_logs").select("id", { count: "exact", head: true })]); return json({ summary: { users: counts.users, merchants: merchants ?? 0, suppliers: suppliers ?? 0, admins: admins ?? 0, shops: counts.shops, products: counts.products, sales: counts.sales, orders: counts.orders, debts: counts.debts, expenses: counts.expenses, paidShops: 0, auditLogs: auditLogs ?? 0 } }); } if (request.method === "PATCH" && path.startsWith("/admin/users/") && path.endsWith("/approval")) { const id = path.split("/")[3]; const body = await request.json().catch(() => ({})); const approvalStatus = String(body.approvalStatus ?? "").toUpperCase(); if (!["PENDING", "APPROVED", "REJECTED"].includes(approvalStatus)) return json({ error: "Invalid approval status" }, 400); const { data, error } = await client.from("users").update({ approvalStatus, updatedAt: new Date().toISOString() }).eq("id", id).select("id,phone,name,role,approvalStatus").single(); if (error) throw error; return json({ user: data, message: `User ${approvalStatus.toLowerCase()}` }); } if (request.method === "POST" && path.startsWith("/admin/users/") && path.endsWith("/reset-pin")) { const id = path.split("/")[3]; const body = await request.json().catch(() => ({})); if (!validPin(String(body.newPin ?? ""))) return json({ error: "New PIN must be 4 to 8 digits" }, 400); const { error } = await client.from("users").update({ pin: await bcrypt.hash(String(body.newPin), 10), updatedAt: new Date().toISOString() }).eq("id", id); if (error) throw error; return json({ message: "PIN reset successfully" }); } return json({ error: "Admin route not found" }, 404); }
 
 async function publicShops(client: SupabaseClient) {
   const { data: shops, error } = await client
@@ -640,7 +640,6 @@ async function publicShops(client: SupabaseClient) {
     .select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo")
     .eq("isActive", true)
     .eq("isCatalogPublished", true)
-    .eq("isDemo", false)
     .order("name", { ascending: true });
 
   if (error) throw error;
@@ -655,7 +654,7 @@ async function publicShops(client: SupabaseClient) {
   for (const product of products ?? []) counts.set(product.shopId, (counts.get(product.shopId) ?? 0) + 1);
 
   return (shops ?? [])
-    .filter((shop) => activeShop(shop) && (counts.get(shop.id) ?? 0) > 0)
+    .filter((shop) => activeShop(shop))
     .map((shop) => ({
       id: shop.id,
       name: shop.name,
@@ -673,24 +672,28 @@ async function publicProducts(client: SupabaseClient, request: Request) {
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 60, 1), 100);
   const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
 
+  const { data: availableShops, error: shopError } = await client.from("shops")
+    .select("id,name,location,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo")
+    .eq("isActive", true)
+    .eq("isCatalogPublished", true);
+  if (shopError) throw shopError;
+  const shopMap = new Map((availableShops ?? []).filter((shop) => activeShop(shop)).map((shop) => [shop.id, shop]));
+  const allowedShopIds = [...shopMap.keys()];
+  if (!allowedShopIds.length) return { products: [], pagination: { total: 0, limit, offset, hasMore: false } };
+
   let query = client
     .from("products")
-    .select("id,name,unit,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,shopId", { count: "exact" })
+    .select("id,name,unit,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,imageUrl,shopId", { count: "exact" })
     .eq("isActive", true)
-    .gt("currentStock", 0);
+    .gt("currentStock", 0)
+    .in("shopId", allowedShopIds);
   if (shopId) query = query.eq("shopId", shopId);
   if (search) query = query.ilike("name", `%${search}%`);
 
   const { data: products, count, error } = await query.order("name").range(offset, offset + limit - 1);
   if (error) throw error;
 
-  const shopIds = [...new Set((products ?? []).map((product) => product.shopId))];
-  const { data: shops, error: shopError } = shopIds.length
-    ? await client.from("shops").select("id,name,location,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").in("id", shopIds)
-    : { data: [], error: null };
-  if (shopError) throw shopError;
-  const shopMap = new Map((shops ?? []).filter((shop) => activeShop(shop)).map((shop) => [shop.id, shop]));
-  const visibleProducts = (products ?? []).filter((product) => shopMap.has(product.shopId)).map((product) => ({
+  const visibleProducts = (products ?? []).map((product) => ({
     ...product,
     shop: shopMap.get(product.shopId),
   }));
@@ -699,6 +702,15 @@ async function publicProducts(client: SupabaseClient, request: Request) {
     products: visibleProducts,
     pagination: { total: count ?? 0, limit, offset, hasMore: offset + visibleProducts.length < (count ?? 0) },
   };
+}
+
+async function publicShopDetail(client: SupabaseClient, shopId: string) {
+  const { data: shop, error: shopError } = await client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", shopId).maybeSingle();
+  if (shopError) throw shopError;
+  if (!shop || !activeShop(shop)) return json({ error: "Shop not found" }, 404);
+  const { data: products, error } = await client.from("products").select("id,name,unit,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,imageUrl,shopId").eq("shopId", shopId).eq("isActive", true).gt("currentStock", 0).order("name");
+  if (error) throw error;
+  return json({ shop, products: products ?? [] });
 }
 
 async function handle(request: Request) {
@@ -721,6 +733,7 @@ async function handle(request: Request) {
     });
   }
 
+  if (request.method === "GET" && path.startsWith("/public/shops/") && path !== "/public/shops/") return publicShopDetail(db, path.slice("/public/shops/".length));
   if (request.method === "GET" && path === "/public/shops") return json({ shops: await publicShops(db) });
   if (request.method === "GET" && path === "/public/products") return json(await publicProducts(db, request));
 
