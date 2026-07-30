@@ -33,6 +33,17 @@ function normalizePhone(value: string): string {
   return value.replace(/[\s()-]/g, "").trim();
 }
 
+const TANZANIA_PREFIX = "+255";
+
+function withTanzaniaPrefix(value: string): string {
+  const compact = value.replace(/[^\d+]/g, "");
+  if (compact.startsWith(TANZANIA_PREFIX)) return compact;
+  const digits = compact.replace(/\D/g, "");
+  if (digits.startsWith("255")) return `+${digits}`;
+  if (digits.startsWith("0")) return `${TANZANIA_PREFIX}${digits.slice(1)}`;
+  return `${TANZANIA_PREFIX}${digits}`;
+}
+
 function isValidPhone(value: string): boolean {
   return /^\+?[1-9]\d{8,14}$/.test(normalizePhone(value));
 }
@@ -118,7 +129,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
   const [view, setView] = useState<View>(initialView);
 
   // Login / Register fields
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(TANZANIA_PREFIX);
   const [pin, setPin] = useState("");
   const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -132,7 +143,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // PIN recovery fields
-  const [forgotPhone, setForgotPhone] = useState("");
+  const [forgotPhone, setForgotPhone] = useState(TANZANIA_PREFIX);
   const [forgotCode, setForgotCode] = useState("");
   const [forgotNewPin, setForgotNewPin] = useState("");
   const [forgotStep, setForgotStep] = useState<"phone" | "code">("phone");
@@ -153,7 +164,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
     setError("");
     setForgotMsg("");
     setForgotStep("phone");
-    setForgotPhone("");
+    setForgotPhone(TANZANIA_PREFIX);
     setForgotCode("");
     setForgotNewPin("");
   }
@@ -497,7 +508,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
                       <input
                         type="tel"
                         value={forgotPhone}
-                        onChange={(e) => setForgotPhone(e.target.value)}
+                        onChange={(e) => setForgotPhone(withTanzaniaPrefix(e.target.value))}
                         placeholder="+255 7XX XXX XXX"
                         className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         required
@@ -702,7 +713,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(withTanzaniaPrefix(e.target.value))}
                       placeholder="+255 7XX XXX XXX"
                       autoComplete="tel"
                       className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
