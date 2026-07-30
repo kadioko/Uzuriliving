@@ -49,7 +49,7 @@ function applyCors(response: Response, request: Request) {
   if (!origin || !allowedOrigins.has(origin)) return response;
   const headers = new Headers(response.headers);
   const getSetCookie = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
-  const cookies = getSetCookie?.() ?? [];
+  const cookies = getSetCookie ? getSetCookie.call(response.headers) : [];
   if (cookies.length) {
     headers.delete("set-cookie");
     for (const value of cookies) headers.append("set-cookie", value);
