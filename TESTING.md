@@ -45,9 +45,9 @@ Admin credentials are kept in the private team credential record and are not pub
 
 1. Sign in as the demo merchant or another merchant.
 2. Open Inventory and add or edit a product.
-3. Upload a JPG, PNG, or WebP image under 5 MB and no larger than 2400 × 2400 pixels.
+3. Upload a JPG, PNG, or WebP image under 1 MB and no larger than 2400 × 2400 pixels.
 4. Save the product and confirm the thumbnail appears in the product list.
-5. Try a non-image file, an image over 5 MB, or an image larger than 2400 × 2400 pixels; each must be rejected before upload.
+5. Try a non-image file, an image over 1 MB, or an image larger than 2400 × 2400 pixels; each must be rejected before upload.
 
 ## Automated checks
 

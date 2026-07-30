@@ -23,7 +23,7 @@ The `backend/` directory contains legacy/local tooling and schema references. Pr
 
 - Merchant dashboard with sales, profit, expenses, debts, stock alerts, and orders.
 - Inventory with barcode support, stock counts, suppliers, expiry dates, and product images.
-- Product images restricted to JPG, PNG, and WebP, maximum 5 MB and maximum 2400 × 2400 pixels.
+- Product images restricted to JPG, PNG, and WebP, maximum 1 MB and maximum 2400 × 2400 pixels.
 - POS sales, customer debts, expenses, supplier orders, and public customer orders.
 - Supplier portal and staff permissions.
 - Admin user visibility, reports, subscriptions, audit logs, and operational monitoring.

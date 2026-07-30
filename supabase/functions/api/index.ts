@@ -517,7 +517,7 @@ async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, 
   const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
   if (!fileName || fileName.length > 180) return json({ error: "A valid file name is required" }, 400);
   if (!allowedImageTypes.has(contentType)) return json({ error: "Product images must be JPEG, PNG, or WebP" }, 400);
-  if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > 5 * 1024 * 1024) return json({ error: "Product images must be 5 MB or smaller" }, 400);
+  if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > 1 * 1024 * 1024) return json({ error: "Product images must be 1 MB or smaller" }, 400);
   const extension = contentType === "image/png" ? ".png" : contentType === "image/webp" ? ".webp" : ".jpg";
   const bucket = isProductImage ? "product-images" : "uzuri-uploads";
   const path = `${user.userId}/${isProductImage ? "products/" : ""}${crypto.randomUUID()}${extension}`;

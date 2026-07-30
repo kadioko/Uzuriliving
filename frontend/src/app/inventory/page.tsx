@@ -101,7 +101,7 @@ const [stockCountCode, setStockCountCode] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+  const MAX_PRODUCT_IMAGE_BYTES = 1 * 1024 * 1024;
   const MAX_PRODUCT_IMAGE_DIMENSION = 2400;
 
   const fetchProducts = useCallback(async () => {
@@ -180,7 +180,7 @@ const [stockCountCode, setStockCountCode] = useState("");
       return;
     }
     if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
-      setError(lang === "sw" ? "Picha lazima iwe chini ya MB 5." : "The image must be 5 MB or smaller.");
+      setError(lang === "sw" ? "Picha lazima iwe chini ya MB 1." : "The image must be 1 MB or smaller.");
       return;
     }
     const preview = URL.createObjectURL(file);
@@ -547,7 +547,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                 onChange={(event) => void handleImageChange(event.target.files?.[0])}
                 className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700"
               />
-              <p className="mt-1 text-xs text-gray-500">JPG, PNG, WebP · max 5 MB · max 2400 × 2400 px</p>
+              <p className="mt-1 text-xs text-gray-500">JPG, PNG, WebP · max 1 MB · max 2400 × 2400 px</p>
               {imagePreview && <img src={imagePreview} alt="Product preview" className="mt-2 h-24 w-24 rounded-xl border border-gray-200 object-cover" />}
             </Field>
             <div className="grid grid-cols-2 gap-3">
