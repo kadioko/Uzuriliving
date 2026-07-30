@@ -37,8 +37,10 @@ const TANZANIA_PREFIX = "+255";
 
 function withTanzaniaPrefix(value: string): string {
   const compact = value.replace(/[^\d+]/g, "");
+  if (compact.startsWith("+")) return compact;
   if (compact.startsWith(TANZANIA_PREFIX)) return compact;
   const digits = compact.replace(/\D/g, "");
+  if (digits.startsWith("00")) return `+${digits.slice(2)}`;
   if (digits.startsWith("255")) return `+${digits}`;
   if (digits.startsWith("0")) return `${TANZANIA_PREFIX}${digits.slice(1)}`;
   return `${TANZANIA_PREFIX}${digits}`;
@@ -509,7 +511,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
                         type="tel"
                         value={forgotPhone}
                         onChange={(e) => setForgotPhone(withTanzaniaPrefix(e.target.value))}
-                        placeholder="+255 7XX XXX XXX"
+                        placeholder="+255 7XX XXX XXX or +country code"
                         className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         required
                       />
@@ -714,7 +716,7 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(withTanzaniaPrefix(e.target.value))}
-                      placeholder="+255 7XX XXX XXX"
+                      placeholder="+255 7XX XXX XXX or +country code"
                       autoComplete="tel"
                       className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                       required
