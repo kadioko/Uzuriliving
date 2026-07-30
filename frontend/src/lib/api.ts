@@ -1,6 +1,6 @@
 import { t, type Lang } from "@/lib/i18n";
 
-const PROD_API_URL = "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api";
+const PROD_API_URL = "/_api";
 const REQUEST_TIMEOUT_MS = 20000;
 
 function normalizeBaseUrl(url: string): string {
@@ -9,11 +9,10 @@ function normalizeBaseUrl(url: string): string {
 }
 
 function getBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") return PROD_API_URL;
   if (process.env.NEXT_PUBLIC_API_URL) {
     return normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL);
   }
-
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost") return PROD_API_URL;
   return normalizeBaseUrl("http://localhost:4000/api");
 }
 

@@ -19,18 +19,22 @@ const allowedOrigins = new Set([
   "https://www.uzuriliving.com",
 ]);
 
-const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "https://www.uzuriliving.com",
-      "access-control-allow-credentials": "true",
-      "access-control-allow-headers": "authorization, content-type, x-client-info, apikey",
-      "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
-      ...headers,
-    },
+const json = (body: unknown, status = 200, headers: HeadersInit = {}) => {
+  const responseHeaders = new Headers({
+    "content-type": "application/json; charset=utf-8",
+    "access-control-allow-origin": "https://www.uzuriliving.com",
+    "access-control-allow-credentials": "true",
+    "access-control-allow-headers": "authorization, content-type, x-client-info, apikey",
+    "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    ...headers,
   });
+  const cookieValues = (headers as Record<string, unknown>)["set-cookie"];
+  if (Array.isArray(cookieValues)) {
+    responseHeaders.delete("set-cookie");
+    for (const value of cookieValues) responseHeaders.append("set-cookie", String(value));
+  }
+  return new Response(JSON.stringify(body), { status, headers: responseHeaders });
+};
 
 function routePath(request: Request) {
   const url = new URL(request.url);
@@ -44,6 +48,12 @@ function applyCors(response: Response, request: Request) {
   const origin = request.headers.get("origin");
   if (!origin || !allowedOrigins.has(origin)) return response;
   const headers = new Headers(response.headers);
+  const getSetCookie = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  const cookies = getSetCookie?.() ?? [];
+  if (cookies.length) {
+    headers.delete("set-cookie");
+    for (const value of cookies) headers.append("set-cookie", value);
+  }
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
   return new Response(response.body, {
@@ -127,12 +137,12 @@ async function authenticate(request: Request) {
 
 function authHeaders(access: string, refresh: string) {
   return {
-    "set-cookie": [cookie("uzuriliving_token", access, 60 * 60 * 1000), cookie("uzuriliving_refresh", refresh, 30 * 24 * 60 * 60 * 1000)].join(", "),
+    "set-cookie": [cookie("uzuriliving_token", access, 60 * 60 * 1000), cookie("uzuriliving_refresh", refresh, 30 * 24 * 60 * 60 * 1000)],
   };
 }
 
 function clearAuthHeaders() {
-  return { "set-cookie": [clearCookie("uzuriliving_token"), clearCookie("uzuriliving_refresh"), clearCookie("dukaos_token"), clearCookie("dukaos_refresh")].join(", ") };
+  return { "set-cookie": [clearCookie("uzuriliving_token"), clearCookie("uzuriliving_refresh"), clearCookie("dukaos_token"), clearCookie("dukaos_refresh")] };
 }
 
 async function profile(client: SupabaseClient, userId: string) {
