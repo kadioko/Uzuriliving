@@ -7,7 +7,6 @@ import { api, getFriendlyErrorMessage } from "@/lib/api";
 import {
   ArrowRight,
   BadgeDollarSign,
-  Brain,
   ChevronDown,
   Eye,
   EyeOff,
@@ -19,7 +18,6 @@ import {
   Phone,
   ReceiptText,
   Store,
-  TrendingUp,
   X,
 } from "lucide-react";
 import LogoMark from "@/components/brand/LogoMark";
@@ -87,30 +85,6 @@ const heroProofPoints = [
   { sw: "AI inapanga kipaumbele cha leo", en: "AI ranks today's priorities" },
   { sw: "Mauzo, stock, madeni na matumizi", en: "Sales, stock, debts, and expenses" },
   { sw: "Imejengwa kwa maduka Tanzania", en: "Built for Tanzanian shops" },
-];
-
-const aiThinkingCards = [
-  {
-    icon: Brain,
-    swTitle: "AI inayosoma duka",
-    enTitle: "AI that reads the shop",
-    swBody: "Inaangalia mauzo, stock, madeni, matumizi na order ili kuelewa kinachotokea.",
-    enBody: "It reads sales, stock, debts, expenses, and orders to understand what is happening.",
-  },
-  {
-    icon: TrendingUp,
-    swTitle: "Inapanga cha kufanya kwanza",
-    enTitle: "Ranks what to do first",
-    swBody: "Cash, faida na uaminifu wa mteja vikiwa hatarini, hatua hiyo inapanda juu.",
-    enBody: "When cash, profit, or customer trust is at risk, that action moves to the top.",
-  },
-  {
-    icon: MessageCircle,
-    swTitle: "Inageuka kuwa ujumbe",
-    enTitle: "Turns insight into action",
-    swBody: "Mmiliki anaweza kufuatilia deni, kuagiza stock au kutuma summary kwa WhatsApp.",
-    enBody: "Owners can collect debt, reorder stock, or share a WhatsApp-ready summary.",
-  },
 ];
 
 const publicNav = [
@@ -811,49 +785,6 @@ export function LoginPageContent({ initialView = "login" }: { initialView?: View
         </div>
         </div>
       </div>
-      <section className="mx-auto w-full max-w-6xl pb-10 lg:pb-14">
-        <div className="overflow-hidden rounded-3xl border border-white/15 bg-white/95 shadow-2xl shadow-black/15">
-          <div className="grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="bg-[#052e22] p-6 text-white sm:p-8 lg:p-10">
-              <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500 text-white">
-                <Brain className="h-5 w-5" />
-              </div>
-              <h2 className="mt-5 text-2xl font-black tracking-tight sm:text-3xl">
-                <TextReveal
-                  text={lang === "sw" ? "Uzuri Living AI hufikiria hatua inayofuata" : "Uzuri Living AI thinks about the next step"}
-                  fontSize="inherit"
-                  hoverColor="#bbf7d0"
-                />
-              </h2>
-              <p className="mt-4 text-sm leading-6 text-brand-100 sm:text-base">
-                {lang === "sw"
-                  ? "Si POS tu. Uzuri Living inageuza data ya kila siku kuwa orodha ya vipaumbele: nini uagize, nani umfuatilie, na gharama zipi zipunguzwe."
-                  : "It is not just POS. Uzuri Living turns daily data into a priority list: what to restock, who to follow up, and which costs to reduce."}
-              </p>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <Link href="/assistant" className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-brand-800 hover:bg-brand-50">
-                  {lang === "sw" ? "Ona AI Assistant" : "See AI Assistant"}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link href="/demo" className="inline-flex items-center justify-center rounded-xl border border-white/20 px-5 py-3 text-sm font-bold text-white hover:bg-white/10">
-                  {lang === "sw" ? "Jaribu demo" : "Try demo"}
-                </Link>
-              </div>
-            </div>
-            <div className="grid gap-3 p-5 sm:grid-cols-3 sm:p-6 lg:p-8">
-              {aiThinkingCards.map(({ icon: Icon, swTitle, enTitle, swBody, enBody }) => (
-                <div key={enTitle} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700 ring-1 ring-brand-100">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <h3 className="mt-4 text-sm font-bold text-gray-950">{lang === "sw" ? swTitle : enTitle}</h3>
-                  <p className="mt-2 text-sm leading-6 text-gray-600">{lang === "sw" ? swBody : enBody}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
