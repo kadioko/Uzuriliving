@@ -361,6 +361,7 @@ model Product {
   minimumStock             Int                     @default(5) // low-stock threshold
   expiryDate               DateTime? // null = not set
   doesNotExpire            Boolean                 @default(false)
+  imageUrl                 String?
   isActive                 Boolean                 @default(true)
   shopId                   String
   shop                     Shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade)

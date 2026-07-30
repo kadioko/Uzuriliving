@@ -39,6 +39,7 @@ interface Product {
   barcode?: string | null;
   barcodeType?: string | null;
   barcodeGenerated?: boolean;
+  imageUrl?: string | null;
 }
 
 interface Supplier {
@@ -96,7 +97,12 @@ export default function InventoryPage() {
   const [labelProduct, setLabelProduct] = useState<Product | null>(null);
   const [stockCount, setStockCount] = useState<{ id: string; items: Array<{ id: string; expected: number; counted: number; product: { id: string; name: string; barcode?: string | null; unit: string } }> } | null>(null);
   const [stockCountScannerOpen, setStockCountScannerOpen] = useState(false);
-  const [stockCountCode, setStockCountCode] = useState("");
+const [stockCountCode, setStockCountCode] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+  const MAX_PRODUCT_IMAGE_DIMENSION = 2400;
 
   const fetchProducts = useCallback(async () => {
     const requestId = ++latestLoad.current;
@@ -139,6 +145,8 @@ export default function InventoryPage() {
     setEditProduct(null);
     setForm({ name: "", sku: "", unit: "pcs", buyingPrice: "", sellingPrice: "", wholesalePrice: "", wholesaleMinQty: "", currentStock: "0", minimumStock: "5", supplierId: "", expiryDate: "", doesNotExpire: false, barcode: "", barcodeType: "", generateBarcode: false });
     setError("");
+    setSelectedImage(null);
+    setImagePreview(null);
     setShowForm(true);
   }
 
@@ -155,8 +163,57 @@ export default function InventoryPage() {
       doesNotExpire: p.doesNotExpire,
       barcode: p.barcode || "", barcodeType: p.barcodeType || "", generateBarcode: false,
     });
+    setSelectedImage(null);
+    setImagePreview(p.imageUrl || null);
     setError("");
     setShowForm(true);
+  }
+
+  async function handleImageChange(file: File | undefined) {
+    if (!file) return;
+    if (![
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ].includes(file.type)) {
+      setError(lang === "sw" ? "Tumia picha ya JPG, PNG, au WebP." : "Use a JPG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
+      setError(lang === "sw" ? "Picha lazima iwe chini ya MB 5." : "The image must be 5 MB or smaller.");
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    const dimensions = await new Promise<{ width: number; height: number } | null>((resolve) => {
+      const image = new window.Image();
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => resolve(null);
+      image.src = preview;
+    });
+    if (!dimensions || dimensions.width > MAX_PRODUCT_IMAGE_DIMENSION || dimensions.height > MAX_PRODUCT_IMAGE_DIMENSION) {
+      URL.revokeObjectURL(preview);
+      setError(lang === "sw" ? "Picha iwe na upana na urefu wa chini ya px 2400." : "Image width and height must each be 2400 px or smaller.");
+      return;
+    }
+    setSelectedImage(file);
+    setImagePreview(preview);
+    setError("");
+  }
+
+  async function uploadProductImage(productId: string, file: File) {
+    const upload = await api.post<{ signedUrl: string; publicUrl: string }>("/storage/upload-url", {
+      fileName: file.name,
+      contentType: file.type,
+      fileSize: file.size,
+      scope: "product",
+    });
+    const response = await fetch(upload.signedUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type, "x-upsert": "true" },
+      body: file,
+    });
+    if (!response.ok) throw new Error(lang === "sw" ? "Picha haikuweza kupakiwa." : "The product image could not be uploaded.");
+    return api.patch<{ product: Product }>(`/products/${productId}`, { imageUrl: upload.publicUrl });
   }
 
   async function handleSave() {
@@ -194,11 +251,18 @@ export default function InventoryPage() {
       const response = editProduct
         ? await api.patch<{ product: Product }>(`/products/${editProduct.id}`, body)
         : await api.post<{ product: Product }>("/products", body);
-      if (editProduct) {
-        setProducts((current) => current.map((product) => product.id === editProduct.id ? response.product : product));
-      } else {
-        setProducts((current) => [response.product, ...current]);
+      let savedProduct = response.product;
+      if (selectedImage) {
+        const imageResponse = await uploadProductImage(savedProduct.id, selectedImage);
+        savedProduct = imageResponse.product;
       }
+      if (editProduct) {
+        setProducts((current) => current.map((product) => product.id === editProduct.id ? savedProduct : product));
+      } else {
+        setProducts((current) => [savedProduct, ...current]);
+      }
+      setSelectedImage(null);
+      setImagePreview(null);
       setShowForm(false);
       toast(editProduct ? (lang === "sw" ? "Bidhaa imebadilishwa." : "Product updated.") : (lang === "sw" ? "Bidhaa imeongezwa." : "Product added."), "success");
       await fetchProducts();
@@ -379,6 +443,11 @@ export default function InventoryPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt="" className="mr-3 h-16 w-16 flex-shrink-0 rounded-xl border border-gray-200 object-cover" />
+                    ) : (
+                      <div className="mr-3 flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-gray-300"><Package className="h-6 w-6" /></div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-gray-900 text-sm">{p.name}</p>
@@ -470,6 +539,16 @@ export default function InventoryPage() {
             <Field label={t("inventory.nameLabel", lang)}>
               <input aria-label={t("inventory.nameLabel", lang)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className={INPUT} placeholder={t("inventory.namePlaceholder", lang)} />
+            </Field>
+            <Field label={lang === "sw" ? "Picha ya bidhaa" : "Product image"}>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => void handleImageChange(event.target.files?.[0])}
+                className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700"
+              />
+              <p className="mt-1 text-xs text-gray-500">JPG, PNG, WebP · max 5 MB · max 2400 × 2400 px</p>
+              {imagePreview && <img src={imagePreview} alt="Product preview" className="mt-2 h-24 w-24 rounded-xl border border-gray-200 object-cover" />}
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("inventory.skuLabel", lang)}>
