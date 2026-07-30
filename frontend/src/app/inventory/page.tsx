@@ -139,6 +139,7 @@ const [stockCountCode, setStockCountCode] = useState("");
       .then((data) => setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports)))
       .catch(() => setCanViewFinancials(false));
     api.get<{ suppliers: Supplier[] }>("/suppliers").then((d) => setSuppliers(d.suppliers));
+    api.get<{ count: NonNullable<typeof stockCount> | null }>("/stock-counts").then((data) => { if (data.count) setStockCount(data.count); }).catch(() => {});
   }, []);
 
   function openAdd() {
