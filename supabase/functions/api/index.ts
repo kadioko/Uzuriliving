@@ -59,6 +59,7 @@ function activeShop(shop: Record<string, unknown>, now = new Date()) {
   const subscriptionEndsAt = shop.subscriptionEndsAt ? new Date(String(shop.subscriptionEndsAt)) : null;
   return Boolean(
     (shop.plan === "FREE_TRIAL" && trialEndsAt && trialEndsAt > now) ||
+      shop.plan === "LIFETIME" ||
       (subscriptionEndsAt && subscriptionEndsAt > now),
   );
 }
@@ -503,7 +504,51 @@ async function reports(client: SupabaseClient, user: Record<string, unknown>, re
   const body = await request.json().catch(() => ({})); if (!body.title || !body.description) return json({ error: "Title and description are required" }, 400); const now = new Date().toISOString(); const { data, error } = await client.from("reports").insert({ id: crypto.randomUUID(), userId: user.userId, type: String(body.type ?? "OTHER").toUpperCase(), title: String(body.title).trim(), description: String(body.description).trim(), priority: String(body.priority ?? "MEDIUM").toUpperCase(), createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; return json({ report: data }, 201);
 }
 
-function subscriptionSnapshot(shop: Record<string, unknown>) { const now = new Date(); const trial = shop.plan === "FREE_TRIAL" && shop.trialEndsAt && new Date(String(shop.trialEndsAt)) > now; const active = shop.subscriptionEndsAt && new Date(String(shop.subscriptionEndsAt)) > now; const status = !shop.isActive ? "suspended" : trial ? "trial" : active ? "active" : "expired"; const validUntil = status === "trial" ? shop.trialEndsAt : status === "active" ? shop.subscriptionEndsAt : shop.subscriptionEndsAt || shop.trialEndsAt || null; return { trialActive: Boolean(trial), subActive: Boolean(active), status, validUntil, daysLeft: validUntil ? Math.max(0, Math.ceil((new Date(String(validUntil)).getTime() - now.getTime()) / 86400000)) : null }; }
+function subscriptionSnapshot(shop: Record<string, unknown>) { const now = new Date(); const trial = shop.plan === "FREE_TRIAL" && shop.trialEndsAt && new Date(String(shop.trialEndsAt)) > now; const lifetime = shop.plan === "LIFETIME"; const active = lifetime || Boolean(shop.subscriptionEndsAt && new Date(String(shop.subscriptionEndsAt)) > now); const status = !shop.isActive ? "suspended" : trial ? "trial" : active ? "active" : "expired"; const validUntil = lifetime ? null : status === "trial" ? shop.trialEndsAt : status === "active" ? shop.subscriptionEndsAt : shop.subscriptionEndsAt || shop.trialEndsAt || null; return { trialActive: Boolean(trial), subActive: active, status, computedStatus: status, validUntil, daysLeft: validUntil ? Math.max(0, Math.ceil((new Date(String(validUntil)).getTime() - now.getTime()) / 86400000)) : null }; }
+
+function addDays(date: Date, days: number) { return new Date(date.getTime() + days * 86400000); }
+function addMonths(date: Date, months: number) { const next = new Date(date); const day = next.getUTCDate(); next.setUTCDate(1); next.setUTCMonth(next.getUTCMonth() + months); const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate(); next.setUTCDate(Math.min(day, last)); return next; }
+function normalizePaymentReference(value: unknown) { return String(value ?? "").trim().toUpperCase().replace(/\s+/g, ""); }
+
+async function adminSubscriptionList(client: SupabaseClient, request: Request) {
+  const url = new URL(request.url);
+  const { data: shops, error } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,onboardingStatus,lastContactedAt,followUpNotes,createdAt,user:users(id,name,phone)").order("createdAt", { ascending: false }).limit(500);
+  if (error) throw error;
+  const shopIds = (shops ?? []).map((shop) => shop.id);
+  const [{ data: payments }, { data: products }, { data: sales }, { data: orders }] = await Promise.all([
+    shopIds.length ? client.from("subscription_payments").select("id,shopId,plan,amount,months,method,reference,status,paidAt,note").in("shopId", shopIds).order("paidAt", { ascending: false }) : Promise.resolve({ data: [], error: null }),
+    shopIds.length ? client.from("products").select("shopId").in("shopId", shopIds).eq("isActive", true) : Promise.resolve({ data: [], error: null }),
+    shopIds.length ? client.from("sales").select("shopId,createdAt").in("shopId", shopIds) : Promise.resolve({ data: [], error: null }),
+    shopIds.length ? client.from("orders").select("shopId").in("shopId", shopIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const counts = (rows: Array<Record<string, unknown>> | null) => { const map = new Map<string, number>(); for (const row of rows ?? []) map.set(String(row.shopId), (map.get(String(row.shopId)) ?? 0) + 1); return map; };
+  const productCounts = counts(products); const orderCounts = counts(orders); const latestPayment = new Map<string, Record<string, unknown>>(); for (const payment of payments ?? []) if (!latestPayment.has(payment.shopId)) latestPayment.set(payment.shopId, payment);
+  const salesByShop = new Map<string, string[]>(); for (const sale of sales ?? []) { const key = String(sale.shopId); const list = salesByShop.get(key) ?? []; list.push(String(sale.createdAt)); salesByShop.set(key, list); }
+  let result = (shops ?? []).map((shop) => { const snapshot = subscriptionSnapshot(shop); const saleDates = (salesByShop.get(shop.id) ?? []).sort(); const first = saleDates[0] ? new Date(saleDates[0]).getTime() : 0; const last = saleDates.at(-1) ? new Date(String(saleDates.at(-1))).getTime() : 0; const activation = { productCount: productCounts.get(shop.id) ?? 0, salesCount: saleDates.length, orderCount: orderCounts.get(shop.id) ?? 0, secondDayReturn: Boolean(first && last && last - first >= 86400000), activated: (productCounts.get(shop.id) ?? 0) >= 10 && saleDates.length >= 10 && Boolean(first && last && last - first >= 86400000) }; return { ...shop, user: Array.isArray(shop.user) ? shop.user[0] ?? null : shop.user, ...snapshot, lastPayment: latestPayment.get(shop.id) ?? null, activation }; });
+  const plan = url.searchParams.get("plan"); const status = url.searchParams.get("status"); if (plan) result = result.filter((shop) => shop.plan === plan); if (status) result = result.filter((shop) => shop.computedStatus === status);
+  return json({ shops: result, total: result.length });
+}
+
+async function adminSubscription(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) {
+  if (user.role !== "ADMIN") return json({ error: "Forbidden" }, 403);
+  if (request.method === "GET" && path === "/subscription/admin") return adminSubscriptionList(client, request);
+  const parts = path.split("/").filter(Boolean); const shopId = parts[2]; const action = parts[3];
+  if (!shopId) return json({ error: "Shop ID is required" }, 400);
+  const { data: current, error: currentError } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").eq("id", shopId).maybeSingle();
+  if (currentError) throw currentError; if (!current) return json({ error: "Shop not found" }, 404);
+  const now = new Date(); const body = await request.json().catch(() => ({}));
+  if (request.method === "PATCH" && !action) {
+    const update: Record<string, unknown> = {}; if (body.plan !== undefined) { const plan = String(body.plan).toUpperCase(); if (!["FREE_TRIAL", "BASIC", "PRO", "LIFETIME"].includes(plan)) return json({ error: "Invalid subscription plan" }, 400); update.plan = plan; if (plan === "LIFETIME") update.subscriptionEndsAt = null; }
+    for (const key of ["isActive", "onboardingStatus", "followUpNotes"]) if (body[key] !== undefined) update[key] = key === "isActive" ? Boolean(body[key]) : body[key] || null;
+    for (const key of ["trialEndsAt", "subscriptionEndsAt", "lastContactedAt"]) if (body[key] !== undefined) { const value = body[key] ? new Date(String(body[key])) : null; if (value && Number.isNaN(value.getTime())) return json({ error: `${key} must be a valid date` }, 400); update[key] = value?.toISOString() ?? null; }
+    const { data, error } = await client.from("shops").update({ ...update, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data });
+  }
+  if (request.method === "DELETE" && !action) { const { data, error } = await client.from("shops").update({ plan: "FREE_TRIAL", trialEndsAt: now.toISOString(), subscriptionEndsAt: null, isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data, message: "Paid subscription removed" }); }
+  if (request.method === "POST" && action === "extend-trial") { const days = Math.max(1, Math.min(90, Number(body.days) || 7)); const base = current.trialEndsAt && new Date(current.trialEndsAt) > now ? new Date(current.trialEndsAt) : now; const { data, error } = await client.from("shops").update({ plan: "FREE_TRIAL", trialEndsAt: addDays(base, days).toISOString(), isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt").single(); if (error) throw error; return json({ shop: data, message: `Trial extended by ${days} days` }); }
+  if (request.method === "POST" && action === "extend-subscription") { const days = Math.max(1, Math.min(730, Number(body.days) || 30)); const plan = body.plan ? String(body.plan).toUpperCase() : (current.plan === "PRO" ? "PRO" : "BASIC"); if (!["BASIC", "PRO"].includes(plan)) return json({ error: "Plan must be BASIC or PRO" }, 400); const base = current.subscriptionEndsAt && new Date(current.subscriptionEndsAt) > now ? new Date(current.subscriptionEndsAt) : now; const { data, error } = await client.from("shops").update({ plan, subscriptionEndsAt: addDays(base, days).toISOString(), isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data, message: `Subscription extended by ${days} days` }); }
+  if (request.method === "POST" && action === "payments") { const plan = String(body.plan ?? "BASIC").toUpperCase(); const months = Math.max(1, Math.min(24, Number(body.months) || 1)); const amount = Number(body.amount); const reference = String(body.reference ?? "").trim(); const normalizedReference = normalizePaymentReference(reference); if (!["BASIC", "PRO"].includes(plan)) return json({ error: "Plan must be BASIC or PRO" }, 400); if (!Number.isInteger(amount) || amount <= 0) return json({ error: "Payment amount must be a whole positive TZS amount" }, 400); if (!normalizedReference) return json({ error: "Payment reference is required" }, 400); const { data: duplicate } = await client.from("subscription_payments").select("*").eq("normalizedReference", normalizedReference).maybeSingle(); if (duplicate) { if (duplicate.shopId !== shopId) return json({ error: "This payment reference is already linked to another shop" }, 409); return json({ payment: duplicate, shop: current, reused: true }); } const base = current.subscriptionEndsAt && new Date(current.subscriptionEndsAt) > now ? new Date(current.subscriptionEndsAt) : now; const ends = addMonths(base, months).toISOString(); const payment = { id: crypto.randomUUID(), shopId, plan, amount, months, method: String(body.method ?? "MANUAL").toUpperCase(), reference, normalizedReference, status: "CONFIRMED", reviewedBy: user.userId, reviewedAt: now.toISOString(), note: String(body.note ?? "").trim() || null, sourceReportId: body.sourceReportId || null, paidAt: now.toISOString(), createdAt: now.toISOString() }; const { data: saved, error: paymentError } = await client.from("subscription_payments").insert(payment).select("*").single(); if (paymentError) throw paymentError; const { data: shop, error: shopError } = await client.from("shops").update({ plan, subscriptionEndsAt: ends, isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (shopError) throw shopError; return json({ payment: saved, shop, subscriptionEndsAt: ends }, 201); }
+  return json({ error: "Subscription admin route not found" }, 404);
+}
 
 async function dashboard(client: SupabaseClient, shop: Record<string, unknown>, request: Request) {
   const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const from = period === "all" ? null : period === "month" ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) : period === "week" ? new Date(now.getTime() - 7 * 86400000) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -763,6 +808,11 @@ async function handle(request: Request) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     return json({ ...access.shop, ...subscriptionSnapshot(access.shop!) });
+  }
+
+  if (path === "/subscription/admin" || path.startsWith("/subscription/admin/")) {
+    if (!user?.userId || typeof user.userId !== "string") return json({ error: "Unauthorized" }, 401);
+    return adminSubscription(db, user, request, path);
   }
 
   if (path === "/storage/upload-url" && request.method === "POST") {

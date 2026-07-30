@@ -575,6 +575,7 @@ export default function AdminPage() {
 
   function validityLabel(shop: Subscription) {
     if (!shop.isActive) return "Suspended";
+    if (shop.plan === "LIFETIME") return "Lifetime access";
     if (shop.computedStatus === "trial") return `Trial until ${formatDate(shop.validUntil || shop.trialEndsAt)}`;
     if (shop.computedStatus === "active") return `Active until ${formatDate(shop.validUntil || shop.subscriptionEndsAt)}`;
     return shop.subscriptionEndsAt ? `Expired ${formatDate(shop.subscriptionEndsAt)}` : "No paid subscription";
@@ -703,6 +704,20 @@ export default function AdminPage() {
       await refreshSubscriptions();
     } catch (err) {
       console.error("Failed to update shop status:", err);
+    } finally {
+      setUpdatingSub(null);
+    }
+  }
+
+  async function handleSetLifetime(shop: Subscription) {
+    const confirmed = window.confirm(`Give ${shop.name} a Lifetime subscription?\n\nThis keeps the shop active permanently and does not require an expiry date.`);
+    if (!confirmed) return;
+    setUpdatingSub(shop.id);
+    try {
+      await api.patch(`/subscription/admin/${shop.id}`, { plan: "LIFETIME", subscriptionEndsAt: null, isActive: true });
+      await refreshSubscriptions();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to assign Lifetime subscription");
     } finally {
       setUpdatingSub(null);
     }
@@ -1305,6 +1320,7 @@ export default function AdminPage() {
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Phone</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Role</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Shop / Supplier</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Subscription</th>
                     <th className="text-left px-4 py-2.5 text-xs font-medium text-gray-500">Joined</th>
                     <th className="text-right px-4 py-2.5 text-xs font-medium text-gray-500">Actions</th>
                   </tr>
@@ -1325,6 +1341,20 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 text-xs">
                         {u.shop?.name || u.supplier?.name || "-"}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {(() => {
+                          const subscription = u.shop ? subscriptions.find((item) => item.id === u.shop?.id) : null;
+                          if (!subscription) return <span className="text-gray-400">Not applicable</span>;
+                          return (
+                            <button type="button" onClick={() => setTab("subscriptions")} className="text-left hover:underline">
+                              <span className={`rounded-full px-2 py-0.5 font-semibold ${subscription.plan === "LIFETIME" ? "bg-amber-100 text-amber-800" : subscription.computedStatus === "active" ? "bg-green-100 text-green-700" : subscription.computedStatus === "trial" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                                {subscription.plan}
+                              </span>
+                              <span className="ml-1 text-gray-500">{subscription.computedStatus}</span>
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-2.5 text-gray-400 text-xs">
                         {new Date(u.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
@@ -1624,7 +1654,7 @@ export default function AdminPage() {
                             shop.computedStatus === "expired" ? "bg-red-100 text-red-700" :
                             "bg-gray-100 text-gray-700"
                           }`}>{shop.computedStatus}</span>
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700">{shop.plan}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${shop.plan === "LIFETIME" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{shop.plan}</span>
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2 rounded-lg border border-gray-100 bg-gray-50 p-2 text-xs text-gray-600 sm:grid-cols-3">
@@ -1712,6 +1742,9 @@ export default function AdminPage() {
                         <button onClick={() => handleExtendSubscription(shop, 30)} disabled={updatingSub === shop.id} className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-200 disabled:opacity-50">
                           +30d paid
                         </button>
+                        <button onClick={() => handleSetLifetime(shop)} disabled={updatingSub === shop.id || shop.plan === "LIFETIME"} className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-200 disabled:opacity-50">
+                          {shop.plan === "LIFETIME" ? "Lifetime active" : "Give Lifetime"}
+                        </button>
                         <button onClick={() => handleToggleShopActive(shop)} disabled={updatingSub === shop.id} className={`rounded px-2 py-1 text-xs font-semibold disabled:opacity-50 ${shop.isActive ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-green-100 text-green-700 hover:bg-green-200"}`}>
                           {shop.isActive ? "Suspend" : "Activate shop"}
                         </button>
@@ -1756,6 +1789,7 @@ export default function AdminPage() {
                         <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
                           shop.plan === "PRO" ? "bg-purple-100 text-purple-700" :
                           shop.plan === "BASIC" ? "bg-blue-100 text-blue-700" :
+                          shop.plan === "LIFETIME" ? "bg-amber-100 text-amber-800" :
                           "bg-gray-100 text-gray-600"
                         }`}>{shop.plan}</span>
                       </td>

@@ -133,7 +133,7 @@ model Shop {
   stockCounts          StockCount[]
   createdSuppliers     Supplier[]            @relation("SupplierCreatedByShop")
   // Subscription / trial
-  plan                 String                @default("FREE_TRIAL") // FREE_TRIAL, BASIC, PRO
+  plan                 String                @default("FREE_TRIAL") // FREE_TRIAL, BASIC, PRO, LIFETIME
   trialEndsAt          DateTime?
   subscriptionEndsAt   DateTime?
   isActive             Boolean               @default(true)
