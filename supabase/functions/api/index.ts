@@ -91,11 +91,13 @@ function readCookies(request: Request) {
 }
 
 function cookie(name: string, value: string, maxAge: number) {
-  return `${name}=${encodeURIComponent(value)}; Max-Age=${Math.floor(maxAge / 1000)}; Path=/; SameSite=Lax; HttpOnly; Secure`;
+  // The API is hosted on Supabase while the browser app is hosted on
+  // uzuriliving.com, so these cookies must be sent in a cross-site fetch.
+  return `${name}=${encodeURIComponent(value)}; Max-Age=${Math.floor(maxAge / 1000)}; Path=/; SameSite=None; HttpOnly; Secure`;
 }
 
 function clearCookie(name: string) {
-  return `${name}=; Max-Age=0; Path=/; SameSite=Lax; HttpOnly; Secure`;
+  return `${name}=; Max-Age=0; Path=/; SameSite=None; HttpOnly; Secure`;
 }
 
 async function token(payload: Record<string, unknown>, expiry: string) {
@@ -495,7 +497,7 @@ async function dashboard(client: SupabaseClient, shop: Record<string, unknown>, 
   const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const from = period === "all" ? null : period === "month" ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) : period === "week" ? new Date(now.getTime() - 7 * 86400000) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   let salesQuery = client.from("sales").select("id,totalAmount,profit,paymentMethod,createdAt").eq("shopId", shop.id); let expenseQuery = client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id); if (from) { salesQuery = salesQuery.gte("createdAt", from.toISOString()); expenseQuery = expenseQuery.gte("spentAt", from.toISOString()); }
   const [{ data: salesRows }, { data: expenseRows }, { data: products }, { data: allSales }, { data: allExpenses }] = await Promise.all([salesQuery, expenseQuery, client.from("products").select("id,name,currentStock,minimumStock,unit").eq("shopId", shop.id).eq("isActive", true), client.from("sales").select("totalAmount,profit,createdAt").eq("shopId", shop.id), client.from("expenses").select("amount").eq("shopId", shop.id)]);
-  const salesData = salesRows ?? []; const expensesData = expenseRows ?? []; const low = (products ?? []).filter((p) => p.currentStock <= p.minimumStock); const summary = { totalSales: salesData.reduce((s, x) => s + x.totalAmount, 0), totalProfit: salesData.reduce((s, x) => s + x.profit, 0), totalExpenses: expensesData.reduce((s, x) => s + x.amount, 0), netProfit: salesData.reduce((s, x) => s + x.profit, 0) - expensesData.reduce((s, x) => s + x.amount, 0), expenseCount: expensesData.length, salesCount: salesData.length, totalProducts: products?.length ?? 0, lowStockCount: low.length, outOfStockCount: (products ?? []).filter((p) => p.currentStock === 0).length, pendingOrders: 0 }; return json({ period, features: {}, summary, allTimeSummary: { totalSales: (allSales ?? []).reduce((s, x) => s + x.totalAmount, 0), totalProfit: (allSales ?? []).reduce((s, x) => s + x.profit, 0), totalExpenses: (allExpenses ?? []).reduce((s, x) => s + x.amount, 0), salesCount: allSales?.length ?? 0, expenseCount: allExpenses?.length ?? 0 }, lowStockAlerts: low, recentSales: salesData.slice(0, 10), dailyChart: [], paymentBreakdown: [] });
+  const salesData = salesRows ?? []; const expensesData = expenseRows ?? []; const low = (products ?? []).filter((p) => p.currentStock <= p.minimumStock); const summary = { totalSales: salesData.reduce((s, x) => s + x.totalAmount, 0), totalProfit: salesData.reduce((s, x) => s + x.profit, 0), totalExpenses: expensesData.reduce((s, x) => s + x.amount, 0), netProfit: salesData.reduce((s, x) => s + x.profit, 0) - expensesData.reduce((s, x) => s + x.amount, 0), expenseCount: expensesData.length, salesCount: salesData.length, totalProducts: products?.length ?? 0, lowStockCount: low.length, outOfStockCount: (products ?? []).filter((p) => p.currentStock === 0).length, pendingOrders: 0 }; return json({ period, features: {}, summary, allTimeSummary: { totalSales: (allSales ?? []).reduce((s, x) => s + x.totalAmount, 0), totalProfit: (allSales ?? []).reduce((s, x) => s + x.profit, 0), totalExpenses: (allExpenses ?? []).reduce((s, x) => s + x.amount, 0), salesCount: allSales?.length ?? 0, expenseCount: allExpenses?.length ?? 0 }, lowStockAlerts: low, recentSales: salesData.slice(0, 10), dailyChart: [], paymentBreakdown: [], historyTimeline: [], topProducts: [] });
 }
 
 async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, request: Request) {
