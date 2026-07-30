@@ -24,7 +24,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
     }
   });
   const getSetCookie = (upstream.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
-  for (const cookie of getSetCookie?.() ?? []) responseHeaders.append("set-cookie", cookie);
+  for (const cookie of getSetCookie ? getSetCookie.call(upstream.headers) : []) responseHeaders.append("set-cookie", cookie);
 
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
 }
