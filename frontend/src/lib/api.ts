@@ -36,6 +36,10 @@ export function getFriendlyErrorMessage(message: string, lang: Lang): string {
     return t("auth.error.serverOffline", lang);
   }
 
+  if (normalized === "The Uzuri Living server took too long to respond. Please try again.") {
+    return t("auth.error.serverTimeout", lang);
+  }
+
   if (normalized === "The Uzuri Living server returned an unexpected response format.") {
     return t("auth.error.unexpectedResponse", lang);
   }
@@ -101,14 +105,20 @@ async function request<T>(
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(`${baseUrl}${path}`, { ...options, headers, credentials: "include", signal: controller.signal });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("The Uzuri Living server took too long to respond. Please try again.");
+    }
     throw new Error("Unable to reach the Uzuri Living server. Confirm the API URL is correct and the backend is online.");
   } finally {
     clearTimeout(timeoutId);
   }
 
-  // On 401, attempt token refresh once then retry
-  if (res.status === 401 && !_isRetry) {
+  // Login, registration, and recovery requests must surface their own 401
+  // response. Only an already-authenticated request should try refreshing a
+  // session; otherwise a wrong PIN looks like a silent redirect/reload.
+  const isAuthenticationRequest = path.startsWith("/auth/");
+  if (res.status === 401 && !_isRetry && !isAuthenticationRequest) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
       return request<T>(path, options, lang, true);
@@ -117,7 +127,7 @@ async function request<T>(
     throw new Error("Session expired");
   }
 
-  if (res.status === 401) {
+  if (res.status === 401 && !isAuthenticationRequest) {
     handleAuthenticationFailure();
     throw new Error("Session expired");
   }

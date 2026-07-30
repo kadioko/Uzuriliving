@@ -211,6 +211,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "auth.error.sessionExpired": { sw: "Muda wa sesi yako umeisha. Tafadhali ingia tena.", en: "Your session expired. Please sign in again." },
   "auth.error.rateLimited": { sw: "Umejaribu mara nyingi sana. Tafadhali subiri dakika chache kabla ya kujaribu tena.", en: "Too many attempts. Please wait a few minutes before trying again." },
   "auth.error.serverOffline": { sw: "Imeshindikana kufikia seva ya Uzuri Living. Hakikisha API URL ni sahihi na backend ipo hewani.", en: "Unable to reach the Uzuri Living server. Confirm the API URL is correct and the backend is online." },
+  "auth.error.serverTimeout": { sw: "Seva ya Uzuri Living imechelewa kujibu. Tafadhali jaribu tena.", en: "The Uzuri Living server took too long to respond. Please try again." },
   "auth.error.unexpectedResponse": { sw: "Seva ya Uzuri Living imerudisha majibu yasiyotegemewa.", en: "The Uzuri Living server returned an unexpected response format." },
   "billing.subscriptionRequired": { sw: "Jaribio au usajili umeisha. Wasiliana WhatsApp +255743910580 ili kuendelea kutumia Uzuri Living.", en: "Your trial or subscription has expired. Contact WhatsApp +255743910580 to continue using Uzuri Living." },
 
