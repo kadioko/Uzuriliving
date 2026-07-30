@@ -14,6 +14,11 @@ const db = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+const allowedOrigins = new Set([
+  "https://uzuriliving.com",
+  "https://www.uzuriliving.com",
+]);
+
 const json = (body: unknown, status = 200, headers: HeadersInit = {}) =>
   new Response(JSON.stringify(body), {
     status,
@@ -33,6 +38,19 @@ function routePath(request: Request) {
   const index = url.pathname.indexOf(marker);
   const path = index >= 0 ? url.pathname.slice(index + marker.length) || "/" : url.pathname;
   return path === "/api" ? "/" : path.startsWith("/api/") ? path.slice(4) : path;
+}
+
+function applyCors(response: Response, request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin || !allowedOrigins.has(origin)) return response;
+  const headers = new Headers(response.headers);
+  headers.set("access-control-allow-origin", origin);
+  headers.set("vary", "Origin");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 function activeShop(shop: Record<string, unknown>, now = new Date()) {
@@ -809,9 +827,9 @@ async function handle(request: Request) {
 
 Deno.serve(async (request) => {
   try {
-    return await handle(request);
+    return applyCors(await handle(request), request);
   } catch (error) {
     console.error(error);
-    return json({ error: "Internal server error" }, 500);
+    return applyCors(json({ error: "Internal server error" }, 500), request);
   }
 });
