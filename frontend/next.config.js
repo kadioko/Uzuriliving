@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  experimental: {
+    useTypeScriptCli: true,
+  },
   async headers() {
     const contentSecurityPolicy = [
       "default-src 'self'",
