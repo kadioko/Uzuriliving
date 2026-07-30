@@ -705,12 +705,13 @@ async function publicProducts(client: SupabaseClient, request: Request) {
 }
 
 async function publicShopDetail(client: SupabaseClient, shopId: string) {
-  const { data: shop, error: shopError } = await client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", shopId).maybeSingle();
+  const { data: shop, error: shopError } = await client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo,owner:users(phone)").eq("id", shopId).maybeSingle();
   if (shopError) throw shopError;
   if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "Shop not found" }, 404);
   const { data: products, error } = await client.from("products").select("id,name,unit,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,imageUrl,shopId").eq("shopId", shopId).eq("isActive", true).gt("currentStock", 0).order("name");
   if (error) throw error;
-  return json({ shop, products: products ?? [] });
+  const owner = Array.isArray(shop.owner) ? shop.owner[0] ?? null : shop.owner;
+  return json({ shop: { ...shop, phone: owner?.phone ?? null, owner: undefined }, products: products ?? [] });
 }
 
 async function handle(request: Request) {

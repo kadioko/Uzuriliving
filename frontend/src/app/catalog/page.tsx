@@ -23,6 +23,7 @@ interface CatalogProduct {
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
   currentStock: number;
+  imageUrl?: string | null;
   shop: { id: string; name: string; location: string; category: string };
 }
 
@@ -241,6 +242,13 @@ export default function CatalogPage() {
                       key={p.id}
                       className="bg-white border border-gray-200 rounded-xl p-4 hover:border-brand-300 transition-colors"
                     >
+                      <div className="mb-3 flex h-36 items-center justify-center overflow-hidden rounded-lg bg-gray-50">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt={p.name} loading="lazy" className="h-full w-full object-cover" />
+                        ) : (
+                          <Package className="h-10 w-10 text-gray-300" aria-hidden="true" />
+                        )}
+                      </div>
                       <p className="font-medium text-gray-900 text-sm leading-tight">{p.name}</p>
                       <p className="text-xs text-gray-400 mt-1">
                         {p.currentStock} {p.unit} {t("catalog.inStock", lang)}
