@@ -30,14 +30,6 @@ const nextConfig = {
       ],
     }];
   },
-  async rewrites() {
-    return [
-      {
-        source: "/_api/:path*",
-        destination: "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api/:path*",
-      },
-    ];
-  },
 };
 
 module.exports = nextConfig;

@@ -1,6 +1,6 @@
 import { t, type Lang } from "@/lib/i18n";
 
-const PROD_API_URL = "/_api";
+const PROD_API_URL = "/api";
 const REQUEST_TIMEOUT_MS = 20000;
 
 function normalizeBaseUrl(url: string): string {

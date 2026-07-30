@@ -65,7 +65,7 @@ export function getAttribution(): Attribution {
 export function trackMarketingEvent(eventName: "page_view" | "cta_click" | "whatsapp_click" | "registration_started", details: Record<string, string> = {}) {
   if (typeof window === "undefined") return;
   const attribution = captureAttribution();
-  fetch("/_api/public/events", {
+  fetch("/api/public/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     keepalive: true,
