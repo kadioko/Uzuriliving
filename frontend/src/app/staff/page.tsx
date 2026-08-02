@@ -69,8 +69,8 @@ export default function StaffPage() {
 
         <form onSubmit={addStaff} className="grid gap-3 rounded-lg border border-gray-200 p-4 md:grid-cols-5">
           <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" required placeholder={lang === "sw" ? "Jina" : "Name"} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder={lang === "sw" ? "Simu" : "Phone"} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" inputMode="numeric" maxLength={8} placeholder={lang === "sw" ? "PIN ya kuingia" : "Login PIN"} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} />
+          <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" required placeholder={lang === "sw" ? "Simu" : "Phone"} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm" required minLength={4} inputMode="numeric" maxLength={8} placeholder={lang === "sw" ? "PIN ya kuingia" : "Login PIN"} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} />
           <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             {roles.map((role) => <option key={role} value={role}>{role.replace("_", " ")}</option>)}
           </select>

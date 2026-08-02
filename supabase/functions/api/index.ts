@@ -145,7 +145,7 @@ function clearAuthHeaders() {
   return { "set-cookie": [clearCookie("uzuriliving_token"), clearCookie("uzuriliving_refresh"), clearCookie("dukaos_token"), clearCookie("dukaos_refresh")] };
 }
 
-async function profile(client: SupabaseClient, userId: string) {
+async function profile(client: SupabaseClient, userId: string, staffId?: string) {
   const { data: user, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt").eq("id", userId).maybeSingle();
   if (error) throw error;
   if (!user) return null;
@@ -153,7 +153,19 @@ async function profile(client: SupabaseClient, userId: string) {
     client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished").eq("userId", userId).maybeSingle(),
     client.from("suppliers").select("id,name,phone,address").eq("userId", userId).maybeSingle(),
   ]);
-  return { ...user, shop: shop ?? null, supplier: supplier ?? null };
+  if (!staffId) return { ...user, shop: shop ?? null, supplier: supplier ?? null };
+  const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,role,language,canSell,canManageStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId").eq("id", staffId).eq("shopId", shop?.id ?? "").eq("isActive", true).maybeSingle();
+  if (staffError) throw staffError;
+  if (!staff || !shop) return null;
+  return {
+    ...user,
+    phone: staff.phone || user.phone,
+    name: staff.name,
+    language: staff.language || user.language,
+    shop: { id: shop.id, name: shop.name, location: shop.location, district: shop.district, category: shop.category },
+    supplier: null,
+    staff: { id: staff.id, name: staff.name, role: staff.role, permissions: staffPermissions(String(staff.role)) },
+  };
 }
 
 async function authRegister(client: SupabaseClient, request: Request) {
@@ -197,12 +209,23 @@ async function authLogin(client: SupabaseClient, request: Request) {
   if (!validPhone(phone) || !validPin(pin)) return json({ error: "Invalid phone or PIN" }, 401);
   const { data: user, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,pin").eq("phone", phone).maybeSingle();
   if (error) throw error;
-  if (!user || !(await bcrypt.compare(pin, user.pin))) return json({ error: "Invalid phone or PIN" }, 401);
-  if (user.approvalStatus === "PENDING") return json({ error: "Your account is waiting for admin approval" }, 403);
-  if (user.approvalStatus === "REJECTED") return json({ error: "Your registration was not approved. Contact Uzuri Living support" }, 403);
-  const access = await token({ userId: user.id, phone: user.phone, role: user.role }, "1h");
-  const refresh = await token({ userId: user.id, role: user.role, type: "refresh" }, "30d");
-  return json({ user: await profile(client, user.id) }, 200, authHeaders(access, refresh));
+  if (user) {
+    if (!(await bcrypt.compare(pin, user.pin))) return json({ error: "Invalid phone or PIN" }, 401);
+    if (user.approvalStatus === "PENDING") return json({ error: "Your account is waiting for admin approval" }, 403);
+    if (user.approvalStatus === "REJECTED") return json({ error: "Your registration was not approved. Contact Uzuri Living support" }, 403);
+    const access = await token({ userId: user.id, phone: user.phone, role: user.role }, "1h");
+    const refresh = await token({ userId: user.id, role: user.role, type: "refresh" }, "30d");
+    return json({ user: await profile(client, user.id) }, 200, authHeaders(access, refresh));
+  }
+  const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,pin,role,language,isActive,shopId,shop:shops!inner(id,userId,user:users!inner(id,phone,role,language,approvalStatus,createdAt))").eq("phone", phone).maybeSingle();
+  if (staffError) throw staffError;
+  const accountUser = Array.isArray(staff?.shop?.user) ? staff.shop.user[0] : staff?.shop?.user;
+  if (!staff || !staff.isActive || !staff.pin || !accountUser || !(await bcrypt.compare(pin, staff.pin))) return json({ error: "Invalid phone or PIN" }, 401);
+  if (accountUser.approvalStatus === "PENDING") return json({ error: "Your account is waiting for admin approval" }, 403);
+  if (accountUser.approvalStatus === "REJECTED") return json({ error: "Your registration was not approved. Contact Uzuri Living support" }, 403);
+  const access = await token({ userId: accountUser.id, phone: staff.phone || accountUser.phone, role: accountUser.role, staffId: staff.id, staffRole: staff.role, permissions: staffPermissions(String(staff.role)) }, "1h");
+  const refresh = await token({ userId: accountUser.id, role: accountUser.role, staffId: staff.id, type: "refresh" }, "30d");
+  return json({ user: await profile(client, accountUser.id, staff.id) }, 200, authHeaders(access, refresh));
 }
 
 async function authRefresh(client: SupabaseClient, request: Request) {
@@ -215,8 +238,15 @@ async function authRefresh(client: SupabaseClient, request: Request) {
     if (payload.type !== "refresh" || typeof payload.userId !== "string") return json({ error: "Invalid token type" }, 401);
     const { data: user } = await client.from("users").select("id,phone,role").eq("id", payload.userId).maybeSingle();
     if (!user) return json({ error: "User not found" }, 401);
-    const access = await token({ userId: user.id, phone: user.phone, role: user.role }, "1h");
-    const nextRefresh = await token({ userId: user.id, role: user.role, type: "refresh" }, "30d");
+    let staff: Record<string, unknown> | null = null;
+    if (typeof payload.staffId === "string") {
+      const { data } = await client.from("staff_members").select("id,name,role,phone,isActive,shopId,shop:shops!inner(userId)").eq("id", payload.staffId).eq("isActive", true).maybeSingle();
+      const staffShop = Array.isArray(data?.shop) ? data?.shop[0] : data?.shop;
+      if (!data || !staffShop || staffShop.userId !== user.id) return json({ error: "Staff access expired" }, 401);
+      staff = data;
+    }
+    const access = await token({ userId: user.id, phone: staff?.phone || user.phone, role: user.role, ...(staff ? { staffId: staff.id, staffRole: staff.role, permissions: staffPermissions(String(staff.role)) } : {}) }, "1h");
+    const nextRefresh = await token({ userId: user.id, role: user.role, ...(staff ? { staffId: staff.id } : {}), type: "refresh" }, "30d");
     return json({ ok: true }, 200, authHeaders(access, nextRefresh));
   } catch {
     return json({ error: "Invalid or expired refresh token" }, 401);
@@ -503,9 +533,11 @@ function staffPermissions(role: string) {
 async function staff(client: SupabaseClient, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
   if (method === "GET") { const { data, error } = await client.from("staff_members").select("id,name,phone,role,canSell,canManageStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").eq("shopId", shop.id).order("isActive", { ascending: false }).order("name"); if (error) throw error; return json({ staff: data ?? [] }); }
   const body = await request.json().catch(() => ({})); const now = new Date().toISOString();
-  if (method === "POST") { const role = String(body.role ?? "CASHIER").toUpperCase(); const defaults = staffPermissions(role); const pin = String(body.pin ?? "").trim(); const { data, error } = await client.from("staff_members").insert({ id: crypto.randomUUID(), name: String(body.name ?? "").trim(), phone: body.phone ? normalizePhone(body.phone) : null, pin: pin ? await bcrypt.hash(pin, 10) : null, role, ...Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, typeof body[key] === "boolean" ? body[key] : fallback])), shopId: shop.id, createdAt: now, updatedAt: now }).select("id,name,phone,role,canSell,canManageStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data }, 201); }
+  if (method === "POST") { const role = String(body.role ?? "CASHIER").toUpperCase(); const defaults = staffPermissions(role); const phone = body.phone ? normalizePhone(body.phone) : ""; const pin = String(body.pin ?? "").trim(); if (!String(body.name ?? "").trim()) return json({ error: "Staff name is required" }, 400); if (!["OWNER", "MANAGER", "CASHIER", "STOCK_CLERK"].includes(role)) return json({ error: "Invalid staff role" }, 400); if (!phone || !validPhone(phone) || !validPin(pin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); const [{ data: existingUser }, { data: existingStaff }] = await Promise.all([client.from("users").select("id").eq("phone", phone).maybeSingle(), client.from("staff_members").select("id").eq("phone", phone).maybeSingle()]); if (existingUser || existingStaff) return json({ error: "This phone number already belongs to another Uzuri Living login" }, 409); const { data, error } = await client.from("staff_members").insert({ id: crypto.randomUUID(), name: String(body.name).trim(), phone, pin: await bcrypt.hash(pin, 10), role, ...Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, typeof body[key] === "boolean" ? body[key] : fallback])), shopId: shop.id, createdAt: now, updatedAt: now }).select("id,name,phone,role,canSell,canManageStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data }, 201); }
   if (!id) return json({ error: "Staff member not found" }, 404);
-  const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "role", "phone", "canSell", "canManageStock", "canManageStaff", "canViewReports", "canRecordExpenses", "isActive"]) if (body[key] !== undefined) update[key] = key === "phone" ? normalizePhone(body[key]) || null : body[key]; if (body.pin !== undefined) update.pin = body.pin ? await bcrypt.hash(String(body.pin), 10) : null;
+  const { data: existingStaff } = await client.from("staff_members").select("phone").eq("id", id).eq("shopId", shop.id).maybeSingle();
+  if (!existingStaff) return json({ error: "Staff member not found" }, 404);
+  const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "role", "phone", "canSell", "canManageStock", "canManageStaff", "canViewReports", "canRecordExpenses", "isActive"]) if (body[key] !== undefined) update[key] = key === "phone" ? normalizePhone(body[key]) || null : body[key]; if (body.pin !== undefined) { const nextPhone = String(update.phone ?? existingStaff.phone ?? "").trim(); const nextPin = String(body.pin ?? "").trim(); if (!nextPhone || !validPhone(nextPhone) || !validPin(nextPin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); update.pin = await bcrypt.hash(nextPin, 10); }
   const { data, error } = await client.from("staff_members").update(update).eq("id", id).eq("shopId", shop.id).select("id,name,phone,role,canSell,canManageStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data });
 }
 
@@ -844,7 +876,7 @@ async function handle(request: Request) {
   if (path === "/usage-events") { const access = await requireUser(db, request); if (access.response) return access.response; return usageEvents(db, access.user!, access.shop!, request); }
   if (request.method === "GET" && path === "/auth/me") {
     if (!user?.userId || typeof user.userId !== "string") return json({ error: "Unauthorized" }, 401);
-    const currentProfile = await profile(db, user.userId);
+    const currentProfile = await profile(db, user.userId, typeof user.staffId === "string" ? user.staffId : undefined);
     return currentProfile ? json({ user: currentProfile }) : json({ error: "User not found" }, 404);
   }
 
