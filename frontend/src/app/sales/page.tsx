@@ -17,6 +17,7 @@ interface Product {
   wholesaleMinQty?: number | null;
   currentStock: number;
   barcode?: string | null;
+  imageUrl?: string | null;
 }
 
 interface CartItem {
@@ -626,6 +627,11 @@ export default function SalesPage() {
                   return (
                     <button key={p.id} onClick={() => addToCart(p)}
                       className={`min-h-28 text-left p-3 rounded-xl border transition-all ${inCart ? "border-brand-400 bg-brand-50" : "border-gray-200 bg-white hover:border-brand-300"}`}>
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt="" className="mb-2 h-20 w-full rounded-lg border border-gray-100 object-cover" />
+                      ) : (
+                        <div className="mb-2 flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-2xl text-gray-300" aria-hidden="true">▧</div>
+                      )}
                       <p className="text-sm font-medium text-gray-800 leading-tight">{p.name}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{p.currentStock} {p.unit} {t("dashboard.remaining", lang)}</p>
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(defaultPriceFor(p))}</p>
@@ -664,6 +670,11 @@ export default function SalesPage() {
                     <div className="space-y-3 mb-4 max-h-56 overflow-y-auto">
                       {cart.map((item) => (
                         <div key={item.product.id} className="flex items-center gap-2">
+                          {item.product.imageUrl ? (
+                            <img src={item.product.imageUrl} alt="" className="h-10 w-10 flex-shrink-0 rounded-lg border border-gray-100 object-cover" />
+                          ) : (
+                            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-gray-300" aria-hidden="true">▧</div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-gray-800 truncate">{item.product.name}</p>
                             <input
