@@ -19,6 +19,8 @@ interface Supplier {
 
 interface CurrentUser {
   role: string;
+  staff?: { role?: string };
+  shop?: { ownerSupplierManagementEnabled?: boolean } | null;
 }
 
 export default function SuppliersPage() {
@@ -85,17 +87,18 @@ export default function SuppliersPage() {
     { labelKey: "suppliers.address", key: "address", placeholder: "Kariakoo, Dar es Salaam", type: "text" },
   ] as const;
   const isAdmin = user?.role === "ADMIN";
+  const canManageOwnerSuppliers = Boolean(user && user.role === "MERCHANT" && (!user.staff || user.staff.role === "OWNER") && user.shop?.ownerSupplierManagementEnabled);
 
   return (
     <AppShell>
       <div className="max-w-3xl mx-auto pb-24 lg:pb-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("suppliers.title", lang)}</h1>
-          <button onClick={openAdd}
+          {canManageOwnerSuppliers && <button onClick={openAdd}
             className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t("suppliers.addBtn", lang)}</span>
-          </button>
+          </button>}
         </div>
 
         {loading ? (
@@ -163,7 +166,7 @@ export default function SuppliersPage() {
                       className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors min-h-0" title="WhatsApp">
                       <Phone className="w-4 h-4" />
                     </a>
-                    {s.canEdit && (
+                    {canManageOwnerSuppliers && s.canEdit && (
                       <button onClick={() => openEdit(s)}
                         className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors min-h-0"
                         aria-label={lang === "sw" ? "Hariri supplier" : "Edit supplier"}
@@ -173,7 +176,7 @@ export default function SuppliersPage() {
                     )}
                   </div>
                 </div>
-                {isAdmin && (
+                {(isAdmin || canManageOwnerSuppliers) && (
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                     {(["VERIFIED", "NEEDS_REVIEW", "REJECTED"] as const).map((status) => (
                       <button

@@ -150,7 +150,7 @@ async function profile(client: SupabaseClient, userId: string, staffId?: string)
   if (error) throw error;
   if (!user) return null;
   const [{ data: shop }, { data: supplier }] = await Promise.all([
-    client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished").eq("userId", userId).maybeSingle(),
+    client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,ownerSupplierManagementEnabled").eq("userId", userId).maybeSingle(),
     client.from("suppliers").select("id,name,phone,address").eq("userId", userId).maybeSingle(),
   ]);
   if (!staffId) return { ...user, shop: shop ?? null, supplier: supplier ?? null };
@@ -162,7 +162,7 @@ async function profile(client: SupabaseClient, userId: string, staffId?: string)
     phone: staff.phone || user.phone,
     name: staff.name,
     language: staff.language || user.language,
-    shop: { id: shop.id, name: shop.name, location: shop.location, district: shop.district, category: shop.category },
+    shop: { id: shop.id, name: shop.name, location: shop.location, district: shop.district, category: shop.category, ownerSupplierManagementEnabled: shop.ownerSupplierManagementEnabled },
     supplier: null,
     staff: { id: staff.id, name: staff.name, role: staff.role, permissions: staffPermissions(String(staff.role)) },
   };
@@ -263,7 +263,7 @@ async function verifyOtpReset(client: SupabaseClient, request: Request) {
 }
 
 async function shopForUser(client: SupabaseClient, userId: string) {
-  const { data, error } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,barcodeGenerationEnabled").eq("userId", userId).maybeSingle();
+  const { data, error } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,barcodeGenerationEnabled,ownerSupplierManagementEnabled").eq("userId", userId).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -591,7 +591,7 @@ function normalizePaymentReference(value: unknown) { return String(value ?? "").
 
 async function adminSubscriptionList(client: SupabaseClient, request: Request) {
   const url = new URL(request.url);
-  const { data: shops, error } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,onboardingStatus,lastContactedAt,followUpNotes,createdAt,user:users(id,name,phone)").order("createdAt", { ascending: false }).limit(500);
+  const { data: shops, error } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,ownerSupplierManagementEnabled,onboardingStatus,lastContactedAt,followUpNotes,createdAt,user:users(id,name,phone)").order("createdAt", { ascending: false }).limit(500);
   if (error) throw error;
   const shopIds = (shops ?? []).map((shop) => shop.id);
   const [{ data: payments }, { data: products }, { data: sales }, { data: orders }] = await Promise.all([
@@ -613,14 +613,14 @@ async function adminSubscription(client: SupabaseClient, user: Record<string, un
   if (request.method === "GET" && path === "/subscription/admin") return adminSubscriptionList(client, request);
   const parts = path.split("/").filter(Boolean); const shopId = parts[2]; const action = parts[3];
   if (!shopId) return json({ error: "Shop ID is required" }, 400);
-  const { data: current, error: currentError } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").eq("id", shopId).maybeSingle();
+  const { data: current, error: currentError } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,ownerSupplierManagementEnabled").eq("id", shopId).maybeSingle();
   if (currentError) throw currentError; if (!current) return json({ error: "Shop not found" }, 404);
   const now = new Date(); const body = await request.json().catch(() => ({}));
   if (request.method === "PATCH" && !action) {
     const update: Record<string, unknown> = {}; if (body.plan !== undefined) { const plan = String(body.plan).toUpperCase(); if (!["FREE_TRIAL", "BASIC", "PRO", "LIFETIME"].includes(plan)) return json({ error: "Invalid subscription plan" }, 400); update.plan = plan; if (plan === "LIFETIME") update.subscriptionEndsAt = null; }
-    for (const key of ["isActive", "onboardingStatus", "followUpNotes"]) if (body[key] !== undefined) update[key] = key === "isActive" ? Boolean(body[key]) : body[key] || null;
+    for (const key of ["isActive", "ownerSupplierManagementEnabled", "onboardingStatus", "followUpNotes"]) if (body[key] !== undefined) update[key] = ["isActive", "ownerSupplierManagementEnabled"].includes(key) ? Boolean(body[key]) : body[key] || null;
     for (const key of ["trialEndsAt", "subscriptionEndsAt", "lastContactedAt"]) if (body[key] !== undefined) { const value = body[key] ? new Date(String(body[key])) : null; if (value && Number.isNaN(value.getTime())) return json({ error: `${key} must be a valid date` }, 400); update[key] = value?.toISOString() ?? null; }
-    const { data, error } = await client.from("shops").update({ ...update, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data });
+    const { data, error } = await client.from("shops").update({ ...update, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,ownerSupplierManagementEnabled").single(); if (error) throw error; return json({ shop: data });
   }
   if (request.method === "DELETE" && !action) { const { data, error } = await client.from("shops").update({ plan: "FREE_TRIAL", trialEndsAt: now.toISOString(), subscriptionEndsAt: null, isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data, message: "Paid subscription removed" }); }
   if (request.method === "POST" && action === "extend-trial") { const days = Math.max(1, Math.min(90, Number(body.days) || 7)); const base = current.trialEndsAt && new Date(current.trialEndsAt) > now ? new Date(current.trialEndsAt) : now; const { data, error } = await client.from("shops").update({ plan: "FREE_TRIAL", trialEndsAt: addDays(base, days).toISOString(), isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt").single(); if (error) throw error; return json({ shop: data, message: `Trial extended by ${days} days` }); }
@@ -704,11 +704,17 @@ async function notifications(client: SupabaseClient, shop: Record<string, unknow
 
 async function syncEvents(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) { if (request.method === "POST" && path === "/sync/events") { const body = await request.json().catch(() => ({})); const now = new Date().toISOString(); const { data, error } = await client.from("offline_sync_events").insert({ id: crypto.randomUUID(), shopId: shop.id, deviceId: body.deviceId || null, deviceLabel: body.deviceLabel || null, status: ["QUEUED", "SYNCED", "FAILED", "REMOVED"].includes(String(body.status).toUpperCase()) ? String(body.status).toUpperCase() : "FAILED", total: body.total == null ? null : Number(body.total), message: body.message || null, attempts: Math.max(0, Number(body.attempts) || 0), localId: body.localId || null, createdAt: now }).select("*").single(); if (error) throw error; return json({ event: data }, 201); } const { data, error } = await client.from("offline_sync_events").select("*").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ events: data ?? [] }); }
 
-async function suppliers(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) {
+function canManageOwnerSuppliers(user: Record<string, unknown>, shop: Record<string, unknown>) {
+  const owner = user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER"));
+  return owner && (user.role === "ADMIN" || shop.ownerSupplierManagementEnabled === true);
+}
+
+async function suppliers(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
   if (request.method === "GET") { const id = path === "/suppliers" ? null : path.slice("/suppliers/".length); let query = client.from("suppliers").select("*,catalogProducts:supplier_catalog_products(*)").order("name"); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; return id ? data?.[0] ? json({ supplier: data[0] }) : json({ error: "Supplier not found" }, 404) : json({ suppliers: data ?? [] }); }
   const id = path === "/suppliers" ? null : path.slice("/suppliers/".length); const body = await request.json().catch(() => ({})); const now = new Date().toISOString();
-  if (request.method === "POST" && !id) { const { data, error } = await client.from("suppliers").insert({ id: crypto.randomUUID(), name: String(body.name ?? "").trim(), phone: body.phone || null, address: body.address || null, verificationStatus: "NEEDS_REVIEW", createdByShopId: shop.id, createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; return json({ supplier: data }, 201); }
-  if (request.method === "PATCH" && id) { const update = { ...(body.name !== undefined ? { name: String(body.name).trim() } : {}), ...(body.phone !== undefined ? { phone: body.phone || null } : {}), ...(body.address !== undefined ? { address: body.address || null } : {}), ...(body.verificationStatus !== undefined ? { verificationStatus: String(body.verificationStatus).toUpperCase() } : {}), ...(body.adminNotes !== undefined ? { adminNotes: body.adminNotes || null } : {}), updatedAt: now }; const { data, error } = await client.from("suppliers").update(update).eq("id", id).select("*").single(); if (error) throw error; return json({ supplier: data }); }
+  if ((request.method === "POST" || request.method === "PATCH") && !canManageOwnerSuppliers(user, shop)) return json({ error: "Owner Supplier Management is disabled for this shop or this account is not the owner" }, 403);
+  if (request.method === "POST" && !id) { const name = String(body.name ?? "").trim(); if (!name) return json({ error: "Supplier name is required" }, 400); const { data, error } = await client.from("suppliers").insert({ id: crypto.randomUUID(), name, phone: body.phone || null, address: body.address || null, verificationStatus: "NEEDS_REVIEW", createdByShopId: shop.id, createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; return json({ supplier: data }, 201); }
+  if (request.method === "PATCH" && id) { const { data: existing } = await client.from("suppliers").select("id,createdByShopId").eq("id", id).maybeSingle(); if (!existing || existing.createdByShopId !== shop.id) return json({ error: "Only suppliers added by this shop owner can be changed" }, 403); const update = { ...(body.name !== undefined ? { name: String(body.name).trim() } : {}), ...(body.phone !== undefined ? { phone: body.phone || null } : {}), ...(body.address !== undefined ? { address: body.address || null } : {}), ...(body.verificationStatus !== undefined ? { verificationStatus: String(body.verificationStatus).toUpperCase(), verifiedAt: String(body.verificationStatus).toUpperCase() === "VERIFIED" ? now : null } : {}), ...(body.adminNotes !== undefined ? { adminNotes: body.adminNotes || null } : {}), updatedAt: now }; const { data, error } = await client.from("suppliers").update(update).eq("id", id).select("*").single(); if (error) throw error; return json({ supplier: data }); }
   return json({ error: "Supplier route not found" }, 404);
 }
 
@@ -1018,7 +1024,7 @@ async function handle(request: Request) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     if (path.startsWith("/suppliers/portal/")) return supplierPortal(db, access.user!, request, path);
-    return suppliers(db, access.shop!, request, path);
+    return suppliers(db, access.user!, access.shop!, request, path);
   }
 
   if (path === "/customer-orders" || path.startsWith("/customer-orders/")) {

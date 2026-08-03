@@ -142,6 +142,7 @@ interface Subscription {
   subscriptionEndsAt?: string;
   validUntil?: string | null;
   isActive: boolean;
+  ownerSupplierManagementEnabled?: boolean;
   computedStatus: string;
   daysLeft: number | null;
   reminderStage?: string | null;
@@ -718,6 +719,18 @@ export default function AdminPage() {
       await refreshSubscriptions();
     } catch (err) {
       console.error("Failed to update shop status:", err);
+    } finally {
+      setUpdatingSub(null);
+    }
+  }
+
+  async function handleToggleOwnerSupplierManagement(shop: Subscription) {
+    setUpdatingSub(shop.id);
+    try {
+      await api.patch(`/subscription/admin/${shop.id}`, { ownerSupplierManagementEnabled: !shop.ownerSupplierManagementEnabled });
+      await refreshSubscriptions();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to update Owner Supplier Management");
     } finally {
       setUpdatingSub(null);
     }
@@ -1786,6 +1799,9 @@ export default function AdminPage() {
                         </button>
                         <button onClick={() => handleToggleShopActive(shop)} disabled={updatingSub === shop.id} className={`rounded px-2 py-1 text-xs font-semibold disabled:opacity-50 ${shop.isActive ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-green-100 text-green-700 hover:bg-green-200"}`}>
                           {shop.isActive ? "Suspend" : "Activate shop"}
+                        </button>
+                        <button onClick={() => handleToggleOwnerSupplierManagement(shop)} disabled={updatingSub === shop.id} className={`rounded px-2 py-1 text-xs font-semibold disabled:opacity-50 ${shop.ownerSupplierManagementEnabled ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                          Owner Supplier Management: {shop.ownerSupplierManagementEnabled ? "On" : "Off"}
                         </button>
                         <button onClick={() => handleRemoveSubscription(shop)} disabled={updatingSub === shop.id || !shop.subscriptionEndsAt} className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50">
                           Remove paid plan

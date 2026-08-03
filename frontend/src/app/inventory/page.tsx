@@ -48,6 +48,12 @@ interface Supplier {
   phone: string;
 }
 
+interface OwnerSupplierUser {
+  role: string;
+  staff?: { role?: string; permissions?: { canViewReports?: boolean } };
+  shop?: { ownerSupplierManagementEnabled?: boolean } | null;
+}
+
 function expiryStatus(p: Product, lang: string): { label: string; color: string } | null {
   if (p.doesNotExpire) return { label: lang === "en" ? "Does not expire" : "Haiishi muda", color: "bg-gray-100 text-gray-500" };
   if (!p.expiryDate) return null;
@@ -100,6 +106,10 @@ export default function InventoryPage() {
 const [stockCountCode, setStockCountCode] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showQuickSupplier, setShowQuickSupplier] = useState(false);
+  const [quickSupplier, setQuickSupplier] = useState({ name: "", phone: "", address: "" });
+  const [savingQuickSupplier, setSavingQuickSupplier] = useState(false);
+  const [canManageOwnerSuppliers, setCanManageOwnerSuppliers] = useState(false);
 
   const MAX_PRODUCT_IMAGE_BYTES = 1 * 1024 * 1024;
   const MAX_PRODUCT_IMAGE_DIMENSION = 2400;
@@ -135,8 +145,11 @@ const [stockCountCode, setStockCountCode] = useState("");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    api.get<{ user: { role: string; staff?: { permissions?: { canViewReports?: boolean } } } }>("/auth/me")
-      .then((data) => setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports)))
+    api.get<{ user: OwnerSupplierUser }>("/auth/me")
+      .then((data) => {
+        setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports));
+        setCanManageOwnerSuppliers(Boolean(data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER") && data.user.shop?.ownerSupplierManagementEnabled));
+      })
       .catch(() => setCanViewFinancials(false));
     api.get<{ suppliers: Supplier[] }>("/suppliers").then((d) => setSuppliers(d.suppliers));
     api.get<{ count: NonNullable<typeof stockCount> | null }>("/stock-counts").then((data) => { if (data.count) setStockCount(data.count); }).catch(() => {});
@@ -300,6 +313,22 @@ const [stockCountCode, setStockCountCode] = useState("");
     } finally {
       setSaving(false);
       mutationInFlight.current = false;
+    }
+  }
+
+  async function handleQuickSupplierSave() {
+    if (!quickSupplier.name.trim() || !quickSupplier.phone.trim()) return;
+    setSavingQuickSupplier(true);
+    try {
+      const data = await api.post<{ supplier: Supplier }>("/suppliers", quickSupplier);
+      setSuppliers((current) => [...current, data.supplier].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((current) => ({ ...current, supplierId: data.supplier.id }));
+      setQuickSupplier({ name: "", phone: "", address: "" });
+      setShowQuickSupplier(false);
+    } catch (value: unknown) {
+      setError(value instanceof Error ? value.message : (lang === "sw" ? "Imeshindikana kuongeza supplier." : "Could not add supplier."));
+    } finally {
+      setSavingQuickSupplier(false);
     }
   }
 
@@ -612,6 +641,9 @@ const [stockCountCode, setStockCountCode] = useState("");
                 <option value="">{t("inventory.selectSupplier", lang)}</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
+              {canManageOwnerSuppliers && <button type="button" onClick={() => setShowQuickSupplier(true)} className="mt-2 text-xs font-semibold text-brand-700 hover:text-brand-800">
+                + {lang === "sw" ? "Ongeza supplier mpya" : "Add new supplier"}
+              </button>}
             </Field>
 
             {/* Expiry section */}
@@ -743,6 +775,14 @@ const [stockCountCode, setStockCountCode] = useState("");
           </div>
         </Modal>
       )}
+      {showQuickSupplier && <Modal title={lang === "sw" ? "Ongeza supplier" : "Add supplier"} onClose={() => setShowQuickSupplier(false)}>
+        <div className="space-y-3">
+          <Field label={lang === "sw" ? "Jina la kampuni" : "Company name"}><input className={INPUT} value={quickSupplier.name} onChange={(e) => setQuickSupplier({ ...quickSupplier, name: e.target.value })} /></Field>
+          <Field label={lang === "sw" ? "Nambari ya simu" : "Phone number"}><input className={INPUT} type="tel" value={quickSupplier.phone} onChange={(e) => setQuickSupplier({ ...quickSupplier, phone: e.target.value })} /></Field>
+          <Field label={lang === "sw" ? "Anwani" : "Address"}><input className={INPUT} value={quickSupplier.address} onChange={(e) => setQuickSupplier({ ...quickSupplier, address: e.target.value })} /></Field>
+          <div className="flex gap-2 pt-2"><button type="button" onClick={() => setShowQuickSupplier(false)} className="flex-1 border border-gray-300 py-2.5 rounded-lg text-sm">{t("common.cancel", lang)}</button><button type="button" onClick={handleQuickSupplierSave} disabled={savingQuickSupplier || !quickSupplier.name.trim() || !quickSupplier.phone.trim()} className="flex-1 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50">{savingQuickSupplier ? "..." : t("common.save", lang)}</button></div>
+        </div>
+      </Modal>}
       {barcodeScannerOpen && <BarcodeScanner onClose={() => setBarcodeScannerOpen(false)} onDetected={(barcode) => { setForm({ ...form, barcode: barcode.toUpperCase(), generateBarcode: false }); setBarcodeScannerOpen(false); }} />}
       {stockCountScannerOpen && <BarcodeScanner onClose={() => setStockCountScannerOpen(false)} onDetected={scanStockCount} />}
       {labelProduct?.barcode && <Modal title="Barcode label" onClose={() => setLabelProduct(null)}><div className="space-y-4"><BarcodeLabel value={labelProduct.barcode} name={labelProduct.name} price={formatTZS(labelProduct.sellingPrice)} className="border" /><button onClick={() => window.print()} className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white">Print label</button></div></Modal>}
