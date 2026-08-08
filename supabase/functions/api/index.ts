@@ -277,7 +277,9 @@ async function requireUser(client: SupabaseClient, request: Request) {
 }
 
 function redactProduct(product: Record<string, unknown>, user: Record<string, unknown>) {
-  return user.role === "ADMIN" ? product : { ...product, buyingPrice: null };
+  const permissions = user.permissions as Record<string, unknown> | undefined;
+  const canViewFinancials = user.role === "ADMIN" || !user.staffId || permissions?.canViewReports === true;
+  return canViewFinancials ? product : { ...product, buyingPrice: null };
 }
 
 async function productList(client: SupabaseClient, request: Request, user: Record<string, unknown>, shop: Record<string, unknown>) {
