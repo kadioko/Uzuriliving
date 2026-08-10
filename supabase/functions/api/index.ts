@@ -382,35 +382,32 @@ async function stockMovements(client: SupabaseClient, shop: Record<string, unkno
 }
 
 const expenseCategories = new Set(["RENT", "SALARY", "UTILITIES", "TRANSPORT", "STOCK", "MARKETING", "TAX", "OTHER"]);
+const expensePaymentMethods = new Set(["CASH", "MOBILE_MONEY", "MPESA", "TIGOPESA", "AIRTEL_MONEY", "HALOPESA", "BANK"]);
+function expenseCategory(value: unknown) { const category = String(value ?? "OTHER").toUpperCase(); return expenseCategories.has(category) ? category : "OTHER"; }
+function expensePaymentMethod(value: unknown) { const method = String(value ?? "CASH").toUpperCase(); return expensePaymentMethods.has(method) ? method : "CASH"; }
+function expenseTitle(value: unknown) { return String(value ?? "").trim(); }
+async function expenseDuplicate(client: SupabaseClient, shopId: string, body: Record<string, unknown>, spentAt: string) {
+  const start = new Date(spentAt); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 1);
+  const { data } = await client.from("expenses").select("id,title,amount,category,vendor,spentAt").eq("shopId", shopId).eq("amount", Number(body.amount)).eq("category", expenseCategory(body.category)).gte("spentAt", start.toISOString()).lt("spentAt", end.toISOString()).ilike("title", expenseTitle(body.title));
+  return data?.find((row) => String(row.vendor ?? "").trim().toLowerCase() === String(body.vendor ?? "").trim().toLowerCase()) ?? null;
+}
 async function expenses(client: SupabaseClient, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
-  if (method === "GET") {
-    const category = String(new URL(request.url).searchParams.get("category") ?? "").toUpperCase();
-    let query = client.from("expenses").select("*").eq("shopId", shop.id).order("spentAt", { ascending: false }).limit(100);
-    if (expenseCategories.has(category)) query = query.eq("category", category);
-    const { data, error } = await query;
-    if (error) throw error;
-    const rows = data ?? [];
-    return json({ expenses: rows, summary: { total: rows.reduce((sum, row) => sum + row.amount, 0), count: rows.length } });
+  const isTemplate = id === "templates" || id?.startsWith("templates/");
+  if (isTemplate) {
+    const templateId = id === "templates" ? null : id?.slice("templates/".length);
+    if (method === "GET") { let query = client.from("recurring_expense_templates").select("*").eq("shopId", shop.id).order("isActive", { ascending: false }).order("title"); if (templateId) query = query.eq("id", templateId); const { data, error } = await query; if (error) throw error; return templateId ? data?.[0] ? json({ template: data[0] }) : json({ error: "Recurring template not found" }, 404) : json({ templates: data ?? [] }); }
+    const body = await request.json().catch(() => ({}));
+    if (method === "POST" && templateId?.endsWith("/record")) { const actualId = templateId.slice(0, -"/record".length); const { data: template } = await client.from("recurring_expense_templates").select("*").eq("id", actualId).eq("shopId", shop.id).maybeSingle(); if (!template) return json({ error: "Recurring template not found" }, 404); const now = new Date().toISOString(); const { data, error } = await client.from("expenses").insert({ id: crypto.randomUUID(), title: template.title, amount: template.amount, category: template.category, vendor: template.vendor, note: template.note, paymentMethod: template.paymentMethod, spentAt: body.spentAt || now, createdAt: now, updatedAt: now, shopId: shop.id }).select("*").single(); if (error) throw error; return json({ expense: data }, 201); }
+    if (method === "DELETE" && templateId) { const { error } = await client.from("recurring_expense_templates").delete().eq("id", templateId).eq("shopId", shop.id); if (error) throw error; return json({ message: "Recurring template deleted" }); }
+    const now = new Date().toISOString(); const amount = Number(body.amount); const title = expenseTitle(body.title); if (!title || !Number.isInteger(amount) || amount <= 0) return json({ error: "Title and a whole positive TZS amount are required" }, 400); const update = { title, amount, category: expenseCategory(body.category), vendor: body.vendor || null, note: body.note || null, paymentMethod: expensePaymentMethod(body.paymentMethod), dayOfMonth: Math.min(28, Math.max(1, Number(body.dayOfMonth) || 1)), isActive: body.isActive !== false, updatedAt: now };
+    const result = templateId ? await client.from("recurring_expense_templates").update(update).eq("id", templateId).eq("shopId", shop.id).select("*").single() : await client.from("recurring_expense_templates").insert({ id: crypto.randomUUID(), ...update, shopId: shop.id, createdAt: now }).select("*").single(); if (result.error) throw result.error; return json({ template: result.data }, templateId ? 200 : 201);
   }
-  if (method === "DELETE" && id) {
-    const { error } = await client.from("expenses").delete().eq("id", id).eq("shopId", shop.id);
-    if (error) throw error;
-    return json({ message: "Expense deleted" });
-  }
-  const body = await request.json().catch(() => ({}));
-  const amount = Number(body.amount);
-  if (!Number.isInteger(amount) || amount <= 0) return json({ error: "Title and a whole positive TZS amount are required" }, 400);
-  const now = new Date().toISOString();
-  if (method === "POST") {
-    const { data, error } = await client.from("expenses").insert({ id: crypto.randomUUID(), title: String(body.title ?? "").trim(), amount, category: expenseCategories.has(String(body.category ?? "OTHER").toUpperCase()) ? String(body.category).toUpperCase() : "OTHER", vendor: body.vendor || null, note: body.note || null, spentAt: body.spentAt || now, createdAt: now, updatedAt: now, shopId: shop.id }).select("*").single();
-    if (error) throw error;
-    return json({ expense: data }, 201);
-  }
-  if (!id) return json({ error: "Expense not found" }, 404);
-  const update = { ...(body.title !== undefined ? { title: String(body.title).trim() } : {}), ...(body.amount !== undefined ? { amount } : {}), ...(body.category !== undefined ? { category: expenseCategories.has(String(body.category).toUpperCase()) ? String(body.category).toUpperCase() : "OTHER" } : {}), ...(body.vendor !== undefined ? { vendor: body.vendor || null } : {}), ...(body.note !== undefined ? { note: body.note || null } : {}), ...(body.spentAt !== undefined ? { spentAt: body.spentAt } : {}), updatedAt: now };
-  const { data, error } = await client.from("expenses").update(update).eq("id", id).eq("shopId", shop.id).select("*").single();
-  if (error) throw error;
-  return json({ expense: data });
+  const url = new URL(request.url);
+  if (method === "GET") { const category = String(url.searchParams.get("category") ?? "").toUpperCase(); const search = url.searchParams.get("search")?.trim(); const vendor = url.searchParams.get("vendor")?.trim(); const from = url.searchParams.get("from"); const to = url.searchParams.get("to"); let query = client.from("expenses").select("*").eq("shopId", shop.id).order("spentAt", { ascending: false }).limit(500); if (expenseCategories.has(category)) query = query.eq("category", category); if (search) query = query.or(`title.ilike.%${search}%,note.ilike.%${search}%`); if (vendor) query = query.ilike("vendor", `%${vendor}%`); if (from) query = query.gte("spentAt", new Date(`${from}T00:00:00`).toISOString()); if (to) query = query.lt("spentAt", new Date(`${to}T23:59:59.999`).toISOString()); const { data, error } = await query; if (error) throw error; const rows = data ?? []; return json({ expenses: rows, summary: { total: rows.reduce((sum, row) => sum + Number(row.amount), 0), count: rows.length }, templates: [] }); }
+  if (method === "DELETE" && id) { const { error } = await client.from("expenses").delete().eq("id", id).eq("shopId", shop.id); if (error) throw error; return json({ message: "Expense deleted" }); }
+  const body = await request.json().catch(() => ({})); const amount = Number(body.amount); const title = expenseTitle(body.title); if (!title || !Number.isInteger(amount) || amount <= 0) return json({ error: "Title and a whole positive TZS amount are required" }, 400); const category = expenseCategory(body.category); const paymentMethod = expensePaymentMethod(body.paymentMethod); const now = new Date().toISOString(); const spentAt = body.spentAt || now;
+  if (method === "POST") { const duplicate = !body.allowDuplicate && await expenseDuplicate(client, String(shop.id), body, spentAt); if (duplicate) return json({ error: "A very similar expense already exists for this date. Add it anyway only if this is intentional.", duplicateWarning: true, duplicate }, 409); const { data, error } = await client.from("expenses").insert({ id: crypto.randomUUID(), title, amount, category, vendor: body.vendor || null, note: body.note || null, paymentMethod, spentAt, createdAt: now, updatedAt: now, shopId: shop.id }).select("*").single(); if (error) throw error; return json({ expense: data }, 201); }
+  if (!id) return json({ error: "Expense not found" }, 404); const update = { ...(body.title !== undefined ? { title } : {}), ...(body.amount !== undefined ? { amount } : {}), ...(body.category !== undefined ? { category } : {}), ...(body.vendor !== undefined ? { vendor: body.vendor || null } : {}), ...(body.note !== undefined ? { note: body.note || null } : {}), ...(body.paymentMethod !== undefined ? { paymentMethod } : {}), ...(body.spentAt !== undefined ? { spentAt } : {}), updatedAt: now }; const { data, error } = await client.from("expenses").update(update).eq("id", id).eq("shopId", shop.id).select("*").single(); if (error) throw error; return json({ expense: data });
 }
 
 const debtPaymentMethods = new Set(["CASH", "MPESA", "TIGOPESA", "AIRTEL_MONEY", "HALOPESA", "BANK"]);

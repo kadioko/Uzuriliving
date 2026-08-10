@@ -1,104 +1,82 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
+import { CalendarDays, ChevronDown, Edit2, Filter, MoreHorizontal, Plus, Receipt, RefreshCw, Search, Trash2, Wallet, X } from "lucide-react";
 
-interface Expense {
-  id: string;
-  title: string;
-  amount: number;
-  category: string;
-  vendor: string | null;
-  spentAt: string;
-}
+type PaymentMethod = "CASH" | "MOBILE_MONEY" | "BANK";
+type ExpenseCategory = "RENT" | "UTILITIES" | "TRANSPORT" | "SALARY" | "MARKETING" | "STOCK" | "TAX" | "OTHER";
 
-const categories = ["RENT", "SALARY", "UTILITIES", "TRANSPORT", "STOCK", "MARKETING", "TAX", "OTHER"];
-const INPUT = "rounded-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm";
+interface Expense { id: string; title: string; amount: number; category: string; vendor: string | null; note?: string | null; paymentMethod?: string | null; spentAt: string; }
+interface RecurringTemplate { id: string; title: string; amount: number; category: string; vendor: string | null; note?: string | null; paymentMethod: PaymentMethod; dayOfMonth: number; isActive: boolean; }
+interface FormState { title: string; amount: string; category: ExpenseCategory; vendor: string; note: string; paymentMethod: PaymentMethod; spentAt: string; }
+
+const categories: Array<{ value: ExpenseCategory; en: string; sw: string }> = [
+  { value: "RENT", en: "Rent", sw: "Kodi" }, { value: "UTILITIES", en: "Utilities", sw: "LUKU" }, { value: "TRANSPORT", en: "Transport", sw: "Usafiri" }, { value: "SALARY", en: "Salary", sw: "Mshahara" }, { value: "MARKETING", en: "Data / marketing", sw: "Data" }, { value: "STOCK", en: "Maintenance", sw: "Matengenezo" }, { value: "OTHER", en: "Other", sw: "Mengine" },
+];
+const INPUT = "w-full rounded-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-brand-500 sm:text-sm";
+const emptyForm = (): FormState => ({ title: "", amount: "", category: "OTHER", vendor: "", note: "", paymentMethod: "CASH", spentAt: new Date().toISOString().slice(0, 10) });
+const amountValue = (value: string) => value.replace(/[^0-9]/g, "");
+const amountDisplay = (value: string) => value ? Number(amountValue(value)).toLocaleString("en-TZ") : "";
+const categoryLabel = (value: string, lang: string) => categories.find((item) => item.value === value)?.[lang === "sw" ? "sw" : "en"] || value.replaceAll("_", " ");
+const paymentLabel = (value: string | null | undefined, lang: string) => value === "MOBILE_MONEY" || ["MPESA", "TIGOPESA", "AIRTEL_MONEY", "HALOPESA"].includes(value || "") ? (lang === "sw" ? "Pesa ya simu" : "Mobile money") : value === "BANK" ? (lang === "sw" ? "Benki" : "Bank") : (lang === "sw" ? "Cash" : "Cash");
 
 export default function ExpensesPage() {
   const lang = useLang();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
   const [summary, setSummary] = useState({ total: 0, count: 0 });
-  const [form, setForm] = useState({ title: "", amount: "", category: "OTHER", vendor: "" });
-  const [assistantFocus, setAssistantFocus] = useState("");
+  const [form, setForm] = useState<FormState>(emptyForm());
+  const [templateForm, setTemplateForm] = useState({ title: "", amount: "", category: "OTHER" as ExpenseCategory, vendor: "", note: "", paymentMethod: "CASH" as PaymentMethod, dayOfMonth: "1" });
+  const [editing, setEditing] = useState<Expense | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [filters, setFilters] = useState({ search: "", vendor: "", category: "", from: "", to: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  async function load() {
-    const data = await api.get<{ expenses: Expense[]; summary: { total: number; count: number } }>("/expenses", lang);
-    setExpenses(data.expenses);
-    setSummary(data.summary);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value)) as string[][]);
+      const [data, templateData] = await Promise.all([
+        api.get<{ expenses: Expense[]; summary: { total: number; count: number } }>(`/expenses?${params}`, lang),
+        api.get<{ templates: RecurringTemplate[] }>("/expenses/templates", lang),
+      ]);
+      setExpenses(data.expenses); setSummary(data.summary); setTemplates(templateData.templates);
+    } catch (value: unknown) { setError(value instanceof Error ? value.message : (lang === "sw" ? "Imeshindikana kupakia matumizi." : "Could not load expenses.")); }
+    finally { setLoading(false); }
+  }, [filters, lang]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  function openAdd(category: ExpenseCategory = "OTHER") { setEditing(null); setForm({ ...emptyForm(), category, title: category === "OTHER" ? "" : categoryLabel(category, lang) }); setError(""); setShowForm(true); }
+  function openEdit(expense: Expense) { setEditing(expense); setForm({ title: expense.title, amount: String(expense.amount), category: expense.category as ExpenseCategory, vendor: expense.vendor || "", note: expense.note || "", paymentMethod: ["BANK", "MOBILE_MONEY"].includes(expense.paymentMethod || "") ? expense.paymentMethod as PaymentMethod : "CASH", spentAt: expense.spentAt.slice(0, 10) }); setError(""); setShowForm(true); }
+
+  async function saveExpense(event: React.FormEvent) {
+    event.preventDefault(); const amount = Number(amountValue(form.amount)); if (!form.title.trim() || !amount || !form.spentAt) { setError(lang === "sw" ? "Jaza jina, kiasi na tarehe." : "Enter a title, amount, and date."); return; }
+    setSaving(true); setError(""); const payload = { ...form, amount, vendor: form.vendor || null, note: form.note || null };
+    try { if (editing) await api.patch(`/expenses/${editing.id}`, payload, lang); else await api.post("/expenses", payload, lang); setShowForm(false); await load(); }
+    catch (value: unknown) { const message = value instanceof Error ? value.message : "Could not save expense."; if (!editing && message.includes("very similar expense") && window.confirm(`${message}\n\n${lang === "sw" ? "Endelea kuongeza?" : "Add it anyway?"}`)) { try { await api.post("/expenses", { ...payload, allowDuplicate: true }, lang); setShowForm(false); await load(); } catch (retry: unknown) { setError(retry instanceof Error ? retry.message : message); } } else setError(message); }
+    finally { setSaving(false); }
   }
 
-  useEffect(() => {
-    load().catch(console.error);
-    setAssistantFocus(new URLSearchParams(window.location.search).get("focus") || "");
-  }, []);
+  async function removeExpense(expense: Expense) { if (!window.confirm(lang === "sw" ? `Futa ${expense.title}?` : `Delete ${expense.title}?`)) return; try { await api.delete(`/expenses/${expense.id}`, lang); await load(); } catch (value: unknown) { setError(value instanceof Error ? value.message : "Could not delete expense."); } }
+  async function saveTemplate(event: React.FormEvent) { event.preventDefault(); const amount = Number(amountValue(templateForm.amount)); if (!templateForm.title.trim() || !amount) return; setSaving(true); try { await api.post("/expenses/templates", { ...templateForm, amount, dayOfMonth: Number(templateForm.dayOfMonth) }, lang); setTemplateForm({ title: "", amount: "", category: "OTHER", vendor: "", note: "", paymentMethod: "CASH", dayOfMonth: "1" }); setShowTemplateForm(false); await load(); } catch (value: unknown) { setError(value instanceof Error ? value.message : "Could not save template."); } finally { setSaving(false); } }
+  async function recordTemplate(template: RecurringTemplate) { try { await api.post(`/expenses/templates/${template.id}/record`, { spentAt: new Date().toISOString().slice(0, 10) }, lang); await load(); } catch (value: unknown) { setError(value instanceof Error ? value.message : "Could not record expense."); } }
+  async function removeTemplate(template: RecurringTemplate) { if (!window.confirm(lang === "sw" ? `Ondoa template ya ${template.title}?` : `Remove the ${template.title} template?`)) return; try { await api.delete(`/expenses/templates/${template.id}`, lang); await load(); } catch (value: unknown) { setError(value instanceof Error ? value.message : "Could not delete template."); } }
 
-  async function addExpense(event: React.FormEvent) {
-    event.preventDefault();
-    await api.post("/expenses", { ...form, amount: Number(form.amount) }, lang);
-    setForm({ title: "", amount: "", category: "OTHER", vendor: "" });
-    await load();
-  }
-
-  return (
-    <AppShell>
-      <div className="mx-auto max-w-5xl space-y-6 pb-24 lg:pb-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-950">{lang === "sw" ? "Matumizi ya Biashara" : "Expense Tracking"}</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              {lang === "sw" ? "Rekodi gharama za duka ili faida iwe ya kweli." : "Record shop costs so profit stays honest."}
-            </p>
-          </div>
-          <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <strong>{formatTZS(summary.total)}</strong> - {summary.count} {lang === "sw" ? "rekodi" : "records"}
-          </div>
-        </div>
-
-        {assistantFocus && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p className="font-semibold">
-              {assistantFocus === "profit"
-                ? (lang === "sw" ? "Uzuri Living imekufungua kukagua matumizi dhidi ya faida." : "Uzuri Living opened expenses so you can review profit pressure.")
-                : (lang === "sw" ? "Uzuri Living imekufungua kwenye ukaguzi wa matumizi ya wiki." : "Uzuri Living opened your weekly expense review.")}
-            </p>
-            <p className="mt-1 text-xs text-amber-800">
-              {lang === "sw" ? "Angalia gharama kubwa, rekodi zilizokosekana, na matumizi yanayoweza kupunguzwa." : "Check large costs, missing records, and expenses that can be reduced."}
-            </p>
-          </div>
-        )}
-
-        <form onSubmit={addExpense} className="grid gap-3 rounded-xl border border-gray-200 bg-white p-4 md:grid-cols-6">
-          <input className={`${INPUT} md:col-span-2`} required placeholder={lang === "sw" ? "Mfano: Kodi ya mwezi" : "Example: Monthly rent"} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          <input className={INPUT} required type="number" min="1" inputMode="numeric" placeholder={lang === "sw" ? "Kiasi" : "Amount"} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          <select className={INPUT} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-            {categories.map((category) => <option key={category} value={category}>{category.replace("_", " ")}</option>)}
-          </select>
-          <input className={INPUT} placeholder={lang === "sw" ? "Muuzaji (hiari)" : "Vendor (optional)"} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />
-          <button className="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white hover:bg-brand-700">
-            {lang === "sw" ? "Hifadhi" : "Save"}
-          </button>
-        </form>
-
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          {expenses.length === 0 ? (
-            <div className="p-6 text-sm text-gray-500">{lang === "sw" ? "Hakuna matumizi bado." : "No expenses yet."}</div>
-          ) : expenses.map((expense) => (
-            <div key={expense.id} className="grid gap-2 border-b border-gray-100 p-4 last:border-b-0 md:grid-cols-[1fr_auto] md:items-center">
-              <div>
-                <p className="font-semibold text-gray-950">{expense.title}</p>
-                <p className="text-sm text-gray-500">
-                  {expense.category.replace("_", " ")} - {new Date(expense.spentAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US")}
-                  {expense.vendor ? ` - ${expense.vendor}` : ""}
-                </p>
-              </div>
-              <p className="font-semibold text-gray-950">{formatTZS(expense.amount)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </AppShell>
-  );
+  return <AppShell><div className="mx-auto max-w-6xl space-y-5 pb-24 lg:pb-6">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">Uzuri Living</p><h1 className="mt-1 text-2xl font-bold text-gray-950">{lang === "sw" ? "Matumizi" : "Expenses"}</h1><p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Fuatilia gharama bila kupoteza picha ya faida." : "Track costs without losing sight of profit."}</p></div><button onClick={() => openAdd()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"><Plus className="h-4 w-4" />{lang === "sw" ? "Ongeza matumizi" : "Add expense"}</button></div>
+    {error && <div className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><span>{error}</span><button onClick={() => setError("")}><X className="h-4 w-4" /></button></div>}
+    <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-gray-200 bg-white p-4"><p className="text-xs text-gray-500">{lang === "sw" ? "Jumla iliyoonyeshwa" : "Total shown"}</p><p className="mt-2 text-xl font-bold text-gray-950">{formatTZS(summary.total)}</p></div><div className="rounded-2xl border border-gray-200 bg-white p-4"><p className="text-xs text-gray-500">{lang === "sw" ? "Rekodi" : "Records"}</p><p className="mt-2 text-xl font-bold text-gray-950">{summary.count}</p></div><div className="rounded-2xl border border-brand-100 bg-brand-50 p-4"><p className="text-xs text-brand-700">{lang === "sw" ? "Hali" : "Workflow"}</p><p className="mt-2 text-sm font-semibold text-brand-950">{templates.length ? `${templates.length} ${lang === "sw" ? "templates za kila mwezi" : "monthly templates"}` : (lang === "sw" ? "Anza kwa chaguo la haraka" : "Start with a quick choice")}</p></div></div>
+    <div className="rounded-2xl border border-gray-200 bg-white p-4"><div className="mb-3 flex items-center gap-2"><Receipt className="h-4 w-4 text-brand-600" /><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Anza haraka" : "Quick start"}</h2></div><div className="flex flex-wrap gap-2">{categories.map((item) => <button key={item.value} onClick={() => openAdd(item.value)} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 hover:border-brand-300 hover:bg-brand-50">{lang === "sw" ? item.sw : item.en}</button>)}</div></div>
+    <div className="rounded-2xl border border-gray-200 bg-white p-4"><div className="mb-3 flex items-center gap-2"><Filter className="h-4 w-4 text-gray-500" /><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Chuja matumizi" : "Filter expenses"}</h2></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><input className={`${INPUT} pl-9`} placeholder={lang === "sw" ? "Tafuta..." : "Search..."} value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} /></div><input className={INPUT} placeholder={lang === "sw" ? "Muuzaji" : "Vendor"} value={filters.vendor} onChange={(e) => setFilters({ ...filters, vendor: e.target.value })} /><select className={INPUT} value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}><option value="">{lang === "sw" ? "Makundi yote" : "All categories"}</option>{categories.map((item) => <option key={item.value} value={item.value}>{lang === "sw" ? item.sw : item.en}</option>)}</select><input type="date" className={INPUT} value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /><input type="date" className={INPUT} value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></div></div>
+    <div className="rounded-2xl border border-gray-200 bg-white"><div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Rekodi za matumizi" : "Expense records"}</h2><button onClick={() => void load()} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Refresh"><RefreshCw className="h-4 w-4" /></button></div>{loading ? <div className="p-8 text-center text-sm text-gray-500">{lang === "sw" ? "Inapakia..." : "Loading..."}</div> : expenses.length === 0 ? <div className="p-8 text-center"><Wallet className="mx-auto h-10 w-10 text-gray-300" /><p className="mt-3 font-semibold text-gray-700">{lang === "sw" ? "Hakuna matumizi yaliyoonyeshwa" : "No expenses shown"}</p><p className="mt-1 text-sm text-gray-500">{lang === "sw" ? "Chagua matumizi ya kuanza kurekodi." : "Choose a quick expense to start recording."}</p></div> : <div>{expenses.map((expense) => <div key={expense.id} className="flex flex-col gap-3 border-b border-gray-100 p-4 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-gray-950">{expense.title}</p><span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">{categoryLabel(expense.category, lang)}</span></div><p className="mt-1 text-xs text-gray-500">{new Date(expense.spentAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US")} {expense.vendor ? `· ${expense.vendor}` : ""} · {paymentLabel(expense.paymentMethod, lang)}</p>{expense.note && <p className="mt-1 text-xs text-gray-400">{expense.note}</p>}</div><div className="flex items-center justify-between gap-4 sm:justify-end"><p className="font-bold text-gray-950">{formatTZS(expense.amount)}</p><div className="flex gap-1"><button onClick={() => openEdit(expense)} className="rounded-lg p-2 text-gray-500 hover:bg-blue-50 hover:text-blue-700" title="Edit"><Edit2 className="h-4 w-4" /></button><button onClick={() => void removeExpense(expense)} className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-700" title="Delete"><Trash2 className="h-4 w-4" /></button></div></div></div>)}</div>}</div>
+    <div className="rounded-2xl border border-gray-200 bg-white"><div className="flex flex-col gap-3 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Templates za kila mwezi" : "Monthly recurring templates"}</h2><p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Haziongezi gharama zenyewe. Bonyeza Rekodi sasa unapolipa." : "Nothing is added automatically. Use Record now when you actually pay."}</p></div><button onClick={() => setShowTemplateForm(!showTemplateForm)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700"><Plus className="h-3.5 w-3.5" />{lang === "sw" ? "Template mpya" : "New template"}</button></div>{showTemplateForm && <form onSubmit={saveTemplate} className="grid gap-2 border-b border-gray-100 bg-gray-50 p-4 sm:grid-cols-2 lg:grid-cols-4"><input required className={INPUT} placeholder={lang === "sw" ? "Mfano: Kodi" : "Example: Rent"} value={templateForm.title} onChange={(e) => setTemplateForm({ ...templateForm, title: e.target.value })} /><input required className={INPUT} inputMode="numeric" placeholder="TZS amount" value={amountDisplay(templateForm.amount)} onChange={(e) => setTemplateForm({ ...templateForm, amount: amountValue(e.target.value) })} /><select className={INPUT} value={templateForm.category} onChange={(e) => setTemplateForm({ ...templateForm, category: e.target.value as ExpenseCategory })}>{categories.map((item) => <option key={item.value} value={item.value}>{lang === "sw" ? item.sw : item.en}</option>)}</select><input className={INPUT} placeholder={lang === "sw" ? "Siku ya mwezi 1-28" : "Day of month 1-28"} type="number" min="1" max="28" value={templateForm.dayOfMonth} onChange={(e) => setTemplateForm({ ...templateForm, dayOfMonth: e.target.value })} /><input className={INPUT} placeholder={lang === "sw" ? "Muuzaji" : "Vendor"} value={templateForm.vendor} onChange={(e) => setTemplateForm({ ...templateForm, vendor: e.target.value })} /><select className={INPUT} value={templateForm.paymentMethod} onChange={(e) => setTemplateForm({ ...templateForm, paymentMethod: e.target.value as PaymentMethod })}><option value="CASH">Cash</option><option value="MOBILE_MONEY">Mobile money</option><option value="BANK">Bank</option></select><button disabled={saving} className="rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{lang === "sw" ? "Hifadhi template" : "Save template"}</button></form>}{templates.length === 0 ? <p className="p-4 text-sm text-gray-500">{lang === "sw" ? "Bado hakuna template." : "No recurring templates yet."}</p> : <div>{templates.map((template) => <div key={template.id} className="flex flex-col gap-3 border-b border-gray-100 p-4 last:border-0 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-gray-900">{template.title} <span className="text-xs font-normal text-gray-500">· day {template.dayOfMonth}</span></p><p className="text-xs text-gray-500">{formatTZS(template.amount)} · {categoryLabel(template.category, lang)} · {paymentLabel(template.paymentMethod, lang)}</p></div><div className="flex gap-2"><button onClick={() => void recordTemplate(template)} className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white">{lang === "sw" ? "Rekodi sasa" : "Record now"}</button><button onClick={() => void removeTemplate(template)} className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></div></div>)}</div>}</div>
+    {showForm && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"><form onSubmit={saveExpense} className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold text-gray-950">{editing ? (lang === "sw" ? "Hariri matumizi" : "Edit expense") : (lang === "sw" ? "Ongeza matumizi" : "Add expense")}</h2><button type="button" onClick={() => setShowForm(false)}><X className="h-5 w-5 text-gray-400" /></button></div>{error && <p className="mb-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}<div className="grid gap-3 sm:grid-cols-2"><input required className={`${INPUT} sm:col-span-2`} placeholder={lang === "sw" ? "Jina la matumizi" : "Expense title"} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /><input required className={INPUT} inputMode="numeric" placeholder="TZS amount" value={amountDisplay(form.amount)} onChange={(e) => setForm({ ...form, amount: amountValue(e.target.value) })} /><select className={INPUT} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ExpenseCategory })}>{categories.map((item) => <option key={item.value} value={item.value}>{lang === "sw" ? item.sw : item.en}</option>)}</select><input className={INPUT} placeholder={lang === "sw" ? "Muuzaji (hiari)" : "Vendor (optional)"} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} /><input type="date" className={INPUT} value={form.spentAt} onChange={(e) => setForm({ ...form, spentAt: e.target.value })} /><select className={INPUT} value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value as PaymentMethod })}><option value="CASH">Cash</option><option value="MOBILE_MONEY">Mobile money</option><option value="BANK">Bank</option></select><textarea className={`${INPUT} sm:col-span-2`} rows={3} placeholder={lang === "sw" ? "Maelezo (hiari)" : "Notes (optional)"} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></div><div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700">{lang === "sw" ? "Ghairi" : "Cancel"}</button><button disabled={saving} className="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? "..." : (lang === "sw" ? "Hifadhi" : "Save")}</button></div></form></div>}
+  </div></AppShell>;
 }

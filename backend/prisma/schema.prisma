@@ -121,6 +121,7 @@ model Shop {
   customerOrders       CustomerOrder[]
   debts                Debt[]
   expenses             Expense[]
+  recurringExpenseTemplates RecurringExpenseTemplate[]
   staffMembers         StaffMember[]
   subscriptionPayments SubscriptionPayment[]
   offlineSyncEvents    OfflineSyncEvent[]
@@ -527,6 +528,7 @@ model Expense {
   category  ExpenseCategory @default(OTHER)
   vendor    String?
   note      String?
+  paymentMethod String  @default("CASH")
   spentAt   DateTime        @default(now())
   shopId    String
   shop      Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -536,6 +538,25 @@ model Expense {
   @@index([shopId, spentAt])
   @@index([shopId, category])
   @@map("expenses")
+}
+
+model RecurringExpenseTemplate {
+  id            String   @id @default(cuid())
+  title         String
+  amount        Int
+  category      String   @default("OTHER")
+  vendor        String?
+  note          String?
+  paymentMethod String   @default("CASH")
+  dayOfMonth    Int      @default(1)
+  isActive      Boolean  @default(true)
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shopId, isActive])
+  @@map("recurring_expense_templates")
 }
 
 model StaffMember {
