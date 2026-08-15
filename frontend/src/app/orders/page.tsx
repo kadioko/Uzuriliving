@@ -35,6 +35,9 @@ interface Product {
   buyingPrice: number;
   currentStock: number;
   minimumStock: number;
+  onOrderQuantity?: number;
+  isReorderable: boolean;
+  note?: string | null;
   supplier?: { id: string };
   supplierCatalogProductId?: string | null;
 }
@@ -43,6 +46,7 @@ interface OrderItem {
   productId: string;
   product: { id: string; name: string; unit: string };
   quantity: number;
+  note?: string | null;
   unitPrice?: number;
 }
 
@@ -77,7 +81,7 @@ export default function OrdersPage() {
   const [catalogImport, setCatalogImport] = useState<SupplierCatalogProduct | null>(null);
   const [retailPriceDraft, setRetailPriceDraft] = useState("");
   const [minimumStockDraft, setMinimumStockDraft] = useState("5");
-  const [orderItems, setOrderItems] = useState<{ productId: string; quantity: number }[]>([]);
+  const [orderItems, setOrderItems] = useState<{ productId: string; quantity: number; note?: string | null }[]>([]);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -111,7 +115,8 @@ export default function OrdersPage() {
   function addItem(productId: string) {
     setOrderItems((prev) => {
       if (prev.find((i) => i.productId === productId)) return prev;
-      return [...prev, { productId, quantity: 1 }];
+      const product = products.find((item) => item.id === productId);
+      return [...prev, { productId, quantity: 1, note: product?.note || "" }];
     });
   }
 
@@ -164,16 +169,21 @@ export default function OrdersPage() {
     );
   }
 
+  function updateItemNote(productId: string, note: string) {
+    setOrderItems((prev) => prev.map((item) => item.productId === productId ? { ...item, note } : item));
+  }
+
   function removeItem(productId: string) {
     setOrderItems((prev) => prev.filter((i) => i.productId !== productId));
   }
 
   function fillLowStock() {
     const lowItems = supplierProducts
-      .filter((p) => p.currentStock <= p.minimumStock)
+      .filter((p) => p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1))
       .map((p) => ({
         productId: p.id,
         quantity: Math.max(p.minimumStock - p.currentStock + 5, 5),
+        note: p.note || "",
       }));
     setOrderItems(lowItems);
   }
@@ -366,15 +376,20 @@ export default function OrdersPage() {
                     {orderItems.map((item) => {
                       const p = products.find((pr) => pr.id === item.productId);
                       return (
-                        <div key={item.productId} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
-                          <span className="flex-1 text-xs font-medium text-gray-700">{p?.name}</span>
-                          <input type="number" value={item.quantity} min={1}
-                            onChange={(e) => updateItemQty(item.productId, Number(e.target.value))}
-                            className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none" />
-                          <span className="text-xs text-gray-400">{p?.unit}</span>
-                          <button onClick={() => removeItem(item.productId)} className="text-gray-300 hover:text-red-400 min-h-0">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+                        <div key={item.productId} className="bg-gray-50 rounded-lg p-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex-1 text-xs font-medium text-gray-700">{p?.name}</span>
+                            <input type="number" value={item.quantity} min={1}
+                              onChange={(e) => updateItemQty(item.productId, Number(e.target.value))}
+                              className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none" />
+                            <span className="text-xs text-gray-400">{p?.unit}</span>
+                            <button onClick={() => removeItem(item.productId)} className="text-gray-300 hover:text-red-400 min-h-0">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <input value={item.note || ""} onChange={(e) => updateItemNote(item.productId, e.target.value)} maxLength={500}
+                            placeholder={lang === "sw" ? "Maelezo ya order hii (rangi, discount, n.k.)" : "Notes for this order (colour, discount, etc.)"}
+                            className="mt-2 w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none" />
                         </div>
                       );
                     })}

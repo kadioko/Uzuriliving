@@ -32,6 +32,9 @@ interface Product {
   wholesaleMinQty?: number | null;
   currentStock: number;
   minimumStock: number;
+  onOrderQuantity?: number;
+  isReorderable: boolean;
+  note?: string | null;
   isActive: boolean;
   expiryDate?: string | null;
   doesNotExpire: boolean;
@@ -90,7 +93,7 @@ export default function InventoryPage() {
   const [form, setForm] = useState({
     name: "", sku: "", unit: "pcs", buyingPrice: "", sellingPrice: "",
     wholesalePrice: "", wholesaleMinQty: "",
-    currentStock: "0", minimumStock: "5", supplierId: "",
+    currentStock: "0", minimumStock: "5", supplierId: "", isReorderable: true, note: "",
     expiryDate: "", doesNotExpire: false, barcode: "", barcodeType: "", generateBarcode: false,
   });
   const [adjustForm, setAdjustForm] = useState({ type: "IN", quantity: "", note: "" });
@@ -158,7 +161,7 @@ const [stockCountCode, setStockCountCode] = useState("");
 
   function openAdd() {
     setEditProduct(null);
-    setForm({ name: "", sku: "", unit: "pcs", buyingPrice: "", sellingPrice: "", wholesalePrice: "", wholesaleMinQty: "", currentStock: "0", minimumStock: "5", supplierId: "", expiryDate: "", doesNotExpire: false, barcode: "", barcodeType: "", generateBarcode: false });
+    setForm({ name: "", sku: "", unit: "pcs", buyingPrice: "", sellingPrice: "", wholesalePrice: "", wholesaleMinQty: "", currentStock: "0", minimumStock: "5", supplierId: "", isReorderable: true, note: "", expiryDate: "", doesNotExpire: false, barcode: "", barcodeType: "", generateBarcode: false });
     setError("");
     setSelectedImage(null);
     setImagePreview(null);
@@ -174,6 +177,7 @@ const [stockCountCode, setStockCountCode] = useState("");
       wholesaleMinQty: p.wholesaleMinQty != null ? String(p.wholesaleMinQty) : "",
       currentStock: String(p.currentStock), minimumStock: String(p.minimumStock),
       supplierId: p.supplier?.id || "",
+      isReorderable: p.isReorderable !== false, note: p.note || "",
       expiryDate: p.expiryDate ? p.expiryDate.slice(0, 10) : "",
       doesNotExpire: p.doesNotExpire,
       barcode: p.barcode || "", barcodeType: p.barcodeType || "", generateBarcode: false,
@@ -257,6 +261,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         wholesaleMinQty: form.wholesaleMinQty === "" ? null : Number(form.wholesaleMinQty),
         currentStock: Number(form.currentStock), minimumStock: Number(form.minimumStock),
         supplierId: form.supplierId || undefined,
+        isReorderable: form.isReorderable, note: form.note.trim() || null,
         doesNotExpire: form.doesNotExpire,
         expiryDate: form.doesNotExpire ? null : (form.expiryDate || null),
         barcode: form.barcode || null,
@@ -437,7 +442,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
             { label: t("inventory.allProducts", lang), value: products.length },
-            { label: t("inventory.lowStockCount", lang), value: products.filter((p) => p.currentStock <= p.minimumStock && p.currentStock > 0).length, color: "text-amber-600" },
+            { label: t("inventory.lowStockCount", lang), value: products.filter((p) => p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1)).length, color: "text-amber-600" },
             { label: t("inventory.outOfStockCount", lang), value: products.filter((p) => p.currentStock === 0).length, color: "text-red-600" },
           ].map((stat) => (
             <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
@@ -459,7 +464,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         ) : (
           <div className="space-y-2">
             {products.map((p) => {
-              const isLow = p.currentStock <= p.minimumStock && p.currentStock > 0;
+              const isLow = p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1);
               const isOut = p.currentStock === 0;
               const expiry = expiryStatus(p, lang);
               const isExpired = expiry?.color === "bg-red-100 text-red-700";
@@ -502,6 +507,8 @@ const [stockCountCode, setStockCountCode] = useState("");
                       {p.supplier && (
                         <p className="text-xs text-gray-400 mt-0.5">{p.supplier.name}</p>
                       )}
+                      {p.onOrderQuantity ? <p className="mt-1 text-xs font-medium text-blue-600">{lang === "sw" ? `Inaagizwa: ${p.onOrderQuantity} ${p.unit}` : `On order: ${p.onOrderQuantity} ${p.unit}`}</p> : null}
+                      {p.note ? <p className="mt-1 text-xs text-gray-500">{p.note}</p> : null}
                       <div className="flex items-center gap-4 mt-2 flex-wrap">
                         <div>
                           <p className="text-xs text-gray-400">{t("inventory.stock", lang)}</p>
@@ -645,6 +652,14 @@ const [stockCountCode, setStockCountCode] = useState("");
               {canManageOwnerSuppliers && <button type="button" onClick={() => setShowQuickSupplier(true)} className="mt-2 text-xs font-semibold text-brand-700 hover:text-brand-800">
                 + {lang === "sw" ? "Ongeza supplier mpya" : "Add new supplier"}
               </button>}
+            </Field>
+
+            <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              <input type="checkbox" checked={form.isReorderable} onChange={(e) => setForm({ ...form, isReorderable: e.target.checked })} className="mt-0.5" />
+              <span><span className="font-medium">{lang === "sw" ? "Iagize tena bidhaa hii" : "Reorder this product"}</span><span className="block text-xs text-gray-500">{lang === "sw" ? "Zima kama bidhaa itaisha na haitanunuliwa tena. Haitatoa low-stock alert." : "Turn off for products you will stop buying. It will not create low-stock alerts."}</span></span>
+            </label>
+            <Field label={lang === "sw" ? "Maelezo ya bidhaa" : "Product notes"}>
+              <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={500} rows={3} className={`${INPUT} resize-none`} placeholder={lang === "sw" ? "Rangi zilizopo, hakuna discount, au taarifa nyingine..." : "Available colours, no discount, or other useful details..."} />
             </Field>
 
             {/* Expiry section */}
