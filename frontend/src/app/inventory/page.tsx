@@ -120,6 +120,7 @@ const [stockCountCode, setStockCountCode] = useState("");
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
+      params.set("limit", "1000");
       const data = await api.get<{ products: Product[] }>(`/products?${params}`);
       if (requestId !== latestLoad.current) return;
       let list = data.products;

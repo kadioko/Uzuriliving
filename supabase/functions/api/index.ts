@@ -285,7 +285,7 @@ function redactProduct(product: Record<string, unknown>, user: Record<string, un
 async function productList(client: SupabaseClient, request: Request, user: Record<string, unknown>, shop: Record<string, unknown>) {
   const url = new URL(request.url);
   const page = Math.max(Number(url.searchParams.get("page")) || 1, 1);
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 100);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 1000);
   const search = url.searchParams.get("search")?.trim();
   const lowStock = url.searchParams.get("lowStock") === "true";
   let query = client.from("products").select("*,supplier:suppliers(id,name,phone)", { count: "exact" }).eq("shopId", shop.id).eq("isActive", true);

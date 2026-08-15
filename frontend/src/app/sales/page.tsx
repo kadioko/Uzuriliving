@@ -168,7 +168,7 @@ export default function SalesPage() {
     api.get<{ user: { role: string; staff?: { permissions?: { canViewReports?: boolean } } } }>("/auth/me")
       .then((data) => setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports)))
       .catch(() => setCanViewFinancials(false));
-    api.get<{ products: Product[] }>("/products")
+    api.get<{ products: Product[] }>("/products?limit=1000")
       .then((d) => setProducts(d.products.filter((p) => p.currentStock > 0)));
   }, []);
 
@@ -225,7 +225,7 @@ export default function SalesPage() {
       setLastSyncAt(new Date().toISOString());
       if (remaining.length < pending.length) {
         toast(lang === "sw" ? "Mauzo ya offline yamesawazishwa." : "Offline sales synced.", "success");
-        api.get<{ products: Product[] }>("/products")
+        api.get<{ products: Product[] }>("/products?limit=1000")
           .then((d) => setProducts(d.products.filter((p) => p.currentStock > 0)))
           .catch(() => {});
       }
@@ -412,7 +412,7 @@ export default function SalesPage() {
       setCustomerName("");
       setCustomerPhone("");
       // Refresh products stock
-      api.get<{ products: Product[] }>("/products")
+      api.get<{ products: Product[] }>("/products?limit=1000")
         .then((d) => setProducts(d.products.filter((p) => p.currentStock > 0)));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t("common.error", lang);
