@@ -903,6 +903,7 @@ async function handle(request: Request) {
     if (request.method === "GET" && productId === "low-stock") {
       const url = new URL(request.url);
       url.searchParams.set("lowStock", "true");
+      url.searchParams.set("limit", "1000");
       return productList(db, new Request(url, request), productUser!, shop!);
     }
     if (request.method === "GET" && productId) return productGet(db, productUser!, shop!, productId);

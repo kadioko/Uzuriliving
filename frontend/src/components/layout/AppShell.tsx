@@ -116,8 +116,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (user?.role === "MERCHANT") {
-      api.get<{ products: unknown[] }>("/products/low-stock")
-        .then((d) => setLowStockCount(d.products.length))
+      api.get<{ products: unknown[]; pagination?: { total?: number } }>("/products/low-stock")
+        .then((d) => setLowStockCount(d.pagination?.total ?? d.products.length))
         .catch(() => {});
       api.get<{ daysLeft: number | null }>("/subscription/status")
         .then((d) => setTrialDaysLeft(d.daysLeft ?? null))
