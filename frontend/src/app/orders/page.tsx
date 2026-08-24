@@ -295,28 +295,73 @@ export default function OrdersPage() {
   }
 
   async function downloadJpg(batch: Order[]) {
-    const width = 1200;
-    const rowHeight = 92;
-    const allItems = batch.flatMap((order) => order.items);
+    const width = 1400;
+    const pagePadding = 64;
+    const rowHeight = 136;
+    const supplierBlockHeight = (order: Order) => 70 + order.items.length * rowHeight;
+    const height = 360 + batch.reduce((sum, order) => sum + supplierBlockHeight(order), 0) + 110;
     const canvas = document.createElement("canvas");
-    canvas.width = width; canvas.height = 280 + allItems.length * rowHeight + batch.length * 34;
+    canvas.width = width; canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) return;
-    context.fillStyle = "#fffdf8"; context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#b56600"; context.font = "bold 34px Arial"; context.fillText("Uzuri Living", 48, 58);
-    context.fillStyle = "#1f2937"; context.font = "bold 24px Arial"; context.fillText("Supplier order follow-up", 48, 98);
-    context.font = "20px Arial"; context.fillText(`Suppliers: ${batch.map((order) => order.supplier.name).join(", ")}`, 48, 140); context.fillText(`Order: #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, 48, 174);
-    let y = 220;
-    for (const order of batch) {
-      context.fillStyle = "#854b08"; context.font = "bold 22px Arial"; context.fillText(order.supplier.name, 48, y + 8); y += 34;
-      for (const item of order.items) {
-      context.fillStyle = "#fff3d6"; context.fillRect(40, y - 30, width - 80, rowHeight - 8);
-      if (item.product.imageUrl) { const image = new Image(); image.crossOrigin = "anonymous"; try { image.src = item.product.imageUrl; await new Promise<void>((resolve) => { image.onload = () => { context.drawImage(image, 52, y - 20, 58, 58); resolve(); }; image.onerror = () => resolve(); }); } catch { /* image remains optional */ } }
-      context.fillStyle = "#1f2937"; context.font = "bold 22px Arial"; context.fillText(item.product.name.slice(0, 42), 128, y + 4);
-      context.font = "18px Arial"; context.fillText(`Available: ${item.product.currentStock ?? "-"} ${item.product.unit}`, 128, y + 34); context.fillText(`Order: ${item.quantity} ${item.product.unit}`, 600, y + 4); context.fillText((item.note || "").slice(0, 36), 600, y + 34); y += rowHeight;
+    const wrapText = (text: string, maxWidth: number, maxLines = 2) => {
+      const words = text.trim().split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+      let line = "";
+      for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (context.measureText(next).width <= maxWidth || !line) line = next;
+        else { lines.push(line); line = word; }
+        if (lines.length === maxLines) break;
       }
+      if (lines.length < maxLines && line) lines.push(line);
+      if (words.length && lines.length === maxLines && !lines[maxLines - 1].endsWith("…")) lines[maxLines - 1] = `${lines[maxLines - 1].slice(0, Math.max(1, lines[maxLines - 1].length - 1))}…`;
+      return lines;
+    };
+    const drawRounded = (x: number, y: number, w: number, h: number, radius: number, fill: string, stroke?: string) => {
+      context.beginPath(); context.roundRect(x, y, w, h, radius); context.fillStyle = fill; context.fill();
+      if (stroke) { context.strokeStyle = stroke; context.stroke(); }
+    };
+    const loadImage = (url: string) => new Promise<HTMLImageElement | null>((resolve) => {
+      const image = new Image(); image.crossOrigin = "anonymous"; image.onload = () => resolve(image); image.onerror = () => resolve(null); image.src = url;
+    });
+    context.fillStyle = "#fffaf0"; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#d47f00"; context.fillRect(0, 0, canvas.width, 18);
+    drawRounded(pagePadding, 48, width - pagePadding * 2, 220, 24, "#ffffff", "#f1dfb7");
+    context.fillStyle = "#b56600"; context.font = "bold 42px Arial"; context.fillText("Uzuri Living", pagePadding + 32, 105);
+    context.fillStyle = "#1f2937"; context.font = "bold 28px Arial"; context.fillText("Supplier order follow-up", pagePadding + 32, 150);
+    context.fillStyle = "#64748b"; context.font = "20px Arial"; context.fillText(`Order #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, pagePadding + 32, 194);
+    const date = new Date(batch[0].createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
+    context.fillText(date, width - pagePadding - 220, 194);
+    const supplierText = batch.map((order) => order.supplier.name).join(", ");
+    context.font = "bold 18px Arial"; context.fillStyle = "#854b08"; context.fillText("SUPPLIERS", width - pagePadding - 360, 90);
+    context.font = "18px Arial"; context.fillStyle = "#334155"; wrapText(supplierText, 330, 3).forEach((line, index) => context.fillText(line, width - pagePadding - 360, 120 + index * 27));
+    let y = 308;
+    for (const order of batch) {
+      drawRounded(pagePadding, y, width - pagePadding * 2, 48, 14, "#fff0c9");
+      context.fillStyle = "#854b08"; context.font = "bold 21px Arial"; context.fillText(order.supplier.name, pagePadding + 18, y + 31);
+      context.fillStyle = "#6b7280"; context.font = "bold 15px Arial"; context.fillText(order.status.replaceAll("_", " "), width - pagePadding - 190, y + 30);
+      y += 62;
+      for (const item of order.items) {
+        drawRounded(pagePadding, y, width - pagePadding * 2, rowHeight - 10, 16, "#ffffff", "#eadfca");
+        if (item.product.imageUrl) {
+          const image = await loadImage(item.product.imageUrl);
+          if (image) { context.save(); context.beginPath(); context.roundRect(pagePadding + 16, y + 16, 88, 88, 12); context.clip(); context.drawImage(image, pagePadding + 16, y + 16, 88, 88); context.restore(); }
+        }
+        context.fillStyle = "#1f2937"; context.font = "bold 21px Arial";
+        wrapText(item.product.name, 510, 2).forEach((line, index) => context.fillText(line, pagePadding + 126, y + 43 + index * 27));
+        context.fillStyle = "#64748b"; context.font = "17px Arial"; context.fillText(`Available in shop: ${item.product.currentStock ?? "-"} ${item.product.unit}`, pagePadding + 126, y + 96);
+        context.fillStyle = "#64748b"; context.font = "bold 15px Arial"; context.fillText("ORDER QUANTITY", pagePadding + 760, y + 33);
+        context.fillStyle = "#b56600"; context.font = "bold 26px Arial"; context.fillText(`${item.quantity} ${item.product.unit}`, pagePadding + 760, y + 70);
+        context.fillStyle = "#64748b"; context.font = "bold 15px Arial"; context.fillText("NOTE", pagePadding + 1000, y + 33);
+        context.fillStyle = "#334155"; context.font = "16px Arial"; wrapText(item.note || "No note", 250, 3).forEach((line, index) => context.fillText(line, pagePadding + 1000, y + 62 + index * 22));
+        y += rowHeight;
+      }
+      y += 8;
     }
-    context.font = "bold 22px Arial"; context.fillText(`Total: ${formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0))}`, 48, y + 28);
+    drawRounded(pagePadding, y, width - pagePadding * 2, 70, 16, "#102a43");
+    context.fillStyle = "#ffffff"; context.font = "bold 22px Arial"; context.fillText("Estimated total", pagePadding + 24, y + 44);
+    context.textAlign = "right"; context.font = "bold 28px Arial"; context.fillText(formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0)), width - pagePadding - 24, y + 45); context.textAlign = "left";
     const link = document.createElement("a"); link.download = `uzuri-order-${(batch[0].orderGroupId || batch[0].id).slice(-8)}.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.92); link.click();
   }
 
