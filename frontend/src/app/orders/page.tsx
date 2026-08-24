@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
-import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus } from "lucide-react";
+import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus, Download, FileImage } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 
 interface Supplier {
@@ -38,13 +38,14 @@ interface Product {
   onOrderQuantity?: number;
   isReorderable: boolean;
   note?: string | null;
-  supplier?: { id: string };
+  imageUrl?: string | null;
+  supplier?: { id: string; name?: string; phone?: string };
   supplierCatalogProductId?: string | null;
 }
 
 interface OrderItem {
   productId: string;
-  product: { id: string; name: string; unit: string };
+  product: { id: string; name: string; unit: string; imageUrl?: string | null; currentStock?: number };
   quantity: number;
   note?: string | null;
   unitPrice?: number;
@@ -108,9 +109,11 @@ export default function OrdersPage() {
     });
   }, []);
 
-  const supplierProducts = selectedSupplier
-    ? products.filter((p) => p.supplier?.id === selectedSupplier || !p.supplier)
-    : products;
+  const supplierProducts = products;
+
+  function supplierForProduct(product: Product) {
+    return product.supplier?.id || selectedSupplier;
+  }
 
   function addItem(productId: string) {
     setOrderItems((prev) => {
@@ -189,18 +192,29 @@ export default function OrdersPage() {
   }
 
   async function handleCreate() {
-    if (!selectedSupplier || orderItems.length === 0) return;
+    if (orderItems.length === 0) return;
+    const groups = new Map<string, typeof orderItems>();
+    for (const item of orderItems) {
+      const product = products.find((p) => p.id === item.productId);
+      const supplierId = product ? supplierForProduct(product) : "";
+      if (!supplierId) {
+        toast(lang === "sw" ? "Chagua supplier kwa bidhaa zote zisizo na supplier." : "Choose a supplier for products without one.", "error");
+        return;
+      }
+      groups.set(supplierId, [...(groups.get(supplierId) || []), item]);
+    }
     setSaving(true);
     try {
-      const data = await api.post<{ order: Order; whatsappMessage: { message: string; whatsappUrl: string | null } }>("/orders", {
-        supplierId: selectedSupplier,
-        items: orderItems,
-        note: note || undefined,
-      });
-      setWhatsappMsg(data.whatsappMessage);
+      const created = await Promise.all([...groups.entries()].map(async ([supplierId, items]) => {
+        return api.post<{ order: Order; whatsappMessage: { message: string; whatsappUrl: string | null } }>("/orders", {
+          supplierId, items, note: note || undefined,
+        });
+      }));
+      setWhatsappMsg(created[0]?.whatsappMessage || null);
       setShowForm(false);
       setOrderItems([]);
       setNote("");
+      toast(lang === "sw" ? `${created.length} supplier order zimeundwa.` : `${created.length} supplier order${created.length === 1 ? "" : "s"} created.`, "success");
       fetchOrders();
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : t("common.error", lang), "error");
@@ -226,6 +240,43 @@ export default function OrdersPage() {
   async function showWhatsApp(orderId: string) {
     const data = await api.get<{ whatsappMessage: { message: string; whatsappUrl: string | null } }>(`/orders/${orderId}`);
     setWhatsappMsg(data.whatsappMessage);
+  }
+
+  function escapeHtml(value: string) {
+    return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[char] || char));
+  }
+
+  function orderMarkup(order: Order) {
+    const date = new Date(order.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
+    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Supplier:</b> ${escapeHtml(order.supplier.name)} &nbsp; <b>Order:</b> #${order.id.slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p><hr/><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td>${escapeHtml(item.product.name)}</td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>${order.note ? `<p><b>Order note:</b> ${escapeHtml(order.note)}</p>` : ""}<h3>Total: ${formatTZS(order.totalAmount || 0)}</h3></div>`;
+  }
+
+  function downloadPdf(order: Order) {
+    const popup = window.open("", "_blank", "width=850,height=700");
+    if (!popup) { toast(lang === "sw" ? "Ruhusu pop-ups ili kuhifadhi PDF." : "Allow pop-ups to save the PDF.", "error"); return; }
+    popup.document.write(`<html><head><title>Order ${order.id.slice(-8).toUpperCase()}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#1f2937}.order-sheet{max-width:760px;margin:auto}h1{color:#b56600;margin-bottom:4px}h2{margin-top:0;font-size:20px}table{border-collapse:collapse;width:100%;margin-top:20px}th,td{border:1px solid #d1d5db;padding:10px;text-align:left;font-size:13px}th{background:#fff3d6}hr{border:0;border-top:1px solid #e5e7eb}</style></head><body>${orderMarkup(order)}</body></html>`);
+    popup.document.close(); popup.focus(); popup.print();
+  }
+
+  async function downloadJpg(order: Order) {
+    const width = 1200;
+    const rowHeight = 92;
+    const canvas = document.createElement("canvas");
+    canvas.width = width; canvas.height = 260 + order.items.length * rowHeight;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.fillStyle = "#fffdf8"; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#b56600"; context.font = "bold 34px Arial"; context.fillText("Uzuri Living", 48, 58);
+    context.fillStyle = "#1f2937"; context.font = "bold 24px Arial"; context.fillText("Supplier order follow-up", 48, 98);
+    context.font = "20px Arial"; context.fillText(`Supplier: ${order.supplier.name}`, 48, 140); context.fillText(`Order: #${order.id.slice(-8).toUpperCase()}`, 48, 174);
+    let y = 220;
+    for (const item of order.items) {
+      context.fillStyle = "#fff3d6"; context.fillRect(40, y - 30, width - 80, rowHeight - 8);
+      context.fillStyle = "#1f2937"; context.font = "bold 22px Arial"; context.fillText(item.product.name.slice(0, 42), 68, y + 4);
+      context.font = "18px Arial"; context.fillText(`Available: ${item.product.currentStock ?? "-"} ${item.product.unit}`, 68, y + 34); context.fillText(`Order: ${item.quantity} ${item.product.unit}`, 470, y + 4); context.fillText((item.note || "").slice(0, 36), 470, y + 34); y += rowHeight;
+    }
+    context.font = "bold 22px Arial"; context.fillText(`Total: ${formatTZS(order.totalAmount || 0)}`, 48, y + 28);
+    const link = document.createElement("a"); link.download = `uzuri-order-${order.id.slice(-8)}.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.92); link.click();
   }
 
   const filtered = statusFilter === "all" ? orders : orders.filter((o) => o.status === statusFilter);
@@ -299,8 +350,9 @@ export default function OrdersPage() {
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <div className="space-y-1 mb-3">
                       {order.items.map((item) => (
-                        <div key={item.productId} className="flex justify-between text-sm">
-                          <span className="text-gray-600">{item.product.name}</span>
+                        <div key={item.productId} className="flex items-center gap-3 border-b border-gray-100 py-2 text-sm last:border-0">
+                          {item.product.imageUrl ? <img src={item.product.imageUrl} alt="" className="h-10 w-10 rounded-lg border border-gray-200 object-cover" /> : <div className="h-10 w-10 rounded-lg bg-gray-100" />}
+                          <span className="flex-1 text-gray-600">{item.product.name}<span className="block text-xs text-gray-400">Available: {item.product.currentStock ?? "-"} {item.product.unit}{item.note ? ` · ${item.note}` : ""}</span></span>
                           <span className="font-medium">{item.quantity} {item.product.unit}</span>
                         </div>
                       ))}
@@ -312,6 +364,8 @@ export default function OrdersPage() {
                         className="flex items-center gap-1.5 text-xs bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-medium min-h-0">
                         <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
                       </button>
+                      <button onClick={() => downloadPdf(order)} className="flex items-center gap-1.5 text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg font-medium min-h-0"><Download className="w-3.5 h-3.5" /> PDF</button>
+                      <button onClick={() => void downloadJpg(order)} className="flex items-center gap-1.5 text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg font-medium min-h-0"><FileImage className="w-3.5 h-3.5" /> JPG</button>
                       {order.status === "DELIVERED" || order.status === "CANCELLED" ? (
                         <button onClick={() => handleReorder(order.id)}
                           className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-medium min-h-0">
@@ -343,7 +397,7 @@ export default function OrdersPage() {
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">{t("orders.supplierLabel", lang)}</label>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">{lang === "sw" ? "Supplier wa default (kwa bidhaa zisizo na supplier)" : "Default supplier (for products without a supplier)"}</label>
                 <select value={selectedSupplier} onChange={(e) => selectSupplier(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
                   <option value="">{t("orders.selectSupplier", lang)}</option>
@@ -359,14 +413,15 @@ export default function OrdersPage() {
                     <Clock className="w-3 h-3" /> {t("orders.fillLowStock", lang)}
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto mb-2">
+                <div className="space-y-2 max-h-64 overflow-y-auto mb-2">
                   {supplierProducts.map((p) => {
                     const inOrder = orderItems.find((i) => i.productId === p.id);
                     return (
                       <button key={p.id} onClick={() => addItem(p.id)}
-                        className={`text-left p-2 rounded-lg border text-xs transition-all ${inOrder ? "border-brand-400 bg-brand-50" : "border-gray-200 hover:border-brand-300"}`}>
-                        <p className="font-medium text-gray-800">{p.name}</p>
-                        <p className="text-gray-400">{p.currentStock} {t("orders.remaining", lang)}</p>
+                        className={`flex w-full items-center gap-3 text-left p-2 rounded-lg border text-xs transition-all ${inOrder ? "border-brand-400 bg-brand-50" : "border-gray-200 hover:border-brand-300"}`}>
+                        {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-11 w-11 flex-shrink-0 rounded-lg border border-gray-200 object-cover" /> : <div className="h-11 w-11 flex-shrink-0 rounded-lg bg-gray-100" />}
+                        <span className="w-28 flex-shrink-0 truncate text-[11px] font-semibold text-brand-700">{p.supplier?.name || (selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : (lang === "sw" ? "Chagua supplier" : "Choose supplier"))}</span>
+                        <span className="min-w-0 flex-1"><span className="block truncate font-medium text-gray-800">{p.name}</span><span className="text-gray-400">Available: {p.currentStock} {p.unit}</span></span>
                       </button>
                     );
                   })}
@@ -378,7 +433,9 @@ export default function OrdersPage() {
                       return (
                         <div key={item.productId} className="bg-gray-50 rounded-lg p-2">
                           <div className="flex items-center gap-2">
-                            <span className="flex-1 text-xs font-medium text-gray-700">{p?.name}</span>
+                            {p?.imageUrl ? <img src={p.imageUrl} alt="" className="h-9 w-9 rounded-md border border-gray-200 object-cover" /> : <div className="h-9 w-9 rounded-md bg-gray-200" />}
+                            <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-brand-700">{p?.supplier?.name || suppliers.find((s) => s.id === selectedSupplier)?.name || "Supplier"}</span>
+                            <span className="flex-1 text-xs font-medium text-gray-700">{p?.name}<span className="block text-[11px] font-normal text-gray-400">Available: {p?.currentStock ?? "-"} {p?.unit}</span></span>
                             <input type="number" value={item.quantity} min={1}
                               onChange={(e) => updateItemQty(item.productId, Number(e.target.value))}
                               className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none" />
@@ -423,7 +480,7 @@ export default function OrdersPage() {
 
               <div className="flex gap-2">
                 <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm">{t("common.cancel", lang)}</button>
-                <button onClick={handleCreate} disabled={saving || !selectedSupplier || orderItems.length === 0}
+                <button onClick={handleCreate} disabled={saving || orderItems.length === 0}
                   className="flex-1 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">
                   {saving ? "..." : t("orders.submit", lang)}
                 </button>
