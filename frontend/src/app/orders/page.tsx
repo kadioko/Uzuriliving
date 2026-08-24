@@ -435,7 +435,7 @@ export default function OrdersPage() {
       {/* New Order Form */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[94vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-semibold text-gray-900">{t("orders.newOrderTitle", lang)}</h3>
               <button onClick={() => setShowForm(false)} className="text-gray-400 min-h-0"><X className="w-5 h-5" /></button>
@@ -462,7 +462,7 @@ export default function OrdersPage() {
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta bidhaa au supplier..." : "Search products or suppliers..."} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
                 </div>
-                <div className="space-y-2 max-h-64 overflow-y-auto mb-2">
+                <div className="space-y-2 max-h-80 overflow-y-auto mb-2">
                   {visibleSupplierProducts.map((p) => {
                     const inOrder = orderItems.find((i) => i.productId === p.id);
                     return (
