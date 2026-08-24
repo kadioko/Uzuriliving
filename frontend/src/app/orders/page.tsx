@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
-import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus, Download, FileImage } from "lucide-react";
+import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus, Download, FileImage, Search } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 
 interface Supplier {
@@ -53,6 +53,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  orderGroupId?: string | null;
   status: string;
   totalAmount?: number;
   note?: string;
@@ -88,6 +89,7 @@ export default function OrdersPage() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [whatsappMsg, setWhatsappMsg] = useState<{ message: string; whatsappUrl: string | null } | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [productSearch, setProductSearch] = useState("");
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -110,6 +112,11 @@ export default function OrdersPage() {
   }, []);
 
   const supplierProducts = products;
+  const visibleSupplierProducts = supplierProducts.filter((product) => {
+    const query = productSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${product.name} ${product.supplier?.name || ""}`.toLowerCase().includes(query);
+  });
 
   function supplierForProduct(product: Product) {
     return product.supplier?.id || selectedSupplier;
@@ -205,15 +212,17 @@ export default function OrdersPage() {
     }
     setSaving(true);
     try {
+      const orderGroupId = crypto.randomUUID();
       const created = await Promise.all([...groups.entries()].map(async ([supplierId, items]) => {
         return api.post<{ order: Order; whatsappMessage: { message: string; whatsappUrl: string | null } }>("/orders", {
-          supplierId, items, note: note || undefined,
+          supplierId, items, note: note || undefined, orderGroupId,
         });
       }));
       setWhatsappMsg(created[0]?.whatsappMessage || null);
       setShowForm(false);
       setOrderItems([]);
       setNote("");
+      setProductSearch("");
       toast(lang === "sw" ? `${created.length} supplier order zimeundwa.` : `${created.length} supplier order${created.length === 1 ? "" : "s"} created.`, "success");
       fetchOrders();
     } catch (e: unknown) {
@@ -242,44 +251,76 @@ export default function OrdersPage() {
     setWhatsappMsg(data.whatsappMessage);
   }
 
+  async function updateStatus(orderId: string, status: string) {
+    try {
+      if (status === "DELIVERED") {
+        if (!confirm(t("orders.confirmDeliveryPrompt", lang))) return;
+        await api.patch(`/orders/${orderId}/confirm-delivery`, {});
+      } else {
+        await api.patch(`/orders/${orderId}`, { status });
+      }
+      toast(lang === "sw" ? "Hali ya order imebadilishwa." : "Order status updated.", "success");
+      await fetchOrders();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : t("common.error", lang), "error");
+    }
+  }
+
   function escapeHtml(value: string) {
     return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[char] || char));
   }
 
-  function orderMarkup(order: Order) {
-    const date = new Date(order.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
-    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Supplier:</b> ${escapeHtml(order.supplier.name)} &nbsp; <b>Order:</b> #${order.id.slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p><hr/><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td>${escapeHtml(item.product.name)}</td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>${order.note ? `<p><b>Order note:</b> ${escapeHtml(order.note)}</p>` : ""}<h3>Total: ${formatTZS(order.totalAmount || 0)}</h3></div>`;
+  function orderMarkup(batch: Order[]) {
+    const first = batch[0];
+    const date = new Date(first.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
+    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Suppliers:</b> ${batch.map((order) => escapeHtml(order.supplier.name)).join(", ")} &nbsp; <b>Order:</b> #${(first.orderGroupId || first.id).slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p>${batch.map((order) => `<h3>${escapeHtml(order.supplier.name)} <span class="status">${escapeHtml(order.status)}</span></h3><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td class="product">${item.product.imageUrl ? `<img src="${item.product.imageUrl}" alt="" />` : ""}<span>${escapeHtml(item.product.name)}</span></td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>`).join("")}<h3>Total: ${formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0))}</h3></div>`;
   }
 
-  function downloadPdf(order: Order) {
+  async function downloadPdf(batch: Order[]) {
+    const order = batch[0];
     const popup = window.open("", "_blank", "width=850,height=700");
     if (!popup) { toast(lang === "sw" ? "Ruhusu pop-ups ili kuhifadhi PDF." : "Allow pop-ups to save the PDF.", "error"); return; }
-    popup.document.write(`<html><head><title>Order ${order.id.slice(-8).toUpperCase()}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#1f2937}.order-sheet{max-width:760px;margin:auto}h1{color:#b56600;margin-bottom:4px}h2{margin-top:0;font-size:20px}table{border-collapse:collapse;width:100%;margin-top:20px}th,td{border:1px solid #d1d5db;padding:10px;text-align:left;font-size:13px}th{background:#fff3d6}hr{border:0;border-top:1px solid #e5e7eb}</style></head><body>${orderMarkup(order)}</body></html>`);
-    popup.document.close(); popup.focus(); popup.print();
+    popup.document.write(`<html><head><title>Order ${(order.orderGroupId || order.id).slice(-8).toUpperCase()}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#1f2937}.order-sheet{max-width:760px;margin:auto}h1{color:#b56600;margin-bottom:4px}h2{margin-top:0;font-size:20px}h3{margin:22px 0 4px}.status{font-size:11px;background:#fff3d6;padding:4px 8px;border-radius:10px}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border:1px solid #d1d5db;padding:8px;text-align:left;font-size:12px}th{background:#fff3d6}.product{display:flex;align-items:center;gap:8px}.product img{height:48px;width:48px;object-fit:cover;border-radius:6px}hr{border:0;border-top:1px solid #e5e7eb}</style></head><body>${orderMarkup(batch)}</body></html>`);
+    popup.document.close();
+    await Promise.all([...popup.document.images].map((image) => image.complete ? Promise.resolve() : new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve(); })));
+    popup.focus(); popup.print();
   }
 
-  async function downloadJpg(order: Order) {
+  async function downloadJpg(batch: Order[]) {
     const width = 1200;
     const rowHeight = 92;
+    const allItems = batch.flatMap((order) => order.items);
     const canvas = document.createElement("canvas");
-    canvas.width = width; canvas.height = 260 + order.items.length * rowHeight;
+    canvas.width = width; canvas.height = 280 + allItems.length * rowHeight + batch.length * 34;
     const context = canvas.getContext("2d");
     if (!context) return;
     context.fillStyle = "#fffdf8"; context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#b56600"; context.font = "bold 34px Arial"; context.fillText("Uzuri Living", 48, 58);
     context.fillStyle = "#1f2937"; context.font = "bold 24px Arial"; context.fillText("Supplier order follow-up", 48, 98);
-    context.font = "20px Arial"; context.fillText(`Supplier: ${order.supplier.name}`, 48, 140); context.fillText(`Order: #${order.id.slice(-8).toUpperCase()}`, 48, 174);
+    context.font = "20px Arial"; context.fillText(`Suppliers: ${batch.map((order) => order.supplier.name).join(", ")}`, 48, 140); context.fillText(`Order: #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, 48, 174);
     let y = 220;
-    for (const item of order.items) {
+    for (const order of batch) {
+      context.fillStyle = "#854b08"; context.font = "bold 22px Arial"; context.fillText(order.supplier.name, 48, y + 8); y += 34;
+      for (const item of order.items) {
       context.fillStyle = "#fff3d6"; context.fillRect(40, y - 30, width - 80, rowHeight - 8);
-      context.fillStyle = "#1f2937"; context.font = "bold 22px Arial"; context.fillText(item.product.name.slice(0, 42), 68, y + 4);
-      context.font = "18px Arial"; context.fillText(`Available: ${item.product.currentStock ?? "-"} ${item.product.unit}`, 68, y + 34); context.fillText(`Order: ${item.quantity} ${item.product.unit}`, 470, y + 4); context.fillText((item.note || "").slice(0, 36), 470, y + 34); y += rowHeight;
+      if (item.product.imageUrl) { const image = new Image(); image.crossOrigin = "anonymous"; try { image.src = item.product.imageUrl; await new Promise<void>((resolve) => { image.onload = () => { context.drawImage(image, 52, y - 20, 58, 58); resolve(); }; image.onerror = () => resolve(); }); } catch { /* image remains optional */ } }
+      context.fillStyle = "#1f2937"; context.font = "bold 22px Arial"; context.fillText(item.product.name.slice(0, 42), 128, y + 4);
+      context.font = "18px Arial"; context.fillText(`Available: ${item.product.currentStock ?? "-"} ${item.product.unit}`, 128, y + 34); context.fillText(`Order: ${item.quantity} ${item.product.unit}`, 600, y + 4); context.fillText((item.note || "").slice(0, 36), 600, y + 34); y += rowHeight;
+      }
     }
-    context.font = "bold 22px Arial"; context.fillText(`Total: ${formatTZS(order.totalAmount || 0)}`, 48, y + 28);
-    const link = document.createElement("a"); link.download = `uzuri-order-${order.id.slice(-8)}.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.92); link.click();
+    context.font = "bold 22px Arial"; context.fillText(`Total: ${formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0))}`, 48, y + 28);
+    const link = document.createElement("a"); link.download = `uzuri-order-${(batch[0].orderGroupId || batch[0].id).slice(-8)}.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.92); link.click();
   }
 
   const filtered = statusFilter === "all" ? orders : orders.filter((o) => o.status === statusFilter);
+  const grouped = useMemo(() => {
+    const batches = new Map<string, Order[]>();
+    for (const order of filtered) {
+      const key = order.orderGroupId || order.id;
+      batches.set(key, [...(batches.get(key) || []), order]);
+    }
+    return [...batches.entries()].map(([key, batch]) => ({ key, orders: batch }));
+  }, [filtered]);
 
   const STATUS_FILTERS = [
     { v: "all", labelKey: "orders.all" },
@@ -287,6 +328,7 @@ export default function OrdersPage() {
     { v: "CONFIRMED", labelKey: "orders.status.CONFIRMED" },
     { v: "OUT_FOR_DELIVERY", labelKey: "orders.status.OUT_FOR_DELIVERY" },
     { v: "DELIVERED", labelKey: "orders.status.DELIVERED" },
+    { v: "CANCELLED", labelKey: "orders.status.CANCELLED" },
   ];
 
   return (
@@ -294,7 +336,7 @@ export default function OrdersPage() {
       <div className="max-w-3xl mx-auto pb-24 lg:pb-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("orders.title", lang)}</h1>
-          <button onClick={() => { setShowForm(true); setOrderItems([]); setNote(""); setSelectedSupplier(""); setSupplierCatalog([]); }}
+          <button onClick={() => { setShowForm(true); setOrderItems([]); setNote(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); }}
             className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t("orders.newOrder", lang)}</span>
@@ -322,67 +364,70 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {filtered.map((order) => (
-              <div key={order.id} className="bg-white rounded-xl border border-gray-200 p-4">
+            {grouped.map(({ key: batchKey, orders: batch }) => {
+              const order = batch[0];
+              const allDelivered = batch.every((item) => item.status === "DELIVERED");
+              const allCancelled = batch.every((item) => item.status === "CANCELLED");
+              return (
+              <div key={batchKey} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-800">{order.supplier.name}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[order.status]}`}>
-                        {t(`orders.status.${order.status}`, lang)}
+                      <p className="font-semibold text-gray-800">{batch.map((item) => item.supplier.name).join(" + ")}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${batch.length > 1 ? "bg-indigo-100 text-indigo-700" : STATUS_COLOR[order.status]}`}>
+                        {batch.length > 1 ? (lang === "sw" ? `${batch.length} suppliers` : `${batch.length} suppliers`) : t(`orders.status.${order.status}`, lang)}
                       </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      #{order.id.slice(-8).toUpperCase()} •{" "}
+                      #{batchKey.slice(-8).toUpperCase()} •{" "}
                       {new Date(order.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short" })}
                     </p>
-                    {order.totalAmount && (
-                      <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(order.totalAmount)}</p>
+                    {batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
+                      <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0))}</p>
                     )}
                   </div>
-                  <button onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
+                  <button onClick={() => setExpandedOrder(expandedOrder === batchKey ? null : batchKey)}
                     className="text-gray-400 min-h-0">
-                    {expandedOrder === order.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {expandedOrder === batchKey ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
                 </div>
 
-                {expandedOrder === order.id && (
+                {expandedOrder === batchKey && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="space-y-1 mb-3">
-                      {order.items.map((item) => (
-                        <div key={item.productId} className="flex items-center gap-3 border-b border-gray-100 py-2 text-sm last:border-0">
+                    <div className="space-y-3 mb-3">
+                      {batch.map((supplierOrder) => <div key={supplierOrder.id} className="rounded-lg border border-gray-100 p-2">
+                        <div className="mb-1 flex items-center justify-between"><p className="text-xs font-bold text-brand-700">{supplierOrder.supplier.name}</p><span className={`text-[11px] rounded-full px-2 py-0.5 font-semibold ${STATUS_COLOR[supplierOrder.status]}`}>{t(`orders.status.${supplierOrder.status}`, lang)}</span></div>
+                        {supplierOrder.items.map((item) => <div key={`${supplierOrder.id}-${item.productId}`} className="flex items-center gap-3 border-b border-gray-100 py-2 text-sm last:border-0">
                           {item.product.imageUrl ? <img src={item.product.imageUrl} alt="" className="h-10 w-10 rounded-lg border border-gray-200 object-cover" /> : <div className="h-10 w-10 rounded-lg bg-gray-100" />}
                           <span className="flex-1 text-gray-600">{item.product.name}<span className="block text-xs text-gray-400">Available: {item.product.currentStock ?? "-"} {item.product.unit}{item.note ? ` · ${item.note}` : ""}</span></span>
                           <span className="font-medium">{item.quantity} {item.product.unit}</span>
-                        </div>
-                      ))}
+                        </div>)}
+                      </div>)}
                     </div>
-                    {order.note && <p className="text-xs text-gray-400 italic mb-3">"{order.note}"</p>}
+                    {batch.some((item) => item.note) && <p className="text-xs text-gray-400 italic mb-3">{batch.filter((item) => item.note).map((item) => `"${item.note}"`).join(" · ")}</p>}
 
                     <div className="flex flex-wrap gap-2">
                       <button onClick={() => showWhatsApp(order.id)}
                         className="flex items-center gap-1.5 text-xs bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-medium min-h-0">
                         <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
                       </button>
-                      <button onClick={() => downloadPdf(order)} className="flex items-center gap-1.5 text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg font-medium min-h-0"><Download className="w-3.5 h-3.5" /> PDF</button>
-                      <button onClick={() => void downloadJpg(order)} className="flex items-center gap-1.5 text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg font-medium min-h-0"><FileImage className="w-3.5 h-3.5" /> JPG</button>
-                      {order.status === "DELIVERED" || order.status === "CANCELLED" ? (
+                      <button onClick={() => void downloadPdf(batch)} className="flex items-center gap-1.5 text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg font-medium min-h-0"><Download className="w-3.5 h-3.5" /> PDF</button>
+                      <button onClick={() => void downloadJpg(batch)} className="flex items-center gap-1.5 text-xs bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg font-medium min-h-0"><FileImage className="w-3.5 h-3.5" /> JPG</button>
+                      {allDelivered || allCancelled ? (
                         <button onClick={() => handleReorder(order.id)}
                           className="flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-medium min-h-0">
                           <RotateCcw className="w-3.5 h-3.5" /> {t("orders.reorder", lang)}
                         </button>
                       ) : null}
-                      {(order.status === "CONFIRMED" || order.status === "OUT_FOR_DELIVERY") && (
-                        <button onClick={() => confirmDelivery(order.id)}
-                          className="flex items-center gap-1.5 text-xs bg-brand-50 text-brand-700 border border-brand-200 px-3 py-1.5 rounded-lg font-medium min-h-0">
-                          <Check className="w-3.5 h-3.5" /> {t("orders.confirmDelivery", lang)}
-                        </button>
-                      )}
+                    </div>
+                    <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                      {batch.map((supplierOrder) => <div key={supplierOrder.id} className="flex flex-wrap items-center gap-2 text-xs"><span className="mr-auto font-semibold text-gray-700">{supplierOrder.supplier.name}</span>{supplierOrder.status === "PENDING" && <><button onClick={() => void updateStatus(supplierOrder.id, "CONFIRMED")} className="rounded-lg bg-blue-50 px-3 py-1.5 font-semibold text-blue-700 min-h-0">Confirm</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "CONFIRMED" && <><button onClick={() => void updateStatus(supplierOrder.id, "OUT_FOR_DELIVERY")} className="rounded-lg bg-purple-50 px-3 py-1.5 font-semibold text-purple-700 min-h-0">Mark out for delivery</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "OUT_FOR_DELIVERY" && <button onClick={() => void updateStatus(supplierOrder.id, "DELIVERED")} className="rounded-lg bg-green-50 px-3 py-1.5 font-semibold text-green-700 min-h-0"><Check className="mr-1 inline h-3.5 w-3.5" />Mark delivered</button>}</div>)}
                     </div>
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -413,8 +458,12 @@ export default function OrdersPage() {
                     <Clock className="w-3 h-3" /> {t("orders.fillLowStock", lang)}
                   </button>
                 </div>
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta bidhaa au supplier..." : "Search products or suppliers..."} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto mb-2">
-                  {supplierProducts.map((p) => {
+                  {visibleSupplierProducts.map((p) => {
                     const inOrder = orderItems.find((i) => i.productId === p.id);
                     return (
                       <button key={p.id} onClick={() => addItem(p.id)}
