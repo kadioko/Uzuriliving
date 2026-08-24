@@ -117,6 +117,14 @@ export default function OrdersPage() {
     if (!query) return true;
     return `${product.name} ${product.supplier?.name || ""}`.toLowerCase().includes(query);
   });
+  const selectedSupplierCount = new Set(orderItems.map((item) => {
+    const product = products.find((entry) => entry.id === item.productId);
+    return product ? supplierForProduct(product) : "";
+  }).filter(Boolean)).size;
+  const estimatedTotal = orderItems.reduce((sum, item) => {
+    const product = products.find((entry) => entry.id === item.productId);
+    return sum + (product?.buyingPrice || 0) * item.quantity;
+  }, 0);
 
   function supplierForProduct(product: Product) {
     return product.supplier?.id || selectedSupplier;
@@ -435,83 +443,95 @@ export default function OrdersPage() {
       {/* New Order Form */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[94vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="font-semibold text-gray-900">{t("orders.newOrderTitle", lang)}</h3>
-              <button onClick={() => setShowForm(false)} className="text-gray-400 min-h-0"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-4 space-y-4">
+          <div className="w-full max-w-3xl max-h-[94vh] overflow-y-auto rounded-3xl bg-[#fffdf8] shadow-2xl ring-1 ring-black/5">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-brand-100 bg-gradient-to-r from-[#fff4d7] via-white to-[#e9f8f5] p-5">
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">{lang === "sw" ? "Supplier wa default (kwa bidhaa zisizo na supplier)" : "Default supplier (for products without a supplier)"}</label>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-700">{lang === "sw" ? "Ununuzi wa supplier" : "Supplier purchasing"}</p>
+                <h3 className="text-lg font-bold text-gray-950">{t("orders.newOrderTitle", lang)}</h3>
+                <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Changanya bidhaa kutoka suppliers tofauti kwenye order moja." : "Combine products from different suppliers in one order batch."}</p>
+              </div>
+              <button onClick={() => setShowForm(false)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-gray-500 shadow-sm transition hover:bg-white hover:text-gray-900 min-h-0"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-4 shadow-sm">
+                <div className="mb-3 flex items-start gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700"><Truck className="h-5 w-5" /></div>
+                  <div><label className="block text-sm font-bold text-gray-900">{lang === "sw" ? "Supplier wa default" : "Default supplier"}</label><p className="mt-0.5 text-xs leading-5 text-gray-500">{lang === "sw" ? "Inatumika kwa bidhaa ambazo bado hazijaunganishwa na supplier." : "Used only for products that are not linked to a supplier yet."}</p></div>
+                </div>
                 <select value={selectedSupplier} onChange={(e) => selectSupplier(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  className="w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
                   <option value="">{t("orders.selectSupplier", lang)}</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.phone})</option>)}
                 </select>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium text-gray-600">{t("orders.productsLabel", lang)}</label>
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div><label className="block text-sm font-bold text-gray-900">{t("orders.productsLabel", lang)}</label><p className="mt-0.5 text-xs text-gray-500">{lang === "sw" ? "Chagua bidhaa za kuagiza na angalia stock iliyopo." : "Choose products to order and check current stock."}</p></div>
                   <button onClick={fillLowStock}
-                    className="text-xs text-brand-600 hover:underline min-h-0 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> {t("orders.fillLowStock", lang)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-2 text-[11px] font-bold text-brand-700 transition hover:bg-brand-100 min-h-0">
+                    <Clock className="h-3.5 w-3.5" /> {t("orders.fillLowStock", lang)}
                   </button>
                 </div>
-                <div className="relative mb-2">
+                <div className="relative mb-3">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta bidhaa au supplier..." : "Search products or suppliers..."} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  <input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta bidhaa au supplier..." : "Search products or suppliers..."} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100" />
                 </div>
-                <div className="space-y-2 max-h-80 overflow-y-auto mb-2">
+                <div className="mb-2 flex items-center justify-between text-[11px] text-gray-400"><span>{visibleSupplierProducts.length} {lang === "sw" ? "bidhaa zinaonekana" : "products showing"}</span><span>{lang === "sw" ? "Bonyeza kuongeza" : "Tap a product to add"}</span></div>
+                <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                   {visibleSupplierProducts.map((p) => {
                     const inOrder = orderItems.find((i) => i.productId === p.id);
                     return (
                       <button key={p.id} onClick={() => addItem(p.id)}
-                        className={`flex w-full items-center gap-3 text-left p-2 rounded-lg border text-xs transition-all ${inOrder ? "border-brand-400 bg-brand-50" : "border-gray-200 hover:border-brand-300"}`}>
-                        {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-11 w-11 flex-shrink-0 rounded-lg border border-gray-200 object-cover" /> : <div className="h-11 w-11 flex-shrink-0 rounded-lg bg-gray-100" />}
-                        <span className="w-28 flex-shrink-0 truncate text-[11px] font-semibold text-brand-700">{p.supplier?.name || (selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : (lang === "sw" ? "Chagua supplier" : "Choose supplier"))}</span>
-                        <span className="min-w-0 flex-1"><span className="block truncate font-medium text-gray-800">{p.name}</span><span className="text-gray-400">Available: {p.currentStock} {p.unit}</span></span>
+                        className={`group flex w-full items-center gap-3 rounded-xl border p-2.5 text-left text-xs transition-all ${inOrder ? "border-brand-400 bg-brand-50 shadow-sm" : "border-gray-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm"}`}>
+                        {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded-xl border border-gray-200 object-cover" /> : <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-300"><PackagePlus className="h-5 w-5" /></div>}
+                        <span className="w-28 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p.supplier?.name || (selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : (lang === "sw" ? "Chagua supplier" : "Choose supplier"))}</span>
+                        <span className="min-w-0 flex-1"><span className="block truncate font-semibold text-gray-800">{p.name}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${p.currentStock <= p.minimumStock ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>Available: {p.currentStock} {p.unit}</span></span>
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${inOrder ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-400 group-hover:bg-brand-100 group-hover:text-brand-700"}`}>{inOrder ? "✓" : "+"}</span>
                       </button>
                     );
                   })}
                 </div>
                 {orderItems.length > 0 && (
-                  <div className="space-y-2 mt-2">
+                  <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50/50 p-3">
+                    <div className="mb-2 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-brand-800">{lang === "sw" ? "Bidhaa ulizochagua" : "Selected products"}</p><p className="mt-0.5 text-[11px] text-brand-700">{orderItems.length} {lang === "sw" ? "bidhaa ·" : "products ·"} {selectedSupplierCount} {lang === "sw" ? "suppliers" : "suppliers"}</p></div><p className="text-sm font-bold text-brand-800">{formatTZS(estimatedTotal)}</p></div>
+                  <div className="space-y-2">
                     {orderItems.map((item) => {
                       const p = products.find((pr) => pr.id === item.productId);
                       return (
-                        <div key={item.productId} className="bg-gray-50 rounded-lg p-2">
+                        <div key={item.productId} className="rounded-xl border border-brand-100 bg-white p-2.5 shadow-sm">
                           <div className="flex items-center gap-2">
                             {p?.imageUrl ? <img src={p.imageUrl} alt="" className="h-9 w-9 rounded-md border border-gray-200 object-cover" /> : <div className="h-9 w-9 rounded-md bg-gray-200" />}
-                            <span className="w-24 flex-shrink-0 text-[11px] font-semibold text-brand-700">{p?.supplier?.name || suppliers.find((s) => s.id === selectedSupplier)?.name || "Supplier"}</span>
-                            <span className="flex-1 text-xs font-medium text-gray-700">{p?.name}<span className="block text-[11px] font-normal text-gray-400">Available: {p?.currentStock ?? "-"} {p?.unit}</span></span>
-                            <input type="number" value={item.quantity} min={1}
+                            <span className="w-24 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p?.supplier?.name || suppliers.find((s) => s.id === selectedSupplier)?.name || "Supplier"}</span>
+                            <span className="flex-1 text-xs font-semibold text-gray-700">{p?.name}<span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-normal text-gray-500">Available: {p?.currentStock ?? "-"} {p?.unit}</span></span>
+                            <input aria-label={`Quantity for ${p?.name || "product"}`} type="number" value={item.quantity} min={1}
                               onChange={(e) => updateItemQty(item.productId, Number(e.target.value))}
-                              className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-center focus:outline-none" />
-                            <span className="text-xs text-gray-400">{p?.unit}</span>
-                            <button onClick={() => removeItem(item.productId)} className="text-gray-300 hover:text-red-400 min-h-0">
+                              className="w-16 rounded-lg border border-brand-200 bg-brand-50 px-2 py-2 text-center text-xs font-bold text-brand-800 outline-none focus:ring-2 focus:ring-brand-200" />
+                            <span className="text-[10px] font-semibold text-gray-400">{p?.unit}</span>
+                            <button onClick={() => removeItem(item.productId)} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 transition hover:bg-red-50 hover:text-red-500 min-h-0">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <input value={item.note || ""} onChange={(e) => updateItemNote(item.productId, e.target.value)} maxLength={500}
                             placeholder={lang === "sw" ? "Maelezo ya order hii (rangi, discount, n.k.)" : "Notes for this order (colour, discount, etc.)"}
-                            className="mt-2 w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none" />
+                            className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 )}
               </div>
 
               {selectedSupplier && supplierCatalog.length > 0 && (
-                <div className="rounded-xl border border-brand-100 bg-brand-50/60 p-3">
+                <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 to-white p-4 shadow-sm">
                   <div className="mb-2 flex items-center gap-2">
-                    <PackagePlus className="h-4 w-4 text-brand-700" />
-                    <p className="text-xs font-semibold text-brand-900">{lang === "sw" ? "Bidhaa za catalog ya supplier" : "Supplier catalog products"}</p>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 text-teal-700"><PackagePlus className="h-4 w-4" /></div>
+                    <div><p className="text-sm font-bold text-teal-950">{lang === "sw" ? "Bidhaa za catalog ya supplier" : "Supplier catalog products"}</p><p className="text-[11px] text-teal-700">{lang === "sw" ? "Ongeza bidhaa mpya kutoka kwenye catalog." : "Add a new product from this supplier catalog."}</p></div>
                   </div>
                   <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
                     {supplierCatalog.map((product) => (
-                      <button key={product.id} type="button" onClick={() => openCatalogImport(product)} className="rounded-lg border border-brand-100 bg-white p-2 text-left hover:border-brand-400">
+                      <button key={product.id} type="button" onClick={() => openCatalogImport(product)} className="rounded-xl border border-teal-100 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-teal-400">
                         <p className="text-xs font-semibold text-gray-900">{product.name}</p>
                         <p className="mt-0.5 text-xs text-gray-500">{formatTZS(product.price)} / {product.unit} - {product.minOrderQty}+ {lang === "sw" ? "kwa order" : "per order"}</p>
                       </button>
@@ -520,17 +540,18 @@ export default function OrdersPage() {
                 </div>
               )}
 
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">{t("orders.noteLabel", lang)}</label>
-                <input value={note} onChange={(e) => setNote(e.target.value)}
+              <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <label className="mb-2 block text-sm font-bold text-gray-900">{t("orders.noteLabel", lang)}</label>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={500}
                   placeholder={t("orders.notePlaceholder", lang)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />
               </div>
 
-              <div className="flex gap-2">
-                <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm">{t("common.cancel", lang)}</button>
+              <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-3 border-t border-gray-200 bg-white/95 p-4 backdrop-blur sm:-mx-5 sm:-mb-5 sm:p-5">
+                <div className="mr-auto hidden sm:block"><p className="text-xs font-bold text-gray-800">{orderItems.length ? `${orderItems.length} ${lang === "sw" ? "bidhaa tayari" : "products ready"}` : (lang === "sw" ? "Chagua bidhaa kuanza" : "Select products to begin")}</p><p className="text-[11px] text-gray-400">{selectedSupplierCount} {lang === "sw" ? "suppliers" : "suppliers"}</p></div>
+                <button onClick={() => setShowForm(false)} className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">{t("common.cancel", lang)}</button>
                 <button onClick={handleCreate} disabled={saving || orderItems.length === 0}
-                  className="flex-1 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">
+                  className="rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-600/20 transition hover:from-brand-700 hover:to-brand-600 disabled:cursor-not-allowed disabled:opacity-50">
                   {saving ? "..." : t("orders.submit", lang)}
                 </button>
               </div>
