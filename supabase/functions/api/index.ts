@@ -706,6 +706,27 @@ async function orders(client: SupabaseClient, shop: Record<string, unknown>, req
       }
       return json({ message: "Delivery confirmed and stock updated" });
     }
+    if (Array.isArray(body.items)) {
+      if (existing.status !== "PENDING") return json({ error: "Only pending orders can be edited" }, 400);
+      const items = body.items;
+      if (!items.length) return json({ error: "An order must contain at least one product" }, 400);
+      const ids = items.map((item: Record<string, unknown>) => item.productId);
+      if (new Set(ids).size !== ids.length) return json({ error: "Each product can only appear once in an order" }, 400);
+      const { data: products } = await client.from("products").select("id,name,unit,buyingPrice,note,isReorderable,imageUrl,currentStock").in("id", ids).eq("shopId", shop.id).eq("isActive", true);
+      if ((products ?? []).length !== ids.length) return json({ error: "One or more products not found in this shop" }, 400);
+      const map = new Map((products ?? []).map((product) => [product.id, product]));
+      const normalized = items.map((item: Record<string, unknown>) => ({ id: crypto.randomUUID(), quantity: Number(item.quantity), unitPrice: item.unitPrice == null ? map.get(item.productId)!.buyingPrice : Number(item.unitPrice), note: item.note ? String(item.note).trim() : null, productId: item.productId }));
+      if (normalized.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || !Number.isFinite(item.unitPrice) || item.unitPrice < 0)) return json({ error: "Order quantities must be whole numbers greater than zero and prices cannot be negative" }, 400);
+      const totalAmount = normalized.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      const now = new Date().toISOString();
+      const { error: updateError } = await client.from("orders").update({ totalAmount, note: body.note ? String(body.note).trim() : null, updatedAt: now }).eq("id", orderId).eq("shopId", shop.id);
+      if (updateError) throw updateError;
+      const { error: deleteItemsError } = await client.from("order_items").delete().eq("orderId", orderId);
+      if (deleteItemsError) throw deleteItemsError;
+      const { error: insertItemsError } = await client.from("order_items").insert(normalized.map((item) => ({ ...item, orderId })));
+      if (insertItemsError) throw insertItemsError;
+      return json({ message: "Order updated", order: { ...existing, totalAmount, note: body.note ? String(body.note).trim() : null, items: normalized.map((item) => ({ ...item, product: map.get(item.productId) })) } });
+    }
     const nextStatus = String(pathStatus(id, "cancel") ? "CANCELLED" : body.status ?? "").toUpperCase();
     const transitions: Record<string, string[]> = { PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"], OUT_FOR_DELIVERY: [] };
     if (!transitions[existing.status]?.includes(nextStatus)) return json({ error: `Cannot move order from ${existing.status} to ${nextStatus || "an empty status"}` }, 400);
@@ -714,6 +735,15 @@ async function orders(client: SupabaseClient, shop: Record<string, unknown>, req
     const { data, error } = await client.from("orders").update(update).eq("id", orderId).eq("shopId", shop.id).select("*").single();
     if (error) throw error;
     return json({ order: data });
+  }
+  if (method === "DELETE" && id) {
+    const orderId = id.replace(/\/cancel$/, "");
+    const { data: existing } = await client.from("orders").select("id,status").eq("id", orderId).eq("shopId", shop.id).maybeSingle();
+    if (!existing) return json({ error: "Order not found" }, 404);
+    if (!["PENDING", "CANCELLED"].includes(existing.status)) return json({ error: "Only pending or cancelled orders can be deleted" }, 400);
+    const { error } = await client.from("orders").delete().eq("id", orderId).eq("shopId", shop.id);
+    if (error) throw error;
+    return json({ message: "Order deleted" });
   }
   const body = await request.json().catch(() => ({})); const items = Array.isArray(body.items) ? body.items : []; if (!body.supplierId || !items.length) return json({ error: "supplierId and items are required" }, 400); const { data: supplier } = await client.from("suppliers").select("id,name,phone").eq("id", body.supplierId).maybeSingle(); if (!supplier) return json({ error: "Supplier not found" }, 404); const ids = items.map((item: Record<string, unknown>) => item.productId); if (new Set(ids).size !== ids.length) return json({ error: "Each product can only appear once in an order" }, 400); const { data: products } = await client.from("products").select("id,name,unit,buyingPrice,note,isReorderable,imageUrl,currentStock").in("id", ids).eq("shopId", shop.id).eq("isActive", true); if ((products ?? []).length !== ids.length) return json({ error: "One or more products not found in this shop" }, 400); const map = new Map((products ?? []).map((p) => [p.id, p])); const normalized = items.map((item: Record<string, unknown>) => ({ id: crypto.randomUUID(), quantity: Number(item.quantity), unitPrice: item.unitPrice == null ? map.get(item.productId)!.buyingPrice : Number(item.unitPrice), note: item.note ? String(item.note).trim() : null, productId: item.productId })); if (normalized.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || !Number.isFinite(item.unitPrice) || item.unitPrice < 0)) return json({ error: "Order quantities must be whole numbers greater than zero and prices cannot be negative" }, 400); const totalAmount = normalized.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0); const now = new Date().toISOString(); const orderId = crypto.randomUUID(); const { data: order, error } = await client.from("orders").insert({ id: orderId, orderGroupId: body.orderGroupId ? String(body.orderGroupId) : null, status: "PENDING", totalAmount, note: body.note || null, shopId: shop.id, supplierId: body.supplierId, createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; const { error: itemError } = await client.from("order_items").insert(normalized.map((item) => ({ ...item, orderId }))); if (itemError) { await client.from("orders").delete().eq("id", orderId); throw itemError; } return json({ order: { ...order, supplier, items: normalized.map((item) => ({ ...item, product: map.get(item.productId) })) }, whatsappMessage: { message: `Habari ${supplier.name}, naomba order ya bidhaa kutoka ${shop.name}.`, whatsappUrl: supplier.phone ? `https://wa.me/${supplier.phone}` : null } }, 201);
 }

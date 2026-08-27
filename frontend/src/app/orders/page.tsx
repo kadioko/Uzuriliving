@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
-import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus, Download, FileImage, Search } from "lucide-react";
+import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus, Download, FileImage, Search, Edit2, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 
 interface Supplier {
@@ -78,6 +78,7 @@ export default function OrdersPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [supplierCatalog, setSupplierCatalog] = useState<SupplierCatalogProduct[]>([]);
   const [catalogImport, setCatalogImport] = useState<SupplierCatalogProduct | null>(null);
@@ -121,6 +122,7 @@ export default function OrdersPage() {
 
   const supplierProducts = products;
   const visibleSupplierProducts = supplierProducts.filter((product) => {
+    if (editingOrder && product.supplier?.id && product.supplier.id !== editingOrder.supplier.id) return false;
     const query = productSearch.trim().toLowerCase();
     if (!query) return true;
     return `${product.name} ${product.supplier?.name || ""}`.toLowerCase().includes(query);
@@ -208,9 +210,30 @@ export default function OrdersPage() {
     setOrderItems((prev) => prev.filter((i) => i.productId !== productId));
   }
 
+  function openEditOrder(order: Order) {
+    setEditingOrder(order);
+    setShowForm(true);
+    setSelectedSupplier(order.supplier.id);
+    setOrderItems(order.items.map((item) => ({ productId: item.productId, quantity: item.quantity, note: item.note || "", supplierId: order.supplier.id })));
+    setNote(order.note || "");
+    setProductSearch("");
+    setSupplierCatalog([]);
+  }
+
+  async function deleteOrder(order: Order) {
+    if (!confirm(lang === "sw" ? "Futa order hii? Hii haiwezi kurudishwa." : "Delete this order? This cannot be undone.")) return;
+    try {
+      await api.delete(`/orders/${order.id}`, lang);
+      toast(lang === "sw" ? "Order imefutwa." : "Order deleted.", "success");
+      await fetchOrders();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : t("common.error", lang), "error");
+    }
+  }
+
   function fillLowStock() {
     const lowItems = supplierProducts
-      .filter((p) => p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1))
+      .filter((p) => (!editingOrder || !p.supplier?.id || p.supplier.id === editingOrder.supplier.id) && p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1))
       .map((p) => ({
         productId: p.id,
         quantity: Math.max(p.minimumStock - p.currentStock + 5, 5),
@@ -221,6 +244,23 @@ export default function OrdersPage() {
 
   async function handleCreate() {
     if (orderItems.length === 0) return;
+    if (editingOrder) {
+      setSaving(true);
+      try {
+        await api.patch(`/orders/${editingOrder.id}`, { items: orderItems, note: note || null }, lang);
+        setShowForm(false);
+        setEditingOrder(null);
+        setOrderItems([]);
+        setNote("");
+        toast(lang === "sw" ? "Order imebadilishwa." : "Order updated.", "success");
+        await fetchOrders();
+      } catch (error) {
+        toast(error instanceof Error ? error.message : t("common.error", lang), "error");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const groups = new Map<string, typeof orderItems>();
     for (const item of orderItems) {
       const product = products.find((p) => p.id === item.productId);
@@ -402,7 +442,7 @@ export default function OrdersPage() {
       <div className="max-w-3xl mx-auto pb-24 lg:pb-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("orders.title", lang)}</h1>
-          <button onClick={() => { setShowForm(true); setOrderItems([]); setNote(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); }}
+          <button onClick={() => { setEditingOrder(null); setShowForm(true); setOrderItems([]); setNote(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); }}
             className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t("orders.newOrder", lang)}</span>
@@ -487,7 +527,7 @@ export default function OrdersPage() {
                       ) : null}
                     </div>
                     <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-                      {batch.map((supplierOrder) => <div key={supplierOrder.id} className="flex flex-wrap items-center gap-2 text-xs"><span className="mr-auto font-semibold text-gray-700">{supplierOrder.supplier.name}</span>{supplierOrder.status === "PENDING" && <><button onClick={() => void updateStatus(supplierOrder.id, "CONFIRMED")} className="rounded-lg bg-blue-50 px-3 py-1.5 font-semibold text-blue-700 min-h-0">Confirm</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "CONFIRMED" && <><button onClick={() => void updateStatus(supplierOrder.id, "OUT_FOR_DELIVERY")} className="rounded-lg bg-purple-50 px-3 py-1.5 font-semibold text-purple-700 min-h-0">Mark out for delivery</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "OUT_FOR_DELIVERY" && <button onClick={() => void updateStatus(supplierOrder.id, "DELIVERED")} className="rounded-lg bg-green-50 px-3 py-1.5 font-semibold text-green-700 min-h-0"><Check className="mr-1 inline h-3.5 w-3.5" />Mark delivered</button>}</div>)}
+                      {batch.map((supplierOrder) => <div key={supplierOrder.id} className="flex flex-wrap items-center gap-2 text-xs"><span className="mr-auto font-semibold text-gray-700">{supplierOrder.supplier.name}</span>{supplierOrder.status === "PENDING" && <><button onClick={() => openEditOrder(supplierOrder)} className="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 font-semibold text-brand-700 min-h-0"><Edit2 className="h-3.5 w-3.5" /> Edit</button><button onClick={() => void deleteOrder(supplierOrder)} className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 font-semibold text-gray-600 min-h-0"><Trash2 className="h-3.5 w-3.5" /> Delete</button><button onClick={() => void updateStatus(supplierOrder.id, "CONFIRMED")} className="rounded-lg bg-blue-50 px-3 py-1.5 font-semibold text-blue-700 min-h-0">Confirm</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "CANCELLED" && <button onClick={() => void deleteOrder(supplierOrder)} className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 font-semibold text-gray-600 min-h-0"><Trash2 className="h-3.5 w-3.5" /> Delete</button>}{supplierOrder.status === "CONFIRMED" && <><button onClick={() => void updateStatus(supplierOrder.id, "OUT_FOR_DELIVERY")} className="rounded-lg bg-purple-50 px-3 py-1.5 font-semibold text-purple-700 min-h-0">Mark out for delivery</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "OUT_FOR_DELIVERY" && <button onClick={() => void updateStatus(supplierOrder.id, "DELIVERED")} className="rounded-lg bg-green-50 px-3 py-1.5 font-semibold text-green-700 min-h-0"><Check className="mr-1 inline h-3.5 w-3.5" />Mark delivered</button>}</div>)}
                     </div>
                   </div>
                 )}
@@ -505,10 +545,10 @@ export default function OrdersPage() {
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-brand-100 bg-gradient-to-r from-[#fff4d7] via-white to-[#e9f8f5] p-5">
               <div>
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-700">{lang === "sw" ? "Ununuzi wa supplier" : "Supplier purchasing"}</p>
-                <h3 className="text-lg font-bold text-gray-950">{t("orders.newOrderTitle", lang)}</h3>
-                <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Changanya bidhaa kutoka suppliers tofauti kwenye order moja." : "Combine products from different suppliers in one order batch."}</p>
+                <h3 className="text-lg font-bold text-gray-950">{editingOrder ? (lang === "sw" ? "Hariri order" : "Edit supplier order") : t("orders.newOrderTitle", lang)}</h3>
+                <p className="mt-1 text-xs text-gray-500">{editingOrder ? (lang === "sw" ? "Sasisha bidhaa, kiasi, au maelezo kabla order haijathibitishwa." : "Update products, quantities, or notes while this order is still pending.") : (lang === "sw" ? "Changanya bidhaa kutoka suppliers tofauti kwenye order moja." : "Combine products from different suppliers in one order batch.")}</p>
               </div>
-              <button onClick={() => setShowForm(false)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-gray-500 shadow-sm transition hover:bg-white hover:text-gray-900 min-h-0"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-gray-500 shadow-sm transition hover:bg-white hover:text-gray-900 min-h-0"><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-5 p-4 sm:p-5">
               <div className="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-4 shadow-sm">
@@ -516,8 +556,8 @@ export default function OrdersPage() {
                   <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700"><Truck className="h-5 w-5" /></div>
                   <div><label className="block text-sm font-bold text-gray-900">{lang === "sw" ? "Supplier wa default" : "Default supplier"}</label><p className="mt-0.5 text-xs leading-5 text-gray-500">{lang === "sw" ? "Inatumika kwa bidhaa ambazo bado hazijaunganishwa na supplier." : "Used only for products that are not linked to a supplier yet."}</p></div>
                 </div>
-                <select value={selectedSupplier} onChange={(e) => selectSupplier(e.target.value)}
-                  className="w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <select value={selectedSupplier} onChange={(e) => selectSupplier(e.target.value)} disabled={Boolean(editingOrder)}
+                  className="w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500">
                   <option value="">{t("orders.selectSupplier", lang)}</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.phone})</option>)}
                 </select>
@@ -607,10 +647,10 @@ export default function OrdersPage() {
 
               <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center gap-3 border-t border-gray-200 bg-white/95 p-4 backdrop-blur sm:-mx-5 sm:-mb-5 sm:p-5">
                 <div className="mr-auto hidden sm:block"><p className="text-xs font-bold text-gray-800">{orderItems.length ? `${orderItems.length} ${lang === "sw" ? "bidhaa tayari" : "products ready"}` : (lang === "sw" ? "Chagua bidhaa kuanza" : "Select products to begin")}</p><p className="text-[11px] text-gray-400">{selectedSupplierCount} {lang === "sw" ? "suppliers" : "suppliers"}</p></div>
-                <button onClick={() => setShowForm(false)} className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">{t("common.cancel", lang)}</button>
+                <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50">{t("common.cancel", lang)}</button>
                 <button onClick={handleCreate} disabled={saving || orderItems.length === 0}
                   className="rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand-600/20 transition hover:from-brand-700 hover:to-brand-600 disabled:cursor-not-allowed disabled:opacity-50">
-                  {saving ? "..." : t("orders.submit", lang)}
+                  {saving ? "..." : editingOrder ? (lang === "sw" ? "Hifadhi mabadiliko" : "Save changes") : t("orders.submit", lang)}
                 </button>
               </div>
             </div>

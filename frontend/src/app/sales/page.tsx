@@ -16,6 +16,7 @@ interface Product {
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
   currentStock: number;
+  sku?: string | null;
   barcode?: string | null;
   imageUrl?: string | null;
 }
@@ -164,13 +165,20 @@ export default function SalesPage() {
   const scannerBuffer = useRef("");
   const scannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const fetchAllProducts = useCallback(async () => {
+    const first = await api.get<{ products: Product[]; pagination?: { totalPages?: number } }>("/products?limit=1000&page=1");
+    const totalPages = first.pagination?.totalPages || 1;
+    if (totalPages <= 1) return first.products;
+    const remaining = await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => api.get<{ products: Product[] }>(`/products?limit=1000&page=${index + 2}`)));
+    return [first.products, ...remaining.map((page) => page.products)].flat();
+  }, []);
+
   useEffect(() => {
     api.get<{ user: { role: string; staff?: { permissions?: { canViewReports?: boolean } } } }>("/auth/me")
       .then((data) => setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports)))
       .catch(() => setCanViewFinancials(false));
-    api.get<{ products: Product[] }>("/products?limit=1000")
-      .then((d) => setProducts(d.products.filter((p) => p.currentStock > 0)));
-  }, []);
+    fetchAllProducts().then(setProducts).catch(() => {});
+  }, [fetchAllProducts]);
 
   const syncPendingSales = useCallback(async () => {
     if (syncingRef.current) return;
@@ -225,15 +233,15 @@ export default function SalesPage() {
       setLastSyncAt(new Date().toISOString());
       if (remaining.length < pending.length) {
         toast(lang === "sw" ? "Mauzo ya offline yamesawazishwa." : "Offline sales synced.", "success");
-        api.get<{ products: Product[] }>("/products?limit=1000")
-          .then((d) => setProducts(d.products.filter((p) => p.currentStock > 0)))
+        fetchAllProducts()
+          .then(setProducts)
           .catch(() => {});
       }
     } finally {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [lang, toast]);
+  }, [fetchAllProducts, lang, toast]);
 
   useEffect(() => {
     setPendingSales(readPendingSales());
@@ -303,7 +311,8 @@ export default function SalesPage() {
     if (view === "history") fetchHistory();
   }, [view, fetchHistory]);
 
-  const filtered = products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode?.includes(search.trim().toUpperCase()));
+  const query = search.trim().toLowerCase();
+  const filtered = products.filter((p) => !query || `${p.name} ${p.sku || ""} ${p.barcode || ""}`.toLowerCase().includes(query));
 
   function defaultPriceFor(product: Product): number {
     if (saleMode === "WHOLESALE" && product.wholesalePrice != null) {
@@ -313,6 +322,10 @@ export default function SalesPage() {
   }
 
   function addToCart(product: Product) {
+    if (product.currentStock <= 0) {
+      toast(lang === "sw" ? "Bidhaa hii haina stock." : "This product is out of stock.", "error");
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
       if (existing) {
@@ -412,8 +425,7 @@ export default function SalesPage() {
       setCustomerName("");
       setCustomerPhone("");
       // Refresh products stock
-      api.get<{ products: Product[] }>("/products?limit=1000")
-        .then((d) => setProducts(d.products.filter((p) => p.currentStock > 0)));
+      fetchAllProducts().then(setProducts).catch(() => {});
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t("common.error", lang);
       const canQueue = typeof navigator !== "undefined" && (!navigator.onLine || message.includes("Unable to reach"));
@@ -624,16 +636,17 @@ export default function SalesPage() {
               <div className="grid grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto pb-2 sm:grid-cols-3 lg:max-h-[60vh] lg:grid-cols-2">
                 {filtered.map((p) => {
                   const inCart = cart.find((i) => i.product.id === p.id);
+                  const outOfStock = p.currentStock <= 0;
                   return (
-                    <button key={p.id} onClick={() => addToCart(p)}
-                      className={`min-h-28 text-left p-3 rounded-xl border transition-all ${inCart ? "border-brand-400 bg-brand-50" : "border-gray-200 bg-white hover:border-brand-300"}`}>
+                    <button key={p.id} onClick={() => addToCart(p)} disabled={outOfStock}
+                      className={`min-h-28 text-left p-3 rounded-xl border transition-all ${outOfStock ? "cursor-not-allowed border-gray-200 bg-gray-50 opacity-65" : inCart ? "border-brand-400 bg-brand-50" : "border-gray-200 bg-white hover:border-brand-300"}`}>
                       {p.imageUrl ? (
                         <img src={p.imageUrl} alt="" className="mb-2 h-20 w-full rounded-lg border border-gray-100 object-cover" />
                       ) : (
                         <div className="mb-2 flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-2xl text-gray-300" aria-hidden="true">▧</div>
                       )}
                       <p className="text-sm font-medium text-gray-800 leading-tight">{p.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{p.currentStock} {p.unit} {t("dashboard.remaining", lang)}</p>
+                      <p className={`text-xs mt-0.5 ${outOfStock ? "font-semibold text-red-600" : "text-gray-400"}`}>{outOfStock ? (lang === "sw" ? "Haipo stock" : "Out of stock") : `${p.currentStock} ${p.unit} ${t("dashboard.remaining", lang)}`}</p>
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(defaultPriceFor(p))}</p>
                       {saleMode === "WHOLESALE" && p.wholesalePrice == null && (
                         <p className="text-[10px] text-amber-600 mt-0.5">{t("sales.noWholesalePrice", lang)}</p>
