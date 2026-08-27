@@ -83,7 +83,7 @@ export default function OrdersPage() {
   const [catalogImport, setCatalogImport] = useState<SupplierCatalogProduct | null>(null);
   const [retailPriceDraft, setRetailPriceDraft] = useState("");
   const [minimumStockDraft, setMinimumStockDraft] = useState("5");
-  const [orderItems, setOrderItems] = useState<{ productId: string; quantity: number; note?: string | null }[]>([]);
+  const [orderItems, setOrderItems] = useState<{ productId: string; quantity: number; note?: string | null; supplierId?: string }[]>([]);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -101,13 +101,21 @@ export default function OrdersPage() {
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
+  async function fetchAllProducts() {
+    const first = await api.get<{ products: Product[]; pagination?: { totalPages?: number } }>("/products?limit=1000&page=1");
+    const pages = first.pagination?.totalPages || 1;
+    if (pages <= 1) return first.products;
+    const remaining = await Promise.all(Array.from({ length: pages - 1 }, (_, index) => api.get<{ products: Product[] }>(`/products?limit=1000&page=${index + 2}`)));
+    return [first.products, ...remaining.map((page) => page.products)].flat();
+  }
+
   useEffect(() => {
     Promise.all([
       api.get<{ suppliers: Supplier[] }>("/suppliers"),
-      api.get<{ products: Product[] }>("/products"),
+      fetchAllProducts(),
     ]).then(([sd, pd]) => {
       setSuppliers(sd.suppliers);
-      setProducts(pd.products);
+      setProducts(pd);
     });
   }, []);
 
@@ -119,22 +127,23 @@ export default function OrdersPage() {
   });
   const selectedSupplierCount = new Set(orderItems.map((item) => {
     const product = products.find((entry) => entry.id === item.productId);
-    return product ? supplierForProduct(product) : "";
+    return product ? supplierForItem(item) : "";
   }).filter(Boolean)).size;
   const estimatedTotal = orderItems.reduce((sum, item) => {
     const product = products.find((entry) => entry.id === item.productId);
     return sum + (product?.buyingPrice || 0) * item.quantity;
   }, 0);
 
-  function supplierForProduct(product: Product) {
-    return product.supplier?.id || selectedSupplier;
+  function supplierForItem(item: { productId: string; supplierId?: string }) {
+    const product = products.find((entry) => entry.id === item.productId);
+    return product?.supplier?.id || item.supplierId || selectedSupplier;
   }
 
   function addItem(productId: string) {
     setOrderItems((prev) => {
       if (prev.find((i) => i.productId === productId)) return prev;
       const product = products.find((item) => item.id === productId);
-      return [...prev, { productId, quantity: 1, note: product?.note || "" }];
+      return [...prev, { productId, quantity: 1, note: product?.note || "", supplierId: product?.supplier?.id || "" }];
     });
   }
 
@@ -191,6 +200,10 @@ export default function OrdersPage() {
     setOrderItems((prev) => prev.map((item) => item.productId === productId ? { ...item, note } : item));
   }
 
+  function updateItemSupplier(productId: string, supplierId: string) {
+    setOrderItems((prev) => prev.map((item) => item.productId === productId ? { ...item, supplierId } : item));
+  }
+
   function removeItem(productId: string) {
     setOrderItems((prev) => prev.filter((i) => i.productId !== productId));
   }
@@ -211,7 +224,7 @@ export default function OrdersPage() {
     const groups = new Map<string, typeof orderItems>();
     for (const item of orderItems) {
       const product = products.find((p) => p.id === item.productId);
-      const supplierId = product ? supplierForProduct(product) : "";
+      const supplierId = product ? supplierForItem(item) : "";
       if (!supplierId) {
         toast(lang === "sw" ? "Chagua supplier kwa bidhaa zote zisizo na supplier." : "Choose a supplier for products without one.", "error");
         return;
@@ -547,7 +560,7 @@ export default function OrdersPage() {
                         <div key={item.productId} className="rounded-xl border border-brand-100 bg-white p-2.5 shadow-sm">
                           <div className="flex items-center gap-2">
                             {p?.imageUrl ? <img src={p.imageUrl} alt="" className="h-9 w-9 rounded-md border border-gray-200 object-cover" /> : <div className="h-9 w-9 rounded-md bg-gray-200" />}
-                            <span className="w-24 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p?.supplier?.name || suppliers.find((s) => s.id === selectedSupplier)?.name || "Supplier"}</span>
+                            {p?.supplier?.name ? <span className="w-24 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p.supplier.name}</span> : <select aria-label={`Supplier for ${p?.name || "product"}`} value={item.supplierId || ""} onChange={(event) => updateItemSupplier(item.productId, event.target.value)} className="w-28 flex-shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-1.5 py-1.5 text-[10px] font-bold text-brand-800 outline-none focus:ring-2 focus:ring-brand-200"><option value="">{selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : "Assign supplier"}</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select>}
                             <span className="flex-1 text-xs font-semibold text-gray-700">{p?.name}<span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-normal text-gray-500">Available: {p?.currentStock ?? "-"} {p?.unit}</span></span>
                             <input aria-label={`Quantity for ${p?.name || "product"}`} type="number" value={item.quantity} min={1}
                               onChange={(e) => updateItemQty(item.productId, Number(e.target.value))}
