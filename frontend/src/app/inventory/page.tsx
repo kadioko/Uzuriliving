@@ -524,6 +524,11 @@ const [stockCountCode, setStockCountCode] = useState("");
                           <p className="text-xs text-gray-400">{t("inventory.sellingPrice", lang)}</p>
                           <p className="text-sm font-medium text-brand-700">{formatTZS(p.sellingPrice)}</p>
                         </div>
+                        <div>
+                          <p className="text-xs text-gray-400">{t("inventory.wholesalePriceLabel", lang)}</p>
+                          <p className="text-sm font-medium text-indigo-700">{p.wholesalePrice == null ? "-" : formatTZS(p.wholesalePrice)}</p>
+                          {p.wholesaleMinQty != null && <p className="text-[10px] text-gray-400">{lang === "sw" ? `Kuanzia ${p.wholesaleMinQty}` : `From ${p.wholesaleMinQty}`} {p.unit}</p>}
+                        </div>
                         {canViewFinancials && <div>
                           <p className="text-xs text-gray-400">{t("inventory.marginLabel", lang)}</p>
                           <p className="text-sm font-medium text-green-600">{margin(p)}%</p>
