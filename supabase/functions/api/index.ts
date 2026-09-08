@@ -707,7 +707,7 @@ async function orders(client: SupabaseClient, shop: Record<string, unknown>, req
       return json({ message: "Delivery confirmed and stock updated" });
     }
     if (Array.isArray(body.items)) {
-      if (existing.status !== "PENDING") return json({ error: "Only pending orders can be edited" }, 400);
+      if (!["PENDING", "OUT_FOR_DELIVERY"].includes(existing.status)) return json({ error: "Only pending or out-for-delivery orders can be edited" }, 400);
       const items = body.items;
       if (!items.length) return json({ error: "An order must contain at least one product" }, 400);
       const ids = items.map((item: Record<string, unknown>) => item.productId);
