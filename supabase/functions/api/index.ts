@@ -282,6 +282,11 @@ function redactProduct(product: Record<string, unknown>, user: Record<string, un
   return canViewFinancials ? product : { ...product, buyingPrice: null };
 }
 
+function canViewOrderQuantities(user: Record<string, unknown>) {
+  const permissions = user.permissions as Record<string, unknown> | undefined;
+  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER")) || permissions?.canManageStock === true;
+}
+
 async function productList(client: SupabaseClient, request: Request, user: Record<string, unknown>, shop: Record<string, unknown>) {
   const url = new URL(request.url);
   const page = Math.max(Number(url.searchParams.get("page")) || 1, 1);
@@ -692,8 +697,9 @@ async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, 
   return json({ path, token: data.token, signedUrl: data.signedUrl, bucket, publicUrl: `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}` });
 }
 
-async function orders(client: SupabaseClient, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
-  if (method === "GET") { let query = client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }); const status = new URL(request.url).searchParams.get("status"); if (status) query = query.eq("status", status.toUpperCase()); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; if (id) return data?.[0] ? json({ order: data[0] }) : json({ error: "Order not found" }, 404); return json({ orders: data ?? [] }); }
+async function orders(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
+  if (method === "GET") { let query = client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }); const status = new URL(request.url).searchParams.get("status"); if (status) query = query.eq("status", status.toUpperCase()); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; const visible = canViewOrderQuantities(user) ? (data ?? []) : (data ?? []).map((order) => ({ ...order, totalAmount: null, items: (order.items ?? []).map((item) => ({ ...item, quantity: null, unitPrice: null, note: null, product: item.product ? { ...item.product, currentStock: null } : item.product })) })); if (id) return visible[0] ? json({ order: visible[0] }) : json({ error: "Order not found" }, 404); return json({ orders: visible }); }
+  if (!canViewOrderQuantities(user)) return json({ error: "Only the owner or stock staff can manage supplier orders" }, 403);
   if (method === "PATCH" && id) {
     const body = await request.json().catch(() => ({}));
     const orderId = id.replace(/\/(confirm-delivery|cancel)$/, "");
@@ -1063,7 +1069,7 @@ async function handle(request: Request) {
   if (path === "/orders" || path.startsWith("/orders/")) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    return orders(db, access.shop!, request, request.method, path === "/orders" ? undefined : path.slice("/orders/".length));
+    return orders(db, access.user!, access.shop!, request, request.method, path === "/orders" ? undefined : path.slice("/orders/".length));
   }
 
   if (path === "/settings" || path.startsWith("/settings/")) {

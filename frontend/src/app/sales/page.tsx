@@ -387,6 +387,15 @@ export default function SalesPage() {
     );
   }
 
+  function setExactQty(productId: string, raw: string) {
+    if (raw === "") return;
+    const quantity = Number(raw);
+    if (!Number.isInteger(quantity)) return;
+    setCart((prev) => prev.map((item) => item.product.id === productId
+      ? { ...item, quantity: Math.max(1, Math.min(quantity, item.product.currentStock)) }
+      : item));
+  }
+
   function updatePrice(productId: string, price: number) {
     setCart((prev) =>
       prev.map((i) => i.product.id === productId ? { ...i, unitPrice: price } : i)
@@ -706,7 +715,15 @@ export default function SalesPage() {
                             <button aria-label={`${t("common.remove", lang)} ${item.product.name}`} onClick={() => updateQty(item.product.id, -1)} className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center min-h-0 sm:h-9 sm:w-9">
                               <Minus className="w-3 h-3" />
                             </button>
-                            <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                            <input
+                              aria-label={`Quantity for ${item.product.name}`}
+                              type="number"
+                              min={1}
+                              max={item.product.currentStock}
+                              value={item.quantity}
+                              onChange={(e) => setExactQty(item.product.id, e.target.value)}
+                              className="w-14 rounded-lg border border-gray-200 bg-white px-1.5 py-2 text-center text-sm font-semibold focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                            />
                             <button aria-label={`${t("common.add", lang)} ${item.product.name}`} onClick={() => updateQty(item.product.id, 1)} className="w-11 h-11 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center min-h-0 sm:h-9 sm:w-9">
                               <Plus className="w-3 h-3" />
                             </button>

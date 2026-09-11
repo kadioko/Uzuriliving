@@ -79,6 +79,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [canViewOrderQuantities, setCanViewOrderQuantities] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [supplierCatalog, setSupplierCatalog] = useState<SupplierCatalogProduct[]>([]);
   const [catalogImport, setCatalogImport] = useState<SupplierCatalogProduct | null>(null);
@@ -91,6 +92,15 @@ export default function OrdersPage() {
   const [whatsappMsg, setWhatsappMsg] = useState<{ message: string; whatsappUrl: string | null } | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [productSearch, setProductSearch] = useState("");
+
+  useEffect(() => {
+    api.get<{ user: { role: string; staff?: { role?: string; permissions?: { canManageStock?: boolean } } } }>("/auth/me")
+      .then(({ user }) => {
+        const isOwner = user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staff || user.staff.role === "OWNER"));
+        setCanViewOrderQuantities(isOwner || Boolean(user.staff?.permissions?.canManageStock));
+      })
+      .catch(() => setCanViewOrderQuantities(false));
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -442,11 +452,11 @@ export default function OrdersPage() {
       <div className="max-w-3xl mx-auto pb-24 lg:pb-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("orders.title", lang)}</h1>
-          <button onClick={() => { setEditingOrder(null); setShowForm(true); setOrderItems([]); setNote(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); }}
+          {canViewOrderQuantities && <button onClick={() => { setEditingOrder(null); setShowForm(true); setOrderItems([]); setNote(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); }}
             className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t("orders.newOrder", lang)}</span>
-          </button>
+          </button>}
         </div>
 
         {/* Status filter */}
@@ -474,6 +484,7 @@ export default function OrdersPage() {
               const order = batch[0];
               const allDelivered = batch.every((item) => item.status === "DELIVERED");
               const allCancelled = batch.every((item) => item.status === "CANCELLED");
+              const statusLabels = [...new Set(batch.map((item) => t(`orders.status.${item.status}`, lang)))];
               return (
               <div key={batchKey} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -481,14 +492,14 @@ export default function OrdersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-gray-800">{batch.map((item) => item.supplier.name).join(" + ")}</p>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${batch.length > 1 ? "bg-indigo-100 text-indigo-700" : STATUS_COLOR[order.status]}`}>
-                        {batch.length > 1 ? (lang === "sw" ? `${batch.length} suppliers` : `${batch.length} suppliers`) : t(`orders.status.${order.status}`, lang)}
+                        {batch.length > 1 ? `${batch.length} suppliers · ${statusLabels.join(" · ")}` : statusLabels[0]}
                       </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       #{batchKey.slice(-8).toUpperCase()} •{" "}
                       {new Date(order.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short" })}
                     </p>
-                    {batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
+                    {canViewOrderQuantities && batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0))}</p>
                     )}
                   </div>
@@ -500,7 +511,7 @@ export default function OrdersPage() {
 
                 {expandedOrder === batchKey && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="space-y-3 mb-3">
+                    {canViewOrderQuantities && <div className="space-y-3 mb-3">
                       {batch.map((supplierOrder) => <div key={supplierOrder.id} className="rounded-lg border border-gray-100 p-2">
                         <div className="mb-1 flex items-center justify-between"><p className="text-xs font-bold text-brand-700">{supplierOrder.supplier.name}</p><span className={`text-[11px] rounded-full px-2 py-0.5 font-semibold ${STATUS_COLOR[supplierOrder.status]}`}>{t(`orders.status.${supplierOrder.status}`, lang)}</span></div>
                         {supplierOrder.items.map((item) => <div key={`${supplierOrder.id}-${item.productId}`} className="flex items-center gap-3 border-b border-gray-100 py-2 text-sm last:border-0">
@@ -509,10 +520,11 @@ export default function OrdersPage() {
                           <span className="font-medium">{item.quantity} {item.product.unit}</span>
                         </div>)}
                       </div>)}
-                    </div>
-                    {batch.some((item) => item.note) && <p className="text-xs text-gray-400 italic mb-3">{batch.filter((item) => item.note).map((item) => `"${item.note}"`).join(" · ")}</p>}
+                    </div>}
+                    {!canViewOrderQuantities && <div className="space-y-2 mb-3">{batch.map((supplierOrder) => <div key={supplierOrder.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs"><span className="font-medium text-gray-700">{supplierOrder.supplier.name}</span><span className={`rounded-full px-2 py-0.5 font-semibold ${STATUS_COLOR[supplierOrder.status]}`}>{t(`orders.status.${supplierOrder.status}`, lang)}</span></div>)}</div>}
+                    {canViewOrderQuantities && batch.some((item) => item.note) && <p className="text-xs text-gray-400 italic mb-3">{batch.filter((item) => item.note).map((item) => `"${item.note}"`).join(" · ")}</p>}
 
-                    <div className="flex flex-wrap gap-2">
+                    {canViewOrderQuantities && <div className="flex flex-wrap gap-2">
                       <button onClick={() => showWhatsApp(order.id)}
                         className="flex items-center gap-1.5 text-xs bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg font-medium min-h-0">
                         <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
@@ -525,10 +537,10 @@ export default function OrdersPage() {
                           <RotateCcw className="w-3.5 h-3.5" /> {t("orders.reorder", lang)}
                         </button>
                       ) : null}
-                    </div>
-                    <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                    </div>}
+                    {canViewOrderQuantities && <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
                       {batch.map((supplierOrder) => <div key={supplierOrder.id} className="flex flex-wrap items-center gap-2 text-xs"><span className="mr-auto font-semibold text-gray-700">{supplierOrder.supplier.name}</span>{["PENDING", "OUT_FOR_DELIVERY"].includes(supplierOrder.status) && <button onClick={() => openEditOrder(supplierOrder)} className="inline-flex items-center gap-1 rounded-lg bg-brand-50 px-3 py-1.5 font-semibold text-brand-700 min-h-0"><Edit2 className="h-3.5 w-3.5" /> Edit</button>}{supplierOrder.status === "PENDING" && <><button onClick={() => void deleteOrder(supplierOrder)} className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 font-semibold text-gray-600 min-h-0"><Trash2 className="h-3.5 w-3.5" /> Delete</button><button onClick={() => void updateStatus(supplierOrder.id, "CONFIRMED")} className="rounded-lg bg-blue-50 px-3 py-1.5 font-semibold text-blue-700 min-h-0">Confirm</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "CANCELLED" && <button onClick={() => void deleteOrder(supplierOrder)} className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 font-semibold text-gray-600 min-h-0"><Trash2 className="h-3.5 w-3.5" /> Delete</button>}{supplierOrder.status === "CONFIRMED" && <><button onClick={() => void updateStatus(supplierOrder.id, "OUT_FOR_DELIVERY")} className="rounded-lg bg-purple-50 px-3 py-1.5 font-semibold text-purple-700 min-h-0">Mark out for delivery</button><button onClick={() => void updateStatus(supplierOrder.id, "CANCELLED")} className="rounded-lg bg-red-50 px-3 py-1.5 font-semibold text-red-700 min-h-0">Cancel</button></>}{supplierOrder.status === "OUT_FOR_DELIVERY" && <button onClick={() => void updateStatus(supplierOrder.id, "DELIVERED")} className="rounded-lg bg-green-50 px-3 py-1.5 font-semibold text-green-700 min-h-0"><Check className="mr-1 inline h-3.5 w-3.5" />Mark delivered</button>}</div>)}
-                    </div>
+                    </div>}
                   </div>
                 )}
               </div>
