@@ -292,11 +292,18 @@ async function productList(client: SupabaseClient, request: Request, user: Recor
   if (search) query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,barcode.ilike.%${search.toUpperCase()}%`);
   const { data, count, error } = await query.order("name").range((page - 1) * limit, page * limit - 1);
   if (error) throw error;
-  const { data: openOrders, error: openOrdersError } = await client.from("orders").select("items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
+  const { data: openOrders, error: openOrdersError } = await client.from("orders").select("status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
   if (openOrdersError) throw openOrdersError;
-  const onOrder = new Map<string, number>();
-  for (const order of openOrders ?? []) for (const item of order.items ?? []) onOrder.set(item.productId, (onOrder.get(item.productId) ?? 0) + Number(item.quantity ?? 0));
-  const products = (data ?? []).map((product) => ({ ...product, onOrderQuantity: onOrder.get(product.id) ?? 0 })).filter((product) => {
+  const onOrder = new Map<string, { total: number; ordered: number; onTheWay: number }>();
+  for (const order of openOrders ?? []) for (const item of order.items ?? []) {
+    const quantity = Number(item.quantity ?? 0);
+    const current = onOrder.get(item.productId) ?? { total: 0, ordered: 0, onTheWay: 0 };
+    current.total += quantity;
+    if (order.status === "OUT_FOR_DELIVERY") current.onTheWay += quantity;
+    else current.ordered += quantity;
+    onOrder.set(item.productId, current);
+  }
+  const products = (data ?? []).map((product) => { const incoming = onOrder.get(product.id) ?? { total: 0, ordered: 0, onTheWay: 0 }; return { ...product, onOrderQuantity: incoming.total, onOrderStatus: incoming.onTheWay > 0 ? "ON_THE_WAY" : incoming.total > 0 ? "ORDERED" : null, onOrderOrderedQuantity: incoming.ordered, onOrderInTransitQuantity: incoming.onTheWay }; }).filter((product) => {
     if (!lowStock) return true;
     if (product.isReorderable === false || product.currentStock > product.minimumStock) return false;
     const openQuantity = Number(product.onOrderQuantity ?? 0);

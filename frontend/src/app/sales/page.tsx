@@ -16,6 +16,10 @@ interface Product {
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
   currentStock: number;
+  onOrderQuantity?: number;
+  onOrderStatus?: "ORDERED" | "ON_THE_WAY" | null;
+  onOrderOrderedQuantity?: number;
+  onOrderInTransitQuantity?: number;
   sku?: string | null;
   barcode?: string | null;
   imageUrl?: string | null;
@@ -647,6 +651,7 @@ export default function SalesPage() {
                       )}
                       <p className="text-sm font-medium text-gray-800 leading-tight">{p.name}</p>
                       <p className={`text-xs mt-0.5 ${outOfStock ? "font-semibold text-red-600" : "text-gray-400"}`}>{outOfStock ? (lang === "sw" ? "Haipo stock" : "Out of stock") : `${p.currentStock} ${p.unit} ${t("dashboard.remaining", lang)}`}</p>
+                      {p.onOrderQuantity ? <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-semibold text-blue-700"><span className={`rounded-full px-1.5 py-0.5 text-[10px] ${p.onOrderStatus === "ON_THE_WAY" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{p.onOrderStatus === "ON_THE_WAY" ? (lang === "sw" ? "Iko njiani" : "On the way") : (lang === "sw" ? "Imeagizwa" : "Ordered")}</span><span>{p.onOrderQuantity} {p.unit} {lang === "sw" ? "zinakuja" : "incoming"}</span>{p.onOrderInTransitQuantity && p.onOrderOrderedQuantity ? <span className="font-normal text-gray-500">· {p.onOrderInTransitQuantity} {lang === "sw" ? "njiani" : "on the way"}</span> : null}</p> : null}
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(defaultPriceFor(p))}</p>
                       {saleMode === "WHOLESALE" && p.wholesalePrice == null && (
                         <p className="text-[10px] text-amber-600 mt-0.5">{t("sales.noWholesalePrice", lang)}</p>

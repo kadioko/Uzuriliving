@@ -33,6 +33,9 @@ interface Product {
   currentStock: number;
   minimumStock: number;
   onOrderQuantity?: number;
+  onOrderStatus?: "ORDERED" | "ON_THE_WAY" | null;
+  onOrderOrderedQuantity?: number;
+  onOrderInTransitQuantity?: number;
   isReorderable: boolean;
   note?: string | null;
   isActive: boolean;
@@ -507,7 +510,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                       {p.supplier && (
                         <p className="text-xs text-gray-400 mt-0.5">{p.supplier.name}</p>
                       )}
-                      {p.onOrderQuantity ? <p className="mt-1 text-xs font-medium text-blue-600">{lang === "sw" ? `Inaagizwa: ${p.onOrderQuantity} ${p.unit}` : `On order: ${p.onOrderQuantity} ${p.unit}`}</p> : null}
+                      {p.onOrderQuantity ? <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-medium text-blue-700"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${p.onOrderStatus === "ON_THE_WAY" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{p.onOrderStatus === "ON_THE_WAY" ? (lang === "sw" ? "Iko njiani" : "On the way") : (lang === "sw" ? "Imeagizwa" : "Ordered")}</span><span>{lang === "sw" ? `${p.onOrderQuantity} ${p.unit} zinakuja` : `${p.onOrderQuantity} ${p.unit} incoming`}</span>{p.onOrderInTransitQuantity && p.onOrderOrderedQuantity ? <span className="text-[11px] font-normal text-gray-500">({p.onOrderInTransitQuantity} {lang === "sw" ? "njiani" : "on the way"}, {p.onOrderOrderedQuantity} {lang === "sw" ? "imeagizwa" : "ordered"})</span> : null}</p> : null}
                       {p.note ? <p className="mt-1 text-xs text-gray-500">{p.note}</p> : null}
                       <div className="flex items-center gap-4 mt-2 flex-wrap">
                         <div>
