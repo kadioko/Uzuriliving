@@ -6,7 +6,7 @@ import { t, useLang } from "@/lib/i18n";
 import {
   Plus,
   Search,
-  AlertTriangle,
+  Filter,
   Edit2,
   Package,
   X,
@@ -26,7 +26,7 @@ interface Product {
   name: string;
   sku?: string;
   unit: string;
-  buyingPrice: number;
+  buyingPrice: number | null;
   sellingPrice: number;
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
@@ -87,7 +87,9 @@ export default function InventoryPage() {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("action") || "";
   });
-  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out" | "incoming">("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
+  const [reorderFilter, setReorderFilter] = useState<"all" | "reorderable" | "stopped">("all");
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
@@ -129,9 +131,7 @@ const [stockCountCode, setStockCountCode] = useState("");
       params.set("limit", "1000");
       const data = await api.get<{ products: Product[] }>(`/products?${params}`);
       if (requestId !== latestLoad.current) return;
-      let list = data.products;
-      if (lowStockOnly) list = list.filter((p) => p.currentStock <= p.minimumStock);
-      setProducts(list);
+      setProducts(data.products);
     } catch (value: unknown) {
       if (requestId === latestLoad.current) {
         toast(value instanceof Error ? value.message : (lang === "sw" ? "Imeshindikana kupakia bidhaa." : "Could not load products."), "error");
@@ -139,7 +139,7 @@ const [stockCountCode, setStockCountCode] = useState("");
     } finally {
       if (requestId === latestLoad.current) setLoading(false);
     }
-  }, [search, lowStockOnly, toast, lang]);
+  }, [search, toast, lang]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
   useEffect(() => {
@@ -386,8 +386,19 @@ const [stockCountCode, setStockCountCode] = useState("");
     } catch (error: unknown) { toast(error instanceof Error ? error.message : "Could not finish stock count", "error"); }
   }
 
-  const margin = (p: Product) =>
-    p.sellingPrice > 0 ? (((p.sellingPrice - p.buyingPrice) / p.sellingPrice) * 100).toFixed(0) : "0";
+  const profitMargin = (price: number, buyingPrice: number | null) =>
+    buyingPrice != null && price > 0 ? (((price - buyingPrice) / price) * 100).toFixed(0) : "0";
+
+  const visibleProducts = products.filter((product) => {
+    if (stockFilter === "low" && !(product.currentStock > 0 && product.currentStock <= product.minimumStock)) return false;
+    if (stockFilter === "out" && product.currentStock !== 0) return false;
+    if (stockFilter === "incoming" && !(product.onOrderQuantity && product.onOrderQuantity > 0)) return false;
+    if (supplierFilter === "unassigned" && product.supplier) return false;
+    if (supplierFilter !== "all" && supplierFilter !== "unassigned" && product.supplier?.id !== supplierFilter) return false;
+    if (reorderFilter === "reorderable" && product.isReorderable === false) return false;
+    if (reorderFilter === "stopped" && product.isReorderable !== false) return false;
+    return true;
+  });
 
   return (
     <AppShell>
@@ -416,8 +427,8 @@ const [stockCountCode, setStockCountCode] = useState("");
         )}
 
         {/* Filters */}
-        <div className="flex gap-2 mb-4">
-          <div className="relative flex-1">
+        <div className="mb-4 space-y-2">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -428,17 +439,63 @@ const [stockCountCode, setStockCountCode] = useState("");
               className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
-          <button
-            onClick={() => setLowStockOnly(!lowStockOnly)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
-              lowStockOnly
-                ? "bg-amber-50 border-amber-300 text-amber-700"
-                : "bg-white border-gray-300 text-gray-600"
-            }`}
-          >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t("inventory.lowStockOnly", lang)}</span>
-          </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label className="relative">
+              <Filter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <span className="sr-only">{t("inventory.filterStock", lang)}</span>
+              <select
+                value={stockFilter}
+                onChange={(e) => setStockFilter(e.target.value as typeof stockFilter)}
+                aria-label={t("inventory.filterStock", lang)}
+                className="w-full appearance-none rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="all">{t("inventory.filterAll", lang)}</option>
+                <option value="low">{t("inventory.filterLow", lang)}</option>
+                <option value="out">{t("inventory.filterOut", lang)}</option>
+                <option value="incoming">{t("inventory.filterIncoming", lang)}</option>
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">{t("inventory.filterSupplier", lang)}</span>
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                aria-label={t("inventory.filterSupplier", lang)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="all">{t("inventory.filterAllSuppliers", lang)}</option>
+                <option value="unassigned">{t("inventory.filterNoSupplier", lang)}</option>
+                {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">{t("inventory.filterReorder", lang)}</span>
+              <select
+                value={reorderFilter}
+                onChange={(e) => setReorderFilter(e.target.value as typeof reorderFilter)}
+                aria-label={t("inventory.filterReorder", lang)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="all">{t("inventory.filterAllReorder", lang)}</option>
+                <option value="reorderable">{t("inventory.filterReorderable", lang)}</option>
+                <option value="stopped">{t("inventory.filterStopped", lang)}</option>
+              </select>
+            </label>
+          </div>
+          {(search || stockFilter !== "all" || supplierFilter !== "all" || reorderFilter !== "all") && (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">
+                {t("inventory.showing", lang).replace("{shown}", String(visibleProducts.length)).replace("{total}", String(products.length))}
+              </p>
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setStockFilter("all"); setSupplierFilter("all"); setReorderFilter("all"); }}
+                className="text-xs font-medium text-brand-700 hover:text-brand-800"
+              >
+                {t("inventory.clearFilters", lang)}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Summary stats */}
@@ -458,15 +515,15 @@ const [stockCountCode, setStockCountCode] = useState("");
         {/* Product list */}
         {loading ? (
           <div className="text-center py-16 text-gray-400">{t("common.loading", lang)}</div>
-        ) : products.length === 0 ? (
+        ) : visibleProducts.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">{t("inventory.noProducts", lang)}</p>
-            <p className="text-gray-400 text-sm mt-1">{t("inventory.noProductsHint", lang)}</p>
+            <p className="text-gray-500 font-medium">{products.length === 0 ? t("inventory.noProducts", lang) : t("inventory.noMatchingProducts", lang)}</p>
+            <p className="text-gray-400 text-sm mt-1">{products.length === 0 ? t("inventory.noProductsHint", lang) : t("inventory.clearFiltersHint", lang)}</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {products.map((p) => {
+            {visibleProducts.map((p) => {
               const isLow = p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1);
               const isOut = p.currentStock === 0;
               const expiry = expiryStatus(p, lang);
@@ -532,10 +589,18 @@ const [stockCountCode, setStockCountCode] = useState("");
                           <p className="text-sm font-medium text-indigo-700">{p.wholesalePrice == null ? "-" : formatTZS(p.wholesalePrice)}</p>
                           {p.wholesaleMinQty != null && <p className="text-[10px] text-gray-400">{lang === "sw" ? `Kuanzia ${p.wholesaleMinQty}` : `From ${p.wholesaleMinQty}`} {p.unit}</p>}
                         </div>
-                        {canViewFinancials && <div>
-                          <p className="text-xs text-gray-400">{t("inventory.marginLabel", lang)}</p>
-                          <p className="text-sm font-medium text-green-600">{margin(p)}%</p>
-                        </div>}
+                        {canViewFinancials && <>
+                          <div>
+                            <p className="text-xs text-gray-400">{t("inventory.retailProfit", lang)}</p>
+                            <p className="text-sm font-medium text-green-600">{p.buyingPrice == null ? "-" : formatTZS(p.sellingPrice - p.buyingPrice)}</p>
+                            {p.buyingPrice != null && <p className="text-[10px] text-gray-400">{profitMargin(p.sellingPrice, p.buyingPrice)}% {t("inventory.marginLabel", lang).toLowerCase()}</p>}
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">{t("inventory.wholesaleProfit", lang)}</p>
+                            <p className="text-sm font-medium text-green-700">{p.wholesalePrice == null || p.buyingPrice == null ? "-" : formatTZS(p.wholesalePrice - p.buyingPrice)}</p>
+                            {p.wholesalePrice != null && p.buyingPrice != null && <p className="text-[10px] text-gray-400">{profitMargin(p.wholesalePrice, p.buyingPrice)}% {t("inventory.marginLabel", lang).toLowerCase()}</p>}
+                          </div>
+                        </>}
                       </div>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
