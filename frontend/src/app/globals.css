@@ -47,5 +47,8 @@ html {
 @media print {
   body * { visibility: hidden; }
   .print-labels, .print-labels * { visibility: visible; }
-  .print-labels { position: absolute; inset: 0; padding: 8mm; }
+  .print-labels { position: absolute; left: 0; top: 0; padding: 0; }
+  .label-print-item, .label-card { break-inside: avoid; page-break-inside: avoid; }
 }
+
+@page { margin: 0; }

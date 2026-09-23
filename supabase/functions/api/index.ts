@@ -282,6 +282,42 @@ function redactProduct(product: Record<string, unknown>, user: Record<string, un
   return canViewFinancials ? product : { ...product, buyingPrice: null };
 }
 
+const BARCODE_TYPES = new Set(["EAN13", "UPC", "CODE128", "INTERNAL"]);
+
+function normalizeBarcode(value: unknown) {
+  return String(value ?? "").trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function inferBarcodeType(value: string, requested?: unknown) {
+  const barcode = normalizeBarcode(value);
+  const explicit = String(requested ?? "").toUpperCase();
+  if (BARCODE_TYPES.has(explicit)) return explicit;
+  if (/^DP\d{8}$/.test(barcode)) return "INTERNAL";
+  if (/^\d{13}$/.test(barcode)) return "EAN13";
+  if (/^\d{12}$/.test(barcode)) return "UPC";
+  return "CODE128";
+}
+
+function validateBarcode(value: unknown) {
+  const barcode = normalizeBarcode(value);
+  if (!barcode) return { value: null, error: null };
+  if (barcode.length < 4 || barcode.length > 64 || !/^[A-Z0-9._-]+$/.test(barcode)) {
+    return { value: null, error: "Barcode must be 4-64 letters, numbers, dots, hyphens, or underscores" };
+  }
+  return { value: barcode, error: null };
+}
+
+function canGenerateBarcode(user: Record<string, unknown>) {
+  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER"));
+}
+
+async function nextInternalBarcode(client: SupabaseClient) {
+  const { data, error } = await client.from("products").select("barcode").like("barcode", "DP%").order("barcode", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  const previous = Number(String(data?.barcode ?? "").slice(2)) || 0;
+  return `DP${String(previous + 1).padStart(8, "0")}`;
+}
+
 function canViewOrderQuantities(user: Record<string, unknown>) {
   const permissions = user.permissions as Record<string, unknown> | undefined;
   return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER")) || permissions?.canManageStock === true;
@@ -335,16 +371,26 @@ async function productCreate(client: SupabaseClient, user: Record<string, unknow
   if (!name || !Number.isFinite(buyingPrice) || !Number.isFinite(sellingPrice)) return json({ error: "name, buyingPrice, and sellingPrice are required" }, 400);
   if (!Number.isInteger(currentStock) || currentStock < 0) return json({ error: "Current stock must be a whole number 0 or greater" }, 400);
   if (wholesalePrice !== null && wholesalePrice > sellingPrice) return json({ error: "Wholesale price cannot be higher than the retail selling price" }, 400);
+  if (body.generateBarcode && !canGenerateBarcode(user)) return json({ error: "Only an owner, manager, or admin can generate barcodes" }, 403);
+  if (body.generateBarcode && shop.barcodeGenerationEnabled === false) return json({ error: "Barcode generation is disabled in settings" }, 403);
+  const checkedBarcode = body.generateBarcode ? { value: await nextInternalBarcode(client), error: null } : validateBarcode(body.barcode);
+  if (checkedBarcode.error) return json({ error: checkedBarcode.error }, 400);
+  const barcode = checkedBarcode.value;
+  const now = new Date().toISOString();
   const product = {
-    id: crypto.randomUUID(), name, sku: body.sku || null, unit: body.unit || "pcs", buyingPrice, sellingPrice, wholesalePrice,
+    id: crypto.randomUUID(), name, sku: body.sku ? String(body.sku).trim() : null, unit: body.unit || "pcs", buyingPrice, sellingPrice, wholesalePrice,
     wholesaleMinQty: body.wholesaleMinQty === undefined || body.wholesaleMinQty === "" ? null : Number(body.wholesaleMinQty), currentStock,
     minimumStock: body.minimumStock === undefined || body.minimumStock === "" ? 5 : Number(body.minimumStock), shopId: shop.id,
     supplierId: body.supplierId || null, doesNotExpire: Boolean(body.doesNotExpire), expiryDate: body.doesNotExpire || !body.expiryDate ? null : new Date(body.expiryDate).toISOString(),
     isReorderable: body.isReorderable !== false, note: body.note ? String(body.note).trim() : null,
-    barcode: body.barcode || null, barcodeType: body.barcodeType || null, barcodeGenerated: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    barcode, barcodeType: barcode ? inferBarcodeType(barcode, body.generateBarcode ? "INTERNAL" : body.barcodeType) : null,
+    barcodeGenerated: Boolean(body.generateBarcode), barcodeCreatedAt: barcode ? now : null, barcodeUpdatedAt: barcode ? now : null, createdAt: now, updatedAt: now,
   };
   const { data, error } = await client.from("products").insert(product).select("*,supplier:suppliers(id,name,phone)").single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === "23505" && String(error.message ?? "").toLowerCase().includes("barcode")) return json({ error: "This barcode is already used by another product." }, 409);
+    throw error;
+  }
   if (currentStock > 0) {
     await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: currentStock, note: "Initial stock", productId: data.id });
   }
@@ -359,9 +405,22 @@ async function productUpdate(client: SupabaseClient, user: Record<string, unknow
   const nextSellingPrice = body.sellingPrice === undefined ? existing.sellingPrice : Number(body.sellingPrice);
   const nextWholesalePrice = body.wholesalePrice === undefined ? existing.wholesalePrice : body.wholesalePrice === null || body.wholesalePrice === "" ? null : Number(body.wholesalePrice);
   if (nextWholesalePrice !== null && nextWholesalePrice > nextSellingPrice) return json({ error: "Wholesale price cannot be higher than the retail selling price" }, 400);
+  if (body.generateBarcode && !canGenerateBarcode(user)) return json({ error: "Only an owner, manager, or admin can generate barcodes" }, 403);
+  if (body.generateBarcode && shop.barcodeGenerationEnabled === false) return json({ error: "Barcode generation is disabled in settings" }, 403);
   const allowed = ["name", "sku", "unit", "buyingPrice", "sellingPrice", "wholesalePrice", "wholesaleMinQty", "minimumStock", "supplierId", "isActive", "expiryDate", "doesNotExpire", "barcode", "barcodeType", "isReorderable"];
   const update: Record<string, unknown> = {};
   for (const key of allowed) if (body[key] !== undefined) update[key] = body[key];
+  if (body.sku !== undefined) update.sku = body.sku ? String(body.sku).trim() : null;
+  if (body.barcode !== undefined || body.generateBarcode) {
+    const checkedBarcode = body.generateBarcode ? { value: await nextInternalBarcode(client), error: null } : validateBarcode(body.barcode);
+    if (checkedBarcode.error) return json({ error: checkedBarcode.error }, 400);
+    const barcode = checkedBarcode.value;
+    update.barcode = barcode;
+    update.barcodeType = barcode ? inferBarcodeType(barcode, body.generateBarcode ? "INTERNAL" : body.barcodeType) : null;
+    update.barcodeGenerated = Boolean(body.generateBarcode) || (barcode === existing.barcode && Boolean(existing.barcodeGenerated));
+    update.barcodeCreatedAt = barcode && !existing.barcode ? new Date().toISOString() : existing.barcodeCreatedAt;
+    update.barcodeUpdatedAt = barcode ? new Date().toISOString() : null;
+  }
   if (body.note !== undefined) update.note = body.note ? String(body.note).trim() : null;
   if (body.imageUrl !== undefined) {
     if (body.imageUrl !== null && (typeof body.imageUrl !== "string" || body.imageUrl.length > 500 || !body.imageUrl.startsWith(`${supabaseUrl}/storage/v1/object/public/product-images/`))) {
@@ -375,7 +434,10 @@ async function productUpdate(client: SupabaseClient, user: Record<string, unknow
   if (body.expiryDate !== undefined && body.doesNotExpire !== true) update.expiryDate = body.expiryDate ? new Date(body.expiryDate).toISOString() : null;
   update.updatedAt = new Date().toISOString();
   const { data, error } = await client.from("products").update(update).eq("id", id).eq("shopId", shop.id).select("*,supplier:suppliers(id,name,phone)").single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === "23505" && String(error.message ?? "").toLowerCase().includes("barcode")) return json({ error: "This barcode is already used by another product." }, 409);
+    throw error;
+  }
   return json({ product: redactProduct(data, user) });
 }
 
@@ -776,7 +838,7 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
 async function barcodes(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) {
   if (path === "/barcodes/settings" && request.method === "GET") { const { data, error } = await client.from("shops").select("barcodeScanningEnabled,bluetoothScannerEnabled,barcodeGenerationEnabled,barcodeAutoFocus,barcodeSuccessSound,barcodeVibrate,barcodeAutoAddToCart").eq("id", shop.id).single(); if (error) throw error; return json({ settings: data }); }
   if (path === "/barcodes/settings" && request.method === "PATCH") { const body = await request.json().catch(() => ({})); const keys = ["barcodeScanningEnabled", "bluetoothScannerEnabled", "barcodeGenerationEnabled", "barcodeAutoFocus", "barcodeSuccessSound", "barcodeVibrate", "barcodeAutoAddToCart"]; const update = Object.fromEntries(keys.filter((key) => typeof body[key] === "boolean").map((key) => [key, body[key]])); const { data, error } = await client.from("shops").update({ ...update, updatedAt: new Date().toISOString() }).eq("id", shop.id).select("barcodeScanningEnabled,bluetoothScannerEnabled,barcodeGenerationEnabled,barcodeAutoFocus,barcodeSuccessSound,barcodeVibrate,barcodeAutoAddToCart").single(); if (error) throw error; return json({ settings: data }); }
-  if (path.startsWith("/barcodes/lookup/")) { const barcode = decodeURIComponent(path.slice("/barcodes/lookup/".length)); const { data: product, error } = await client.from("products").select("*").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); await client.from("barcode_scans").insert({ id: crypto.randomUUID(), shopId: shop.id, barcode, productId: product?.id ?? null, found: Boolean(product), context: new URL(request.url).searchParams.get("context") ?? "POS" }); if (error) throw error; return product ? json({ product }) : json({ error: "This barcode was not found." }, 404); }
+  if (path.startsWith("/barcodes/lookup/")) { const barcode = normalizeBarcode(decodeURIComponent(path.slice("/barcodes/lookup/".length))); const { data: product, error } = await client.from("products").select("*").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); await client.from("barcode_scans").insert({ id: crypto.randomUUID(), shopId: shop.id, barcode, productId: product?.id ?? null, found: Boolean(product), context: new URL(request.url).searchParams.get("context") ?? "POS" }); if (error) throw error; return product ? json({ product }) : json({ error: "This barcode was not found." }, 404); }
   if (path === "/barcodes/history") { const { data, error } = await client.from("barcode_scans").select("*,product:products(id,name,barcode)").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(200); if (error) throw error; return json({ scans: data ?? [] }); }
   if (path === "/barcodes/report") { const [{ data: withoutBarcodes }, { data: scans }] = await Promise.all([client.from("products").select("id,name,currentStock").eq("shopId", shop.id).eq("isActive", true).is("barcode", null), client.from("barcode_scans").select("barcode,product:products(id,name,sellingPrice)").eq("shopId", shop.id).eq("found", true).limit(500)]); const groups = new Map<string, { barcode: string; scans: number; product: unknown }>(); for (const scan of scans ?? []) { const current = groups.get(scan.barcode) ?? { barcode: scan.barcode, scans: 0, product: scan.product }; current.scans++; groups.set(scan.barcode, current); } return json({ withoutBarcodes: withoutBarcodes ?? [], mostScanned: [...groups.values()].sort((a, b) => b.scans - a.scans).slice(0, 20), duplicateAttempts: 0 }); }
   return json({ error: "Barcode route not found" }, 404);
@@ -818,7 +880,7 @@ async function syncAdmin(client: SupabaseClient, request: Request, path: string)
   return json({ error: "Sync admin route not found" }, 404);
 }
 
-async function stockCounts(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) { const parts = path.split("/").filter(Boolean); if (request.method === "POST" && parts.length === 1) { const { data: products } = await client.from("products").select("id,currentStock").eq("shopId", shop.id).eq("isActive", true); const now = new Date().toISOString(); const countId = crypto.randomUUID(); const { error } = await client.from("stock_counts").insert({ id: countId, shopId: shop.id, createdById: user.userId, status: "OPEN", createdAt: now, updatedAt: now }); if (error) throw error; const { error: itemError } = await client.from("stock_count_items").insert((products ?? []).map((p) => ({ id: crypto.randomUUID(), stockCountId: countId, productId: p.id, expected: p.currentStock, counted: 0, createdAt: now, updatedAt: now }))); if (itemError) { await client.from("stock_counts").delete().eq("id", countId); throw itemError; } return stockCountRead(client, shop.id, countId, 201); } const id = parts[1]; if (request.method === "GET") return stockCountRead(client, shop.id, id); if (request.method === "POST" && parts[2] === "scan") { const body = await request.json().catch(() => ({})); const barcode = String(body.barcode ?? "").trim(); const { data: count } = await client.from("stock_counts").select("id,status").eq("id", id).eq("shopId", shop.id).maybeSingle(); if (!count || count.status !== "OPEN") return json({ error: "Open stock count not found" }, 404); const { data: product } = await client.from("products").select("id,name,barcode,unit").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); if (!product) return json({ error: "This barcode was not found." }, 404); const { data: existing } = await client.from("stock_count_items").select("counted").eq("stockCountId", id).eq("productId", product.id).maybeSingle(); if (!existing) return json({ error: "This product is not part of the stock count." }, 404); const { data: item, error } = await client.from("stock_count_items").update({ counted: Number(existing.counted ?? 0) + 1, updatedAt: new Date().toISOString() }).eq("stockCountId", id).eq("productId", product.id).eq("counted", existing.counted).select("*,product:products(id,name,barcode,unit)").single(); if (error) throw error; return json({ item }); } if (request.method === "POST" && parts[2] === "finish") { const body = await request.json().catch(() => ({})); const { data: items } = await client.from("stock_count_items").select("*").eq("stockCountId", id); if (body.applyAdjustments) for (const item of items ?? []) if (item.counted !== item.expected) { const { error: productError } = await client.from("products").update({ currentStock: item.counted, updatedAt: new Date().toISOString() }).eq("id", item.productId).eq("shopId", shop.id); if (productError) throw productError; const { error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "ADJUSTMENT", quantity: item.counted, note: `Stock count ${id}`, productId: item.productId }); if (movementError) throw movementError; } const { error } = await client.from("stock_counts").update({ status: "COMPLETED", completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).eq("id", id).eq("shopId", shop.id); if (error) throw error; return stockCountRead(client, shop.id, id); } return json({ error: "Stock count route not found" }, 404); }
+async function stockCounts(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) { const parts = path.split("/").filter(Boolean); if (request.method === "POST" && parts.length === 1) { const { data: products } = await client.from("products").select("id,currentStock").eq("shopId", shop.id).eq("isActive", true); const now = new Date().toISOString(); const countId = crypto.randomUUID(); const { error } = await client.from("stock_counts").insert({ id: countId, shopId: shop.id, createdById: user.userId, status: "OPEN", createdAt: now, updatedAt: now }); if (error) throw error; const { error: itemError } = await client.from("stock_count_items").insert((products ?? []).map((p) => ({ id: crypto.randomUUID(), stockCountId: countId, productId: p.id, expected: p.currentStock, counted: 0, createdAt: now, updatedAt: now }))); if (itemError) { await client.from("stock_counts").delete().eq("id", countId); throw itemError; } return stockCountRead(client, shop.id, countId, 201); } const id = parts[1]; if (request.method === "GET") return stockCountRead(client, shop.id, id); if (request.method === "POST" && parts[2] === "scan") { const body = await request.json().catch(() => ({})); const barcode = normalizeBarcode(body.barcode); const { data: count } = await client.from("stock_counts").select("id,status").eq("id", id).eq("shopId", shop.id).maybeSingle(); if (!count || count.status !== "OPEN") return json({ error: "Open stock count not found" }, 404); const { data: product } = await client.from("products").select("id,name,barcode,unit").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); if (!product) return json({ error: "This barcode was not found." }, 404); const { data: existing } = await client.from("stock_count_items").select("counted").eq("stockCountId", id).eq("productId", product.id).maybeSingle(); if (!existing) return json({ error: "This product is not part of the stock count." }, 404); const { data: item, error } = await client.from("stock_count_items").update({ counted: Number(existing.counted ?? 0) + 1, updatedAt: new Date().toISOString() }).eq("stockCountId", id).eq("productId", product.id).eq("counted", existing.counted).select("*,product:products(id,name,barcode,unit)").single(); if (error) throw error; return json({ item }); } if (request.method === "POST" && parts[2] === "finish") { const body = await request.json().catch(() => ({})); const { data: items } = await client.from("stock_count_items").select("*").eq("stockCountId", id); if (body.applyAdjustments) for (const item of items ?? []) if (item.counted !== item.expected) { const { error: productError } = await client.from("products").update({ currentStock: item.counted, updatedAt: new Date().toISOString() }).eq("id", item.productId).eq("shopId", shop.id); if (productError) throw productError; const { error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "ADJUSTMENT", quantity: item.counted, note: `Stock count ${id}`, productId: item.productId }); if (movementError) throw movementError; } const { error } = await client.from("stock_counts").update({ status: "COMPLETED", completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).eq("id", id).eq("shopId", shop.id); if (error) throw error; return stockCountRead(client, shop.id, id); } return json({ error: "Stock count route not found" }, 404); }
 async function stockCountRead(client: SupabaseClient, shopId: string, id: string, status = 200) { const { data, error } = await client.from("stock_counts").select("*,items:stock_count_items(*,product:products(id,name,barcode,unit,currentStock))").eq("id", id).eq("shopId", shopId).maybeSingle(); if (error) throw error; return data ? json({ count: data }, status) : json({ error: "Stock count not found" }, 404); }
 
 async function assistant(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) { if (request.method === "GET") { const { data, error } = await client.from("assistant_actions").select("*").eq("shopId", shop.id).order("updatedAt", { ascending: false }).limit(200); if (error) throw error; return json({ actions: data ?? [] }); } const body = await request.json().catch(() => ({})); if (!body.actionKey || !body.title || !body.href) return json({ error: "actionKey, title, and href are required" }, 400); const now = new Date().toISOString(); const { data, error } = await client.from("assistant_actions").upsert({ id: crypto.randomUUID(), shopId: shop.id, actionKey: String(body.actionKey), title: String(body.title), href: String(body.href), status: String(body.status ?? "OPEN").toUpperCase(), updatedAt: now, createdAt: now }, { onConflict: "shopId,actionKey" }).select("*").single(); if (error) throw error; return json({ action: data }, 201); }

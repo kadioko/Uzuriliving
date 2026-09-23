@@ -874,7 +874,7 @@ const [stockCountCode, setStockCountCode] = useState("");
       </Modal>}
       {barcodeScannerOpen && <BarcodeScanner onClose={() => setBarcodeScannerOpen(false)} onDetected={(barcode) => { setForm({ ...form, barcode: barcode.toUpperCase(), generateBarcode: false }); setBarcodeScannerOpen(false); }} />}
       {stockCountScannerOpen && <BarcodeScanner onClose={() => setStockCountScannerOpen(false)} onDetected={scanStockCount} />}
-      {labelProduct?.barcode && <Modal title="Barcode label" onClose={() => setLabelProduct(null)}><div className="space-y-4"><BarcodeLabel value={labelProduct.barcode} name={labelProduct.name} price={formatTZS(labelProduct.sellingPrice)} className="border" /><button onClick={() => window.print()} className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white">Print label</button></div></Modal>}
+      {labelProduct?.barcode && <Modal title="Barcode label" onClose={() => setLabelProduct(null)}><div className="space-y-4"><div className="print-labels"><BarcodeLabel value={labelProduct.barcode} name={labelProduct.name} price={formatTZS(labelProduct.sellingPrice)} className="border" /></div><button onClick={() => window.print()} className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white">Print label</button></div></Modal>}
     </AppShell>
   );
 }
