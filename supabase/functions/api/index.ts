@@ -298,16 +298,31 @@ function inferBarcodeType(value: string, requested?: unknown) {
   return "CODE128";
 }
 
-function validateBarcode(value: unknown) {
+function hasValidCheckDigit(value: string, requested?: unknown) {
+  const barcode = normalizeBarcode(value);
+  const type = inferBarcodeType(barcode, requested);
+  const digits = type === "UPC" && /^\d{12}$/.test(barcode) ? `0${barcode}` : barcode;
+  if (type !== "EAN13" && type !== "UPC") return true;
+  if (!/^\d{13}$/.test(digits)) return false;
+  const sum = [...digits.slice(0, 12)].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+  return (10 - (sum % 10)) % 10 === Number(digits[12]);
+}
+
+function validateBarcode(value: unknown, requested?: unknown) {
   const barcode = normalizeBarcode(value);
   if (!barcode) return { value: null, error: null };
   if (barcode.length < 4 || barcode.length > 64 || !/^[A-Z0-9._-]+$/.test(barcode)) {
     return { value: null, error: "Barcode must be 4-64 letters, numbers, dots, hyphens, or underscores" };
   }
+  if (!hasValidCheckDigit(barcode, requested)) return { value: null, error: "EAN-13 or UPC-A barcode has an invalid check digit" };
   return { value: barcode, error: null };
 }
 
 function canGenerateBarcode(user: Record<string, unknown>) {
+  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER"));
+}
+
+function canManageLabelProfiles(user: Record<string, unknown>) {
   return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER"));
 }
 
@@ -371,9 +386,11 @@ async function productCreate(client: SupabaseClient, user: Record<string, unknow
   if (!name || !Number.isFinite(buyingPrice) || !Number.isFinite(sellingPrice)) return json({ error: "name, buyingPrice, and sellingPrice are required" }, 400);
   if (!Number.isInteger(currentStock) || currentStock < 0) return json({ error: "Current stock must be a whole number 0 or greater" }, 400);
   if (wholesalePrice !== null && wholesalePrice > sellingPrice) return json({ error: "Wholesale price cannot be higher than the retail selling price" }, 400);
+  const requestedBarcodeType = String(body.barcodeType ?? "").toUpperCase();
+  if (requestedBarcodeType && !BARCODE_TYPES.has(requestedBarcodeType)) return json({ error: "Invalid barcode type" }, 400);
   if (body.generateBarcode && !canGenerateBarcode(user)) return json({ error: "Only an owner, manager, or admin can generate barcodes" }, 403);
   if (body.generateBarcode && shop.barcodeGenerationEnabled === false) return json({ error: "Barcode generation is disabled in settings" }, 403);
-  const checkedBarcode = body.generateBarcode ? { value: await nextInternalBarcode(client), error: null } : validateBarcode(body.barcode);
+  const checkedBarcode = body.generateBarcode ? { value: await nextInternalBarcode(client), error: null } : validateBarcode(body.barcode, requestedBarcodeType);
   if (checkedBarcode.error) return json({ error: checkedBarcode.error }, 400);
   const barcode = checkedBarcode.value;
   const now = new Date().toISOString();
@@ -405,6 +422,8 @@ async function productUpdate(client: SupabaseClient, user: Record<string, unknow
   const nextSellingPrice = body.sellingPrice === undefined ? existing.sellingPrice : Number(body.sellingPrice);
   const nextWholesalePrice = body.wholesalePrice === undefined ? existing.wholesalePrice : body.wholesalePrice === null || body.wholesalePrice === "" ? null : Number(body.wholesalePrice);
   if (nextWholesalePrice !== null && nextWholesalePrice > nextSellingPrice) return json({ error: "Wholesale price cannot be higher than the retail selling price" }, 400);
+  const requestedBarcodeType = String(body.barcodeType ?? "").toUpperCase();
+  if (requestedBarcodeType && !BARCODE_TYPES.has(requestedBarcodeType)) return json({ error: "Invalid barcode type" }, 400);
   if (body.generateBarcode && !canGenerateBarcode(user)) return json({ error: "Only an owner, manager, or admin can generate barcodes" }, 403);
   if (body.generateBarcode && shop.barcodeGenerationEnabled === false) return json({ error: "Barcode generation is disabled in settings" }, 403);
   const allowed = ["name", "sku", "unit", "buyingPrice", "sellingPrice", "wholesalePrice", "wholesaleMinQty", "minimumStock", "supplierId", "isActive", "expiryDate", "doesNotExpire", "barcode", "barcodeType", "isReorderable"];
@@ -412,7 +431,7 @@ async function productUpdate(client: SupabaseClient, user: Record<string, unknow
   for (const key of allowed) if (body[key] !== undefined) update[key] = body[key];
   if (body.sku !== undefined) update.sku = body.sku ? String(body.sku).trim() : null;
   if (body.barcode !== undefined || body.generateBarcode) {
-    const checkedBarcode = body.generateBarcode ? { value: await nextInternalBarcode(client), error: null } : validateBarcode(body.barcode);
+    const checkedBarcode = body.generateBarcode ? { value: await nextInternalBarcode(client), error: null } : validateBarcode(body.barcode, requestedBarcodeType);
     if (checkedBarcode.error) return json({ error: checkedBarcode.error }, 400);
     const barcode = checkedBarcode.value;
     update.barcode = barcode;
@@ -835,7 +854,59 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
   return json({ error: "Settings route not found" }, 404);
 }
 
-async function barcodes(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) {
+async function labelProfiles(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
+  const parts = path.split("/").filter(Boolean);
+  const resource = parts[0];
+  const id = parts[1];
+  const isTemplate = resource === "label-templates";
+  const table = isTemplate ? "label_templates" : "printer_profiles";
+  if (request.method === "GET") {
+    const { data, error } = await client.from(table).select("*").eq("shopId", shop.id).order("isDefault", { ascending: false }).order("updatedAt", { ascending: false });
+    if (error) throw error;
+    return json({ [isTemplate ? "templates" : "profiles"]: data ?? [] });
+  }
+  if (!canManageLabelProfiles(user)) return json({ error: "Only the shop owner, manager, or admin can change label and printer profiles" }, 403);
+  if (request.method === "DELETE" && id) {
+    const { error } = await client.from(table).delete().eq("id", id).eq("shopId", shop.id);
+    if (error) throw error;
+    return json({ message: "Profile deleted" });
+  }
+  const body = await request.json().catch(() => ({}));
+  const now = new Date().toISOString();
+  if (isTemplate) {
+    const fields = Array.isArray(body.fields) ? body.fields.filter((field: unknown) => ["name", "price", "barcode", "sku", "unit", "custom"].includes(String(field))) : ["name", "price", "barcode"];
+    if (!fields.length) return json({ error: "A label template must contain at least one field" }, 400);
+    const widthMm = Math.max(20, Math.min(200, Number(body.widthMm) || 40));
+    const heightMm = Math.max(15, Math.min(150, Number(body.heightMm) || 30));
+    const update = { name: String(body.name ?? "Product label").trim().slice(0, 80) || "Product label", widthMm, heightMm, fields, priceMode: body.priceMode === "WHOLESALE" ? "WHOLESALE" : "RETAIL", customText: String(body.customText ?? "").slice(0, 200), ...(body.isDefault === true ? { isDefault: true } : {}), updatedAt: now };
+    if (!update.name) return json({ error: "Template name is required" }, 400);
+    if (id) {
+      const { data, error } = await client.from(table).update(update).eq("id", id).eq("shopId", shop.id).select("*").single();
+      if (error) throw error;
+      return json({ template: data });
+    }
+    const { data, error } = await client.from(table).insert({ id: crypto.randomUUID(), ...update, shopId: shop.id, createdById: user.userId, createdAt: now }).select("*").single();
+    if (error) throw error;
+    return json({ template: data }, 201);
+  }
+  const protocols = new Set(["BROWSER", "ZPL", "TSPL", "ESCPOS"]);
+  const connections = new Set(["BROWSER", "DOWNLOAD", "USB", "NETWORK", "BLUETOOTH"]);
+  const protocol = String(body.protocol ?? "BROWSER").toUpperCase();
+  const connection = String(body.connection ?? "BROWSER").toUpperCase();
+  if (!protocols.has(protocol) || !connections.has(connection)) return json({ error: "Invalid printer protocol or connection" }, 400);
+  const update = { name: String(body.name ?? "Browser printer").trim().slice(0, 80) || "Browser printer", protocol, connection, model: body.model ? String(body.model).trim().slice(0, 100) : null, config: body.config && typeof body.config === "object" ? body.config : {}, ...(body.isDefault === true ? { isDefault: true } : {}), updatedAt: now };
+  if (id) {
+    const { data, error } = await client.from(table).update(update).eq("id", id).eq("shopId", shop.id).select("*").single();
+    if (error) throw error;
+    return json({ profile: data });
+  }
+  const { data, error } = await client.from(table).insert({ id: crypto.randomUUID(), ...update, shopId: shop.id, createdById: user.userId, createdAt: now }).select("*").single();
+  if (error) throw error;
+  return json({ profile: data }, 201);
+}
+
+async function barcodes(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
+  if (path === "/barcodes/label-templates" || path.startsWith("/barcodes/label-templates/") || path === "/barcodes/printer-profiles" || path.startsWith("/barcodes/printer-profiles/")) return labelProfiles(client, user, shop, request, path.replace("/barcodes", ""));
   if (path === "/barcodes/settings" && request.method === "GET") { const { data, error } = await client.from("shops").select("barcodeScanningEnabled,bluetoothScannerEnabled,barcodeGenerationEnabled,barcodeAutoFocus,barcodeSuccessSound,barcodeVibrate,barcodeAutoAddToCart").eq("id", shop.id).single(); if (error) throw error; return json({ settings: data }); }
   if (path === "/barcodes/settings" && request.method === "PATCH") { const body = await request.json().catch(() => ({})); const keys = ["barcodeScanningEnabled", "bluetoothScannerEnabled", "barcodeGenerationEnabled", "barcodeAutoFocus", "barcodeSuccessSound", "barcodeVibrate", "barcodeAutoAddToCart"]; const update = Object.fromEntries(keys.filter((key) => typeof body[key] === "boolean").map((key) => [key, body[key]])); const { data, error } = await client.from("shops").update({ ...update, updatedAt: new Date().toISOString() }).eq("id", shop.id).select("barcodeScanningEnabled,bluetoothScannerEnabled,barcodeGenerationEnabled,barcodeAutoFocus,barcodeSuccessSound,barcodeVibrate,barcodeAutoAddToCart").single(); if (error) throw error; return json({ settings: data }); }
   if (path.startsWith("/barcodes/lookup/")) { const barcode = normalizeBarcode(decodeURIComponent(path.slice("/barcodes/lookup/".length))); const { data: product, error } = await client.from("products").select("*").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); await client.from("barcode_scans").insert({ id: crypto.randomUUID(), shopId: shop.id, barcode, productId: product?.id ?? null, found: Boolean(product), context: new URL(request.url).searchParams.get("context") ?? "POS" }); if (error) throw error; return product ? json({ product }) : json({ error: "This barcode was not found." }, 404); }
@@ -1143,7 +1214,7 @@ async function handle(request: Request) {
   if (path.startsWith("/barcodes/")) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    return barcodes(db, access.shop!, request, path);
+    return barcodes(db, access.user!, access.shop!, request, path);
   }
 
   if (path === "/notifications") {

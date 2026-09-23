@@ -16,6 +16,8 @@ export default function HelpPage() {
     [lang === "sw" ? "Nawezaje kushare catalog?" : "How do I share the catalog?", lang === "sw" ? "Fungua Catalog, chagua duka lako, kisha tuma link kwa WhatsApp au mitandao mingine." : "Open Catalog, choose your shop, then send the link on WhatsApp or other channels."],
     [lang === "sw" ? "Staff wanaingiaje?" : "How do staff sign in?", lang === "sw" ? "Owner anaongeza staff, simu na PIN kwenye ukurasa wa Staff. Staff hutumia simu na PIN kuingia." : "The owner adds staff, phone, and PIN on the Staff page. Staff use that phone and PIN to sign in."],
     [lang === "sw" ? "Offline inafanya kazi?" : "Does offline work?", lang === "sw" ? "Ukurasa wa Sales unaweza kuhifadhi mauzo kwenye browser ukiwa offline na kuyasawazisha internet ikirudi. Kagua sync history kwa hitilafu za stock." : "The Sales page can save sales locally while offline and sync them when internet returns. Check sync history for stock conflict errors."],
+    [lang === "sw" ? "Ninatumiaje barcode na labels?" : "How do I use barcodes and labels?", lang === "sw" ? "Ongeza barcode kwenye Inventory, kisha fungua Barcode management → Labels kuchagua bidhaa, ukubwa, fields na copies. Tumia Print kwa browser/PDF au download printer file kwa ZPL/TSPL." : "Add the barcode in Inventory, then open Barcode management → Labels to choose products, size, fields, and copies. Use Print for browser/PDF or download a printer file for ZPL/TSPL."],
+    [lang === "sw" ? "Scanner haioni bidhaa, nifanye nini?" : "What if the scanner cannot find a product?", lang === "sw" ? "Hakikisha barcode imehifadhiwa kwenye bidhaa active, scanner inatuma Enter baada ya scan, au tumia camera/manual entry kuthibitisha code." : "Make sure the barcode is saved on an active product, the scanner sends Enter after each scan, or use camera/manual entry to verify the code."],
     [lang === "sw" ? "Ninalipaje subscription?" : "How do I pay for subscription?", lang === "sw" ? "Njia ya kwanza: M-Pesa Lipa Number 52806296 jina Necuva Group Limited. Njia ya pili: Mix by Yas Lipa Number 18214626 jina Necuva. Njia ya tatu: tuma pesa 0743910580. Baada ya kulipa, weka reference kwenye Billing au tuma WhatsApp 0743910580." : "First option: M-Pesa Lipa Number 52806296, name Necuva Group Limited. Second option: Mix by Yas Lipa Number 18214626, name Necuva. Third option: send money to 0743910580. After paying, submit the reference in Billing or WhatsApp 0743910580."],
     [lang === "sw" ? "Nitajuaje malipo yamekubaliwa?" : "How do I know payment was confirmed?", lang === "sw" ? "Billing inaonyesha maombi yako ya malipo na status. Admin akithibitisha, plan itaonekana active." : "Billing shows your payment requests and status. Once admin confirms, your plan shows active."],
     [lang === "sw" ? "AI Assistant inanisaidiaje?" : "How does the AI Assistant help?", lang === "sw" ? "Inapanga hatua za leo kama kuagiza bidhaa, kufuatilia madeni, kupunguza gharama na kushughulikia order." : "It ranks today's actions like restocking, following up debts, reducing costs, and handling orders."],
@@ -92,6 +94,11 @@ export default function HelpPage() {
             {lang === "sw" ? "Maswali muhimu zaidi ya Uzuri Living yapo hapa chini." : "The most important Uzuri Living questions are answered below."}
           </p>
         </div>
+
+        <Link href="/help/barcodes" className="flex items-center justify-between gap-4 rounded-2xl border border-brand-100 bg-brand-50 px-5 py-4 shadow-sm hover:bg-brand-100">
+          <div><p className="font-semibold text-brand-950">{lang === "sw" ? "Mwongozo wa barcode na labels" : "Barcode and label guide"}</p><p className="mt-1 text-sm text-brand-900">{lang === "sw" ? "Jifunze kuweka code, kuscan POS, kuchapisha na kutatua matatizo." : "Learn how to add codes, scan in POS, print labels, and troubleshoot."}</p></div>
+          <BookOpen className="h-5 w-5 flex-shrink-0 text-brand-700" />
+        </Link>
 
         <ProductProofSection compact />
 

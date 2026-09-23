@@ -351,6 +351,7 @@ export default function SalesPage() {
   const handleBarcode = useCallback(async (value: string) => {
     setScannerOpen(false);
     const normalized = value.trim().toUpperCase();
+    if (!normalized) return;
     try {
       const data = await api.get<{ product: Product }>(`/barcodes/lookup/${encodeURIComponent(normalized)}?context=POS`, lang);
       addToCart(data.product);
@@ -365,6 +366,8 @@ export default function SalesPage() {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || scannerOpen) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || "")) return;
       if (event.key === "Enter" && scannerBuffer.current.length >= 4) { const value = scannerBuffer.current; scannerBuffer.current = ""; if (scannerTimer.current) clearTimeout(scannerTimer.current); handleBarcode(value); return; }
       if (event.key.length !== 1) return;
       scannerBuffer.current += event.key;

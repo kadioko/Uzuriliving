@@ -1,5 +1,8 @@
 export type LabelField = "name" | "price" | "barcode" | "sku" | "unit" | "custom";
 export type LabelPriceMode = "RETAIL" | "WHOLESALE";
+export type BarcodeType = "EAN13" | "UPC" | "CODE128" | "INTERNAL";
+export type PrinterProtocol = "BROWSER" | "ZPL" | "TSPL" | "ESCPOS";
+export type PrinterConnection = "BROWSER" | "DOWNLOAD" | "USB" | "NETWORK" | "BLUETOOTH";
 
 export interface LabelTemplate {
   id: string;
@@ -17,8 +20,19 @@ export interface LabelProduct {
   sku?: string | null;
   barcode?: string | null;
   unit?: string | null;
+  barcodeType?: BarcodeType | string | null;
   sellingPrice: number;
   wholesalePrice?: number | null;
+}
+
+export interface PrinterProfile {
+  id: string;
+  name: string;
+  protocol: PrinterProtocol;
+  connection: PrinterConnection;
+  model?: string | null;
+  config?: Record<string, unknown>;
+  isDefault?: boolean;
 }
 
 export const DEFAULT_LABEL_TEMPLATE: LabelTemplate = {
