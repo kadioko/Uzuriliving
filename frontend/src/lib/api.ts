@@ -43,6 +43,13 @@ export function getFriendlyErrorMessage(message: string, lang: Lang): string {
     return t("auth.error.unexpectedResponse", lang);
   }
 
+  if (
+    normalized.includes("exceed_cached_egress_quota") ||
+    normalized.includes("Service for this project is restricted")
+  ) {
+    return t("auth.error.serviceRestricted", lang);
+  }
+
   if (normalized === "Subscription required" || normalized === "SUBSCRIPTION_REQUIRED") {
     return t("billing.subscriptionRequired", lang);
   }
@@ -139,7 +146,7 @@ async function request<T>(
     const rawMessage =
       typeof payload === "string"
         ? payload || `Request failed with status ${res.status}`
-        : payload?.error || `Request failed with status ${res.status}`;
+        : payload?.error || payload?.message || `Request failed with status ${res.status}`;
 
     throw new Error(getFriendlyErrorMessage(rawMessage, lang));
   }

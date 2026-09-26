@@ -231,6 +231,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "auth.error.serverOffline": { sw: "Imeshindikana kufikia seva ya Uzuri Living. Hakikisha API URL ni sahihi na backend ipo hewani.", en: "Unable to reach the Uzuri Living server. Confirm the API URL is correct and the backend is online." },
   "auth.error.serverTimeout": { sw: "Seva ya Uzuri Living imechelewa kujibu. Tafadhali jaribu tena.", en: "The Uzuri Living server took too long to respond. Please try again." },
   "auth.error.unexpectedResponse": { sw: "Seva ya Uzuri Living imerudisha majibu yasiyotegemewa.", en: "The Uzuri Living server returned an unexpected response format." },
+  "auth.error.serviceRestricted": { sw: "Huduma ya Uzuri Living imesitishwa kwa muda kwa sababu kikomo cha matumizi ya seva kimefikiwa. Tafadhali jaribu tena baada ya mmiliki wa mfumo kurekebisha suala la huduma.", en: "Uzuri Living is temporarily unavailable because the service usage limit has been reached. Please try again after the project billing restriction is cleared." },
   "billing.subscriptionRequired": { sw: "Jaribio au usajili umeisha. Wasiliana WhatsApp +255743910580 ili kuendelea kutumia Uzuri Living.", en: "Your trial or subscription has expired. Contact WhatsApp +255743910580 to continue using Uzuri Living." },
 
   "common.save": { sw: "Hifadhi", en: "Save" },
