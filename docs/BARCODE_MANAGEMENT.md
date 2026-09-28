@@ -142,3 +142,13 @@ Uzuri Living currently provides browser/SVG label preview and printing plus down
 The bridge listens on `http://127.0.0.1:38100` by default and binds to loopback only. It exposes `GET /health`, `GET /printers`, `POST /test`, and `POST /print`. Do not expose its port to the public internet. Optional `UZURI_BRIDGE_TOKEN` support is available if the bridge needs to bind beyond loopback.
 
 The bridge also has Windows USB spooler and paired Bluetooth COM-port adapters. LAN remains the recommended first connection because it is easier to share and troubleshoot. Printer profiles are intentionally protocol- and connection-based so native adapters can evolve without changing product data or label templates.
+
+### Android phone printing
+
+The Android app now accepts `uzuriliving://print` requests from Barcode management. Save a printer profile with connection **Android phone (LAN / Bluetooth / USB)** and configure the matching transport:
+
+- **Wi-Fi / LAN:** phone and printer must be on the same network; enter the printer IP and usually port 9100.
+- **Bluetooth:** pair the printer in Android settings and enter its Bluetooth address.
+- **USB OTG:** connect the printer with a compatible OTG cable; the app requests USB permission and uses the printer's bulk output endpoint.
+
+Android label jobs are sent as the same TSPL, ZPL, EPL, or ESC/POS payload used by the browser and desktop bridge. Start with one label and keep mobile batches small because the Android handoff carries the job in an app intent. iPhone/iPad remains a later native adapter because this repository has no iOS target.

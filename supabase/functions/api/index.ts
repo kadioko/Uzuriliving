@@ -890,7 +890,7 @@ async function labelProfiles(client: SupabaseClient, user: Record<string, unknow
     return json({ template: data }, 201);
   }
   const protocols = new Set(["BROWSER", "ZPL", "TSPL", "EPL", "ESCPOS"]);
-  const connections = new Set(["BROWSER", "DOWNLOAD", "BRIDGE", "USB", "NETWORK", "BLUETOOTH"]);
+  const connections = new Set(["BROWSER", "DOWNLOAD", "BRIDGE", "ANDROID", "USB", "NETWORK", "BLUETOOTH"]);
   const protocol = String(body.protocol ?? "BROWSER").toUpperCase();
   const connection = String(body.connection ?? "BROWSER").toUpperCase();
   if (!protocols.has(protocol) || !connections.has(connection)) return json({ error: "Invalid printer protocol or connection" }, 400);
