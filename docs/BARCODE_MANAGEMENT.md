@@ -141,4 +141,4 @@ Uzuri Living currently provides browser/SVG label preview and printing plus down
 
 The bridge listens on `http://127.0.0.1:38100` by default and binds to loopback only. It exposes `GET /health`, `GET /printers`, `POST /test`, and `POST /print`. Do not expose its port to the public internet. Optional `UZURI_BRIDGE_TOKEN` support is available if the bridge needs to bind beyond loopback.
 
-Direct USB and Bluetooth adapters remain separate future modules. Printer profiles are intentionally protocol- and connection-based so those adapters can be added without changing product data or label templates.
+The bridge also has Windows USB spooler and paired Bluetooth COM-port adapters. LAN remains the recommended first connection because it is easier to share and troubleshoot. Printer profiles are intentionally protocol- and connection-based so native adapters can evolve without changing product data or label templates.

@@ -9,7 +9,7 @@ The Print Bridge is a small local service that receives label commands from the 
 - Raw TCP printing, normally port `9100`
 - Windows, macOS, or Linux with Node.js 20+
 
-USB and Bluetooth adapters are intentionally not enabled in this first bridge release. They require OS-specific/native handling and should be added without changing the web label engine.
+Windows USB and paired Bluetooth COM-port adapters are also supported by the bridge. LAN remains the recommended first connection because it is easier to share and troubleshoot.
 
 ## Run it
 
@@ -23,6 +23,29 @@ npm start
 ```
 
 The bridge listens on `http://127.0.0.1:38100` by default. It binds to loopback only; do not expose this port to the public internet.
+
+### USB on Windows
+
+Install the printer normally so it appears in **Windows Printers & scanners**, then set:
+
+```text
+UZURI_PRINTER_CONNECTION=USB
+UZURI_PRINTER_QUEUE=the exact Windows printer queue name
+```
+
+The bridge sends RAW data through the Windows spooler. The printer driver must accept raw TSPL/ZPL/EPL data; a driver that rasterizes the job may not understand label commands.
+
+### Bluetooth on Windows
+
+Pair the printer in Windows and identify the outgoing COM port in Device Manager. Then set:
+
+```text
+UZURI_PRINTER_CONNECTION=BLUETOOTH
+UZURI_PRINTER_SERIAL_PATH=COM3
+UZURI_PRINTER_BAUD_RATE=9600
+```
+
+Bluetooth printing depends on the printer's module exposing a serial/RFCOMM port. Verify the port and baud rate from the exact hardware manual.
 
 ## Test it
 

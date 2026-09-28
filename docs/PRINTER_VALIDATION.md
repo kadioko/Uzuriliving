@@ -88,14 +88,26 @@ For every failed test record:
 - A photo of the output and the printer settings
 - Whether the same product scans successfully from the browser preview
 
-## Direct bridge work still to be implemented
+## Direct bridge validation
 
-The web application currently downloads printer commands; it does not open raw USB, Bluetooth, or network sockets. The next bridge implementation should provide one local, authenticated adapter with:
+The repository now includes `printer-bridge/`, a loopback local service that exposes `GET /health`, `GET /printers`, `POST /test`, and `POST /print`. It supports:
 
-1. `POST /print` accepting a printer profile and rendered payload.
-2. A device allow-list so the browser cannot send arbitrary data to arbitrary printers.
-3. Job IDs, retries, cancellation, and a visible print result.
-4. Adapters for browser/PDF, ZPL over TCP 9100, TSPL through the same raw path, and ESC/POS through a byte-safe transport.
-5. A QZ Tray or signed local-agent option for USB/Bluetooth access where the browser cannot connect directly.
+- Network/LAN raw TCP printing, normally port 9100.
+- Windows USB through a RAW Windows printer queue.
+- Windows Bluetooth through a paired serial/RFCOMM COM port.
+- TSPL, ZPL, EPL, and ESC/POS payload validation.
 
-Do not enable direct printing until the actual printer model, connection type, and command language have been confirmed.
+Before calling a printer supported, run the following on the shop computer:
+
+1. Copy `printer-bridge/.env.example` to `.env`.
+2. Configure exactly one connection: `NETWORK`, `USB`, or `BLUETOOTH`.
+3. Start the bridge with `npm start`.
+4. Confirm `GET http://127.0.0.1:38100/health` reports the expected connection.
+5. Use `POST /test` with matching media loaded.
+6. Print one product label from Barcode management.
+7. Scan the physical barcode back into POS.
+8. Repeat with a batch of three labels and confirm there are no duplicate, blank, shifted, or extra feeds.
+
+For USB, the Windows queue must accept RAW data rather than rasterizing the file. For Bluetooth, the exact printer module must expose a serial COM port and the baud rate must match its manual. LAN is the recommended first production connection.
+
+The bridge code and simulator tests are complete, but physical certification still requires the actual XP-D281B/D281E, its firmware, its interface module, and its label media. Do not promise a hardware connection to customers until those tests pass.
