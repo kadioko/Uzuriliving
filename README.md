@@ -60,6 +60,8 @@ https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api
 supabase functions deploy api --project-ref ryadgenkvhgxjdyhbyqc --no-verify-jwt
 ```
 
+If the CLI returns `401 Unauthorized`, the Supabase personal access token is expired, revoked, or not available in the current shell. Authenticate again with `supabase login` or set a newly generated token only for the current session, then retry the command. Never commit the token or place it in `.env` files tracked by Git.
+
 Apply migrations through the linked Supabase project before deploying frontend changes that depend on new database columns or buckets. Keep `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, Africa's Talking credentials, VAPID keys, and other secrets in Supabase secrets; never commit them.
 
 ## Verification
