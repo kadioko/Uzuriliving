@@ -23,7 +23,7 @@ plugins {
 
 def twaManifest = [
     applicationId: 'com.uzuriliving.app',
-    hostName: 'www.uzuriliving.com', // The domain being opened in the TWA.
+    hostName: 'uzuriliving.com', // The canonical domain being opened in the TWA.
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
     name: 'Uzuri Living', // The application name.
     launcherName: 'Uzuri Living', // The name shown on the Android Launcher.
@@ -41,9 +41,9 @@ def twaManifest = [
     // - url: Absolute path of the URL to launch the app with (e.g '/create').
     // - icon: Name of the resource in the drawable folder to use as an icon.
     shortcuts: [
-        [name: 'Record sale', short_name: 'Sale', url: 'https://www.uzuriliving.com/sales?shortcut=sale', icon: 'shortcut_sale'],
-        [name: 'Inventory', short_name: 'Stock', url: 'https://www.uzuriliving.com/inventory?shortcut=inventory', icon: 'shortcut_inventory'],
-        [name: 'Customer debts', short_name: 'Debts', url: 'https://www.uzuriliving.com/debts?shortcut=debts', icon: 'shortcut_debts'],
+        [name: 'Record sale', short_name: 'Sale', url: 'https://uzuriliving.com/sales?shortcut=sale', icon: 'shortcut_sale'],
+        [name: 'Inventory', short_name: 'Stock', url: 'https://uzuriliving.com/inventory?shortcut=inventory', icon: 'shortcut_inventory'],
+        [name: 'Customer debts', short_name: 'Debts', url: 'https://uzuriliving.com/debts?shortcut=debts', icon: 'shortcut_debts'],
     ],
     // The duration of fade out animation in milliseconds to be played when removing splash screen.
     splashScreenFadeOutDuration: 300,
@@ -81,8 +81,8 @@ android {
         minSdkVersion 23
         // Google Play requires Android 16 / API 36 for app updates from 31 August 2026.
         targetSdkVersion 36
-        versionCode 5
-        versionName "1.0.4"
+        versionCode 6
+        versionName "1.0.5"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
@@ -100,7 +100,7 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://www.uzuriliving.com/manifest.json'
+            resValue "string", "webManifestUrl", 'https://uzuriliving.com/manifest.json'
         
 
         

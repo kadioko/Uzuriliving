@@ -1,6 +1,6 @@
 {
   "packageId": "com.uzuriliving.app",
-  "host": "www.uzuriliving.com",
+  "host": "uzuriliving.com",
   "name": "Uzuri Living",
   "launcherName": "Uzuri Living",
   "display": "standalone",
@@ -14,38 +14,38 @@
   "enableNotifications": false,
   "enableSiteSettingsShortcut": true,
   "startUrl": "/",
-  "iconUrl": "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
-  "maskableIconUrl": "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
-  "monochromeIconUrl": "https://www.uzuriliving.com/logo/uzuriliving-logo.svg",
+  "iconUrl": "https://uzuriliving.com/logo/uzuriliving-logo.svg",
+  "maskableIconUrl": "https://uzuriliving.com/logo/uzuriliving-logo.svg",
+  "monochromeIconUrl": "https://uzuriliving.com/logo/uzuriliving-logo.svg",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "keystores/uzuriliving-upload.jks",
     "alias": "uzuriliving"
   },
-  "appVersion": "1.0.4",
-  "appVersionCode": 5,
+  "appVersion": "1.0.5",
+  "appVersionCode": 6,
   "shortcuts": [
     {
       "name": "Record sale",
       "short_name": "Sale",
-      "url": "https://www.uzuriliving.com/sales?shortcut=sale",
+      "url": "https://uzuriliving.com/sales?shortcut=sale",
       "icon": "shortcut_sale"
     },
     {
       "name": "Inventory",
       "short_name": "Stock",
-      "url": "https://www.uzuriliving.com/inventory?shortcut=inventory",
+      "url": "https://uzuriliving.com/inventory?shortcut=inventory",
       "icon": "shortcut_inventory"
     },
     {
       "name": "Customer debts",
       "short_name": "Debts",
-      "url": "https://www.uzuriliving.com/debts?shortcut=debts",
+      "url": "https://uzuriliving.com/debts?shortcut=debts",
       "icon": "shortcut_debts"
     }
   ],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://www.uzuriliving.com/manifest.json",
+  "webManifestUrl": "https://uzuriliving.com/manifest.json",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {
