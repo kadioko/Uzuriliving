@@ -2,6 +2,12 @@
 
 This plan is used when the shop has the actual printer hardware. The Epson L3250 currently connected to the development computer is a general-purpose IPP printer; it is suitable for browser/PDF label sheets, but it is not a ZPL, TSPL, or ESC/POS label-printer test device.
 
+## Recommended hardware target
+
+The first physical target is the **Xprinter XP-D281B with USB + Ethernet/LAN**. It is the preferred general-purpose choice for ordinary product labels because its 203-DPI output is sufficient for readable text and barcodes. The XP-D281E is the 300-DPI option for smaller or denser labels. Confirm the exact unit's ports, firmware, media sensor mode, and supported command languages with the seller before ordering.
+
+The web app and label renderer are printer-independent. The physical printer is only responsible for receiving the selected output language and feeding the matching media. Physical certification is still required before claiming that a specific XP-D281B/D281E batch is supported.
+
 ## Test setup
 
 Use one product with:
@@ -111,3 +117,17 @@ Before calling a printer supported, run the following on the shop computer:
 For USB, the Windows queue must accept RAW data rather than rasterizing the file. For Bluetooth, the exact printer module must expose a serial COM port and the baud rate must match its manual. LAN is the recommended first production connection.
 
 The bridge code and simulator tests are complete, but physical certification still requires the actual XP-D281B/D281E, its firmware, its interface module, and its label media. Do not promise a hardware connection to customers until those tests pass.
+
+## Android phone validation
+
+The Android APK can receive a label job from the hosted web app and send it through one of three transports:
+
+1. **LAN/Wi-Fi:** the phone and printer are on the same network and the printer accepts raw TCP, normally on port 9100.
+2. **Bluetooth:** the printer is paired in Android settings and its Bluetooth address is saved in the printer profile.
+3. **USB OTG:** the phone has USB host support, a compatible OTG adapter, and permission to access the printer's bulk output endpoint.
+
+Test each transport with one 40 × 30 mm label, then three labels, then a mixed-product batch. Verify that Android version, printer firmware, interface module, media sensor mode, and the exact APK version are recorded with the result.
+
+## iPhone and iPad validation boundary
+
+Safari/PWA testing should cover login, product selection, label preview, PDF download, and browser printing. It should not be recorded as direct USB/Bluetooth printer certification. Direct iOS printing requires a native companion, supported printer SDK, or a tested network bridge and should be validated as a separate project.

@@ -126,9 +126,13 @@ Reduce the number of fields, choose a wider label, or increase the label height.
 5. Review labels whenever a product's unit, pack size, or selling price changes.
 6. Keep one saved browser profile and one saved raw-printer profile per printer language, not per individual product.
 
-## Current support boundary
+## Current support boundary and printer choice
 
 Uzuri Living currently provides browser/SVG label preview and printing plus downloadable ZPL, TSPL, EPL, and ESC/POS-oriented output files. For the first direct-print workflow, install the local **Uzuri Living Print Bridge** on a computer that can reach an Xprinter over LAN. The bridge sends TSPL to the printer over raw TCP, normally port 9100, while the web app continues to own the label template and product data.
+
+The recommended first device is the **Xprinter XP-D281B with USB + Ethernet/LAN**. It is a 203-DPI direct-thermal printer and is normally sufficient for product name, price, SKU, and barcode labels. The **XP-D281E** is the 300-DPI alternative when very small text or dense barcodes are important. Both models must be confirmed with the seller for the exact interface and command-language configuration before purchase. They do not use ink or ribbon, but they do require compatible thermal label media.
+
+The default Uzuri Living label is approximately **40 × 30 mm**. The label renderer also supports other sizes, so the physical media must match the selected template. Start with one test label before printing a batch.
 
 ### Direct printing with Xprinter XP-D281B/D281E
 
@@ -145,10 +149,24 @@ The bridge also has Windows USB spooler and paired Bluetooth COM-port adapters. 
 
 ### Android phone printing
 
-The Android app now accepts `uzuriliving://print` requests from Barcode management. Save a printer profile with connection **Android phone (LAN / Bluetooth / USB)** and configure the matching transport:
+The Android app is a Trusted Web Activity connected to the same live Uzuri Living web app and Supabase backend. It now accepts `uzuriliving://print` requests from Barcode management. Install the latest Android build before testing; the web app can change without reinstalling, but the native printer adapter requires the updated APK.
+
+Save a printer profile with connection **Android phone (LAN / Bluetooth / USB)** and configure the matching transport:
 
 - **Wi-Fi / LAN:** phone and printer must be on the same network; enter the printer IP and usually port 9100.
 - **Bluetooth:** pair the printer in Android settings and enter its Bluetooth address.
 - **USB OTG:** connect the printer with a compatible OTG cable; the app requests USB permission and uses the printer's bulk output endpoint.
 
 Android label jobs are sent as the same TSPL, ZPL, EPL, or ESC/POS payload used by the browser and desktop bridge. Start with one label and keep mobile batches small because the Android handoff carries the job in an app intent. iPhone/iPad remains a later native adapter because this repository has no iOS target.
+
+### iPhone and iPad
+
+The Uzuri Living web app, product data, label preview, PDF download, and browser printing work on iPhone and iPad through Safari or an installed PWA. Safari cannot reliably open a raw USB, Bluetooth Classic, or TCP printer connection, so the web app alone should not be advertised as direct Xprinter printing on iOS.
+
+For iPhone/iPad direct printing, use one of these future paths:
+
+- A native Uzuri Living iOS companion using the printer manufacturer's SDK or supported network interface.
+- A shop computer running the authenticated Print Bridge, with the iPhone/iPad submitting jobs through a supported local bridge workflow.
+- A printer with a supported network-printing workflow rather than Bluetooth-only hardware.
+
+AirPrint is not the same as sending raw TSPL/ZPL to an Xprinter. Do not promise AirPrint compatibility unless the exact printer and adapter have been tested.

@@ -2,6 +2,8 @@
 
 The Print Bridge is a small local service that receives label commands from the hosted Uzuri Living web app and sends them to a network thermal printer. It keeps raw printer access out of the browser while allowing the same label template to work with different printer languages.
 
+The web app remains the source of truth for products, prices, barcodes, label fields, and copies. The bridge only handles the final local transport to the configured printer.
+
 ## First supported setup
 
 - Xprinter XP-D281B or XP-D281E with Ethernet/LAN
@@ -10,6 +12,8 @@ The Print Bridge is a small local service that receives label commands from the 
 - Windows, macOS, or Linux with Node.js 20+
 
 Windows USB and paired Bluetooth COM-port adapters are also supported by the bridge. LAN remains the recommended first connection because it is easier to share and troubleshoot.
+
+For a new shop, order the XP-D281B with USB + Ethernet/LAN if available. The 203-DPI model is normally enough for 40 × 30 mm product labels. Use the XP-D281E when very small text or dense barcodes justify 300 DPI. Always confirm the exact ports and TSPL support with the seller.
 
 ## Run it
 
@@ -63,6 +67,16 @@ Invoke-RestMethod -Method Post http://127.0.0.1:38100/test
 
 The test label is 50 × 30 mm. Load matching media before sending it.
 
+## Use it from Uzuri Living
+
+1. Start the bridge on the shop computer.
+2. Open **Barcode management → Labels** in Uzuri Living.
+3. Select products, fields, label size, and copies.
+4. Save or select a printer profile using the matching protocol and **Local bridge (LAN)** connection.
+5. Run **Test bridge**, print one label, and scan it back into POS before printing a batch.
+
+The bridge accepts TSPL, ZPL, EPL, and ESC/POS-oriented payloads. The printer must support the selected language; do not send a TSPL file to a printer configured only for another language.
+
 ## Security
 
 The service is loopback-only by default. If it is ever bound to another interface, set `UZURI_BRIDGE_TOKEN` and use a firewall rule that only permits the shop network. The bridge does not accept arbitrary shell commands; it accepts only validated printer-language payloads and sends them to the configured printer.
@@ -75,3 +89,7 @@ The service is loopback-only by default. If it is ever bound to another interfac
 - `POST /print` — send `{ "printerId": "default", "protocol": "TSPL", "data": "..." }`
 
 The web app should use `POST /print` for TSPL, ZPL, EPL, or ESC/POS output. For ESC/POS, `data` is a hexadecimal byte string.
+
+## Mobile boundary
+
+The Android Uzuri Living APK can send jobs directly through LAN, paired Bluetooth, or USB OTG without this desktop bridge. iPhone and iPad can use the web app for label preview, PDF, and browser printing, but Safari alone cannot reliably send raw TSPL/ZPL over USB or Bluetooth. Direct iOS printing needs a native companion or a tested network bridge.

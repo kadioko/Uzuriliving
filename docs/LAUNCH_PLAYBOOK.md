@@ -247,7 +247,8 @@ Do not optimize for signups alone. Optimize for activated shops and paid convers
 - Customer orders follow `PENDING -> CONFIRMED -> OUT_FOR_DELIVERY -> DELIVERED`.
 - Mobile Orders has no horizontal page overflow; Sales shows the sticky cart summary.
 - Public catalog contains only published, non-demo shops and supports pagination.
-- Android `1.0.3` / version code `4` targets API 36 and is signed with the existing upload key before Play Console upload.
+- Android `1.0.5` / version code `6` targets API 36 and uses the canonical `https://uzuriliving.com` origin for the Trusted Web Activity and Digital Asset Links.
+- Android printer handoff supports LAN, paired Bluetooth, and USB OTG through the native adapter; physical XP-D281B/D281E testing is still required before release claims.
 - For local release builds, copy `android/keystores/signing.properties.example` to the ignored `signing.properties` file and keep its credentials in the password manager, never Git.
 
 ## Immediate Next Product Improvements

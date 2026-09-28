@@ -27,6 +27,7 @@ The `backend/` directory contains legacy/local tooling and schema references. Pr
 - POS sales, customer debts, expenses, supplier orders, and public customer orders.
 - Supplier portal and staff permissions.
 - Admin user visibility, reports, subscriptions, audit logs, and operational monitoring.
+- Product labels with browser/PDF output, ZPL/TSPL/EPL/ESC/POS downloads, saved printer profiles, and Android phone printing.
 - Kiswahili-first interface with English support.
 
 ## Repository layout
@@ -37,6 +38,7 @@ supabase/functions/api/   Supabase Edge Function API
 supabase/migrations/      Supabase database migrations and demo seed
 docs/                     Operations, email, launch, and test documentation
 android/                  Trusted Web Activity configuration
+printer-bridge/           Local USB, Bluetooth, and LAN printer bridge
 marketing/                Uzuri Living marketing assets
 ```
 
@@ -79,6 +81,9 @@ Use [TESTING.md](./TESTING.md) for the current production smoke checklist and [d
 - [Test users](./docs/TEST_USERS.md)
 - [Email setup](./docs/EMAIL.md)
 - [Barcode management](./docs/BARCODE_MANAGEMENT.md)
+- [Printer setup guide](./docs/PRINTER_SETUP_GUIDE.md)
+- [Printer validation plan](./docs/PRINTER_VALIDATION.md)
+- [Local print bridge](./printer-bridge/README.md)
 - [Production alerts and restore](./docs/PRODUCTION_ALERTS_AND_RESTORE.md)
 - [Launch playbook](./docs/LAUNCH_PLAYBOOK.md)
 - [Marketing assets](./marketing/README.md)
