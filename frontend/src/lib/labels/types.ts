@@ -1,8 +1,8 @@
 export type LabelField = "name" | "price" | "barcode" | "sku" | "unit" | "custom";
 export type LabelPriceMode = "RETAIL" | "WHOLESALE";
 export type BarcodeType = "EAN13" | "UPC" | "CODE128" | "INTERNAL";
-export type PrinterProtocol = "BROWSER" | "ZPL" | "TSPL" | "ESCPOS";
-export type PrinterConnection = "BROWSER" | "DOWNLOAD" | "USB" | "NETWORK" | "BLUETOOTH";
+export type PrinterProtocol = "BROWSER" | "ZPL" | "TSPL" | "EPL" | "ESCPOS";
+export type PrinterConnection = "BROWSER" | "DOWNLOAD" | "BRIDGE" | "USB" | "NETWORK" | "BLUETOOTH";
 
 export interface LabelTemplate {
   id: string;

@@ -6,7 +6,7 @@ import { Barcode, Check, ClipboardList, Printer, RefreshCw, ScanLine, Search, Ta
 import AppShell from "@/components/layout/AppShell";
 import { BarcodeLabel } from "@/components/barcode/BarcodeLabel";
 import { api, formatTZS } from "@/lib/api";
-import { DEFAULT_LABEL_TEMPLATE, LABEL_FIELD_OPTIONS, type LabelField, type LabelPriceMode, type LabelTemplate, type PrinterProfile, type PrinterProtocol } from "@/lib/labels/types";
+import { DEFAULT_LABEL_TEMPLATE, LABEL_FIELD_OPTIONS, type LabelField, type LabelPriceMode, type LabelTemplate, type PrinterConnection, type PrinterProfile, type PrinterProtocol } from "@/lib/labels/types";
 import { renderPrinterFile } from "@/lib/labels/printers";
 import { useLang } from "@/lib/i18n";
 
@@ -54,6 +54,10 @@ export default function BarcodesPage() {
   const [templateName, setTemplateName] = useState("Product 40 × 30 mm");
   const [printerName, setPrinterName] = useState("Browser printing");
   const [printerProtocol, setPrinterProtocol] = useState<PrinterProtocol>("BROWSER");
+  const [printerConnection, setPrinterConnection] = useState<PrinterConnection>("BROWSER");
+  const [bridgeUrl, setBridgeUrl] = useState("http://127.0.0.1:38100");
+  const [bridgeToken, setBridgeToken] = useState("");
+  const [bridgeBusy, setBridgeBusy] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +82,13 @@ export default function BarcodesPage() {
         setTemplateName(defaultTemplate.name);
       }
       const defaultProfile = (profileData.profiles ?? []).find((item) => item.isDefault) ?? profileData.profiles?.[0];
-      if (defaultProfile) setActivePrinterId(defaultProfile.id);
+      if (defaultProfile) {
+        setActivePrinterId(defaultProfile.id);
+        setPrinterProtocol(defaultProfile.protocol);
+        setPrinterConnection(defaultProfile.connection);
+        const profileBridgeUrl = defaultProfile.config && typeof defaultProfile.config.bridgeUrl === "string" ? defaultProfile.config.bridgeUrl : "";
+        if (profileBridgeUrl) setBridgeUrl(profileBridgeUrl);
+      }
     } finally {
       setLoading(false);
     }
@@ -118,13 +128,69 @@ export default function BarcodesPage() {
     setTemplateName(saved.name);
   };
 
+  useEffect(() => {
+    setBridgeToken(window.localStorage.getItem("uzuri_bridge_token") || "");
+  }, []);
+
   const selectedPrinter = printerProfiles.find((profile) => profile.id === activePrinterId);
-  const exportLabels = () => {
+  const selectedBridgeUrl = selectedPrinter?.config && typeof selectedPrinter.config.bridgeUrl === "string" ? selectedPrinter.config.bridgeUrl : bridgeUrl;
+  const selectedBridgeToken = bridgeToken.trim();
+
+  const bridgeRequest = async (path: string, body?: unknown) => {
+    const endpoint = selectedBridgeUrl.trim().replace(/\/$/, "");
+    if (!endpoint) throw new Error("Enter the local print bridge URL first.");
+    const response = await fetch(`${endpoint}${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: { "Content-Type": "application/json", ...(selectedBridgeToken ? { Authorization: `Bearer ${selectedBridgeToken}` } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Print bridge returned ${response.status}.`);
+    return payload;
+  };
+
+  const testBridge = async () => {
+    setBridgeBusy(true);
+    try {
+      await bridgeRequest("/health");
+      setProfileMessage("Print bridge is connected. Use Test print after confirming the printer has matching labels loaded.");
+    } catch (error) {
+      setProfileMessage(error instanceof Error ? error.message : "Could not reach the print bridge.");
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
+
+  const testPrint = async () => {
+    setBridgeBusy(true);
+    try {
+      const result = await bridgeRequest("/test", {});
+      setProfileMessage(`Test label sent to ${result.printer || "the printer"}.`);
+    } catch (error) {
+      setProfileMessage(error instanceof Error ? error.message : "Could not send a test label.");
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
+
+  const exportLabels = async () => {
     if (!selectedPrinter || selectedPrinter.protocol === "BROWSER") {
       window.print();
       return;
     }
     const output = renderPrinterFile(selectedPrinter.protocol, printProducts, template);
+    if (selectedPrinter.connection === "BRIDGE") {
+      setBridgeBusy(true);
+      try {
+        const result = await bridgeRequest("/print", { printerId: selectedPrinter.config?.printerId || "default", protocol: selectedPrinter.protocol, data: output.content });
+        setProfileMessage(`Sent ${printProducts.length} label${printProducts.length === 1 ? "" : "s"} to ${result.printer || "the printer"}.`);
+      } catch (error) {
+        setProfileMessage(error instanceof Error ? error.message : "Could not send labels to the print bridge.");
+      } finally {
+        setBridgeBusy(false);
+      }
+      return;
+    }
     const blob = new Blob([output.content], { type: output.mime });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -149,7 +215,8 @@ export default function BarcodesPage() {
 
   const savePrinterProfile = async () => {
     try {
-      const data = await api.post<{ profile: PrinterProfile }>("/barcodes/printer-profiles", { name: printerName.trim() || "Printer profile", protocol: printerProtocol, connection: printerProtocol === "BROWSER" ? "BROWSER" : "DOWNLOAD", isDefault: true });
+      if (printerConnection === "BRIDGE") window.localStorage.setItem("uzuri_bridge_token", bridgeToken.trim());
+      const data = await api.post<{ profile: PrinterProfile }>("/barcodes/printer-profiles", { name: printerName.trim() || "Printer profile", protocol: printerProtocol, connection: printerProtocol === "BROWSER" ? "BROWSER" : printerConnection, config: printerConnection === "BRIDGE" ? { bridgeUrl: bridgeUrl.trim() || "http://127.0.0.1:38100", printerId: "default" } : {}, isDefault: true });
       setPrinterProfiles((current) => [data.profile, ...current.filter((item) => item.id !== data.profile.id)]);
       setActivePrinterId(data.profile.id);
       setProfileMessage("Printer profile saved for this shop.");
@@ -168,13 +235,13 @@ export default function BarcodesPage() {
       </div>}
       {tab === "labels" && <div className="space-y-4">
         <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-gray-950">{lang === "sw" ? "Chapisha labels" : "Print labels"}</h2><p className="text-xs text-gray-500">{lang === "sw" ? "Chagua bidhaa, muonekano, ukubwa na idadi." : "Choose products, fields, size, and copies."}</p></div><button disabled={!printProducts.length} onClick={exportLabels} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"><Printer className="h-4 w-4" />{selectedPrinter && selectedPrinter.protocol !== "BROWSER" ? "Download printer file" : "Print"} ({printProducts.length})</button></div>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-gray-950">{lang === "sw" ? "Chapisha labels" : "Print labels"}</h2><p className="text-xs text-gray-500">{lang === "sw" ? "Chagua bidhaa, muonekano, ukubwa na idadi." : "Choose products, fields, size, and copies."}</p></div><button disabled={!printProducts.length || bridgeBusy} onClick={() => void exportLabels()} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"><Printer className="h-4 w-4" />{selectedPrinter?.connection === "BRIDGE" ? "Print directly" : selectedPrinter && selectedPrinter.protocol !== "BROWSER" ? "Download printer file" : "Print"} ({printProducts.length})</button></div>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_280px]">
             <div className="space-y-3">
               <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Muundo wa label" : "Label content"}</p><div className="grid gap-2 sm:grid-cols-2">{FIELD_PRESETS.map((preset) => <button key={preset.label} type="button" onClick={() => setFields(preset.fields)} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-semibold ${JSON.stringify(template.fields) === JSON.stringify(preset.fields) ? "border-brand-400 bg-brand-50 text-brand-800" : "border-gray-200 text-gray-600"}`}><span>{lang === "sw" ? preset.sw : preset.label}</span>{JSON.stringify(template.fields) === JSON.stringify(preset.fields) && <Check className="h-4 w-4" />}</button>)}</div></div>
               <div className="rounded-lg border border-gray-200 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Sehemu maalum" : "Custom fields"}</p><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{LABEL_FIELD_OPTIONS.map((field) => <label key={field.value} className="flex items-center gap-2 text-xs text-gray-700"><input type="checkbox" checked={template.fields.includes(field.value)} onChange={() => toggleField(field.value)} className="h-4 w-4 rounded border-gray-300 text-brand-600" />{lang === "sw" ? field.sw : field.label}</label>)}</div>{template.fields.includes("custom") && <input value={template.customText} onChange={(event) => setTemplate((current) => ({ ...current, customText: event.target.value }))} placeholder={lang === "sw" ? "Maandishi ya ziada" : "Custom label text"} className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />}</div>
               <div className="flex flex-wrap items-center gap-2"><label className="text-xs font-semibold text-gray-600">{lang === "sw" ? "Bei" : "Price"}</label><select value={template.priceMode} onChange={(event) => setTemplate((current) => ({ ...current, priceMode: event.target.value as LabelPriceMode }))} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs"><option value="RETAIL">{lang === "sw" ? "Rejareja" : "Retail"}</option><option value="WHOLESALE">{lang === "sw" ? "Jumla" : "Wholesale"}</option></select><button type="button" onClick={resetTemplate} className="ml-auto text-xs font-semibold text-brand-700">{lang === "sw" ? "Rudisha default" : "Reset defaults"}</button></div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Hifadhi muundo na printer" : "Save template and printer"}</p><div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-gray-600">Template name<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label><label className="text-xs text-gray-600">Saved template<select value={savedTemplates.some((item) => item.id === template.id) ? template.id : ""} onChange={(event) => chooseTemplate(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm"><option value="">Current unsaved template</option>{savedTemplates.map((saved) => <option key={saved.id} value={saved.id}>{saved.name}</option>)}</select></label><label className="text-xs text-gray-600">Printer profile<select value={activePrinterId} onChange={(event) => setActivePrinterId(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm"><option value="">Browser print / Save as PDF</option>{printerProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} ({profile.protocol})</option>)}</select></label></div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={saveTemplate} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">Save label template</button><input value={printerName} onChange={(event) => setPrinterName(event.target.value)} placeholder="Printer name" className="min-w-[150px] flex-1 rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /><select value={printerProtocol} onChange={(event) => setPrinterProtocol(event.target.value as PrinterProtocol)} className="rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs"><option value="BROWSER">Browser/PDF</option><option value="ZPL">ZPL download</option><option value="TSPL">TSPL download</option><option value="ESCPOS">ESC/POS hex</option></select><button type="button" onClick={savePrinterProfile} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">Save printer</button></div>{profileMessage && <p className="mt-2 text-xs text-gray-600">{profileMessage}</p>}</div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Hifadhi muundo na printer" : "Save template and printer"}</p><div className="grid gap-2 sm:grid-cols-2"><label className="text-xs text-gray-600">Template name<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label><label className="text-xs text-gray-600">Saved template<select value={savedTemplates.some((item) => item.id === template.id) ? template.id : ""} onChange={(event) => chooseTemplate(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm"><option value="">Current unsaved template</option>{savedTemplates.map((saved) => <option key={saved.id} value={saved.id}>{saved.name}</option>)}</select></label><label className="text-xs text-gray-600">Printer profile<select value={activePrinterId} onChange={(event) => { const profile = printerProfiles.find((item) => item.id === event.target.value); setActivePrinterId(event.target.value); if (profile) { setPrinterProtocol(profile.protocol); setPrinterConnection(profile.connection); if (typeof profile.config?.bridgeUrl === "string") setBridgeUrl(profile.config.bridgeUrl); } }} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm"><option value="">Browser print / Save as PDF</option>{printerProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} ({profile.protocol} · {profile.connection})</option>)}</select></label></div><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="text-xs text-gray-600">Printer name<input value={printerName} onChange={(event) => setPrinterName(event.target.value)} placeholder="Printer name" className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label><label className="text-xs text-gray-600">Output protocol<select value={printerProtocol} onChange={(event) => setPrinterProtocol(event.target.value as PrinterProtocol)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs"><option value="BROWSER">Browser/PDF</option><option value="ZPL">ZPL</option><option value="TSPL">TSPL</option><option value="EPL">EPL</option><option value="ESCPOS">ESC/POS hex</option></select></label><label className="text-xs text-gray-600">Connection<select value={printerConnection} onChange={(event) => setPrinterConnection(event.target.value as PrinterConnection)} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-xs"><option value="BROWSER">Browser dialog</option><option value="DOWNLOAD">Download file</option><option value="BRIDGE">Local bridge (LAN)</option><option value="USB" disabled>USB adapter (later)</option><option value="BLUETOOTH" disabled>Bluetooth adapter (later)</option></select></label>{printerConnection === "BRIDGE" && <><label className="text-xs text-gray-600">Bridge URL<input value={bridgeUrl} onChange={(event) => setBridgeUrl(event.target.value)} placeholder="http://127.0.0.1:38100" className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label><label className="text-xs text-gray-600">Bridge token (optional)<input type="password" value={bridgeToken} onChange={(event) => setBridgeToken(event.target.value)} placeholder="Only if configured" className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label></>}</div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={saveTemplate} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">Save label template</button>{printerConnection === "BRIDGE" && <><button type="button" onClick={() => void testBridge()} disabled={bridgeBusy} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">Test bridge</button><button type="button" onClick={() => void testPrint()} disabled={bridgeBusy} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">Test print</button></>}<button type="button" onClick={savePrinterProfile} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-200">Save printer</button></div>{profileMessage && <p className="mt-2 text-xs text-gray-600">{profileMessage}</p>}</div>
             </div>
             <div className="rounded-xl border border-brand-100 bg-brand-50 p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-800">{lang === "sw" ? "Ukubwa wa label" : "Label size"}</p><div className="grid grid-cols-2 gap-2">{SIZE_PRESETS.map((size) => <button key={size.label} type="button" onClick={() => setSize(size.widthMm, size.heightMm)} className={`rounded-lg border px-2 py-2 text-xs font-semibold ${template.widthMm === size.widthMm && template.heightMm === size.heightMm ? "border-brand-500 bg-white text-brand-800" : "border-brand-100 bg-brand-100/50 text-brand-700"}`}>{size.label}</button>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs text-gray-600">Width (mm)<input type="number" min="20" max="200" value={template.widthMm} onChange={(event) => setTemplate((current) => ({ ...current, widthMm: Math.max(20, Math.min(200, Number(event.target.value) || 20)) }))} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label><label className="text-xs text-gray-600">Height (mm)<input type="number" min="15" max="150" value={template.heightMm} onChange={(event) => setTemplate((current) => ({ ...current, heightMm: Math.max(15, Math.min(150, Number(event.target.value) || 15)) }))} className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm" /></label></div><div className="mt-4 border-t border-brand-100 pt-3"><p className="mb-2 text-xs font-semibold text-brand-800">Preview</p>{previewProduct ? <BarcodeLabel value={previewProduct.barcode} barcodeType={previewProduct.barcodeType} name={previewProduct.name} price={labelPrice(previewProduct)} sku={previewProduct.sku} unit={previewProduct.unit} customText={template.customText} fields={template.fields} widthMm={template.widthMm} heightMm={template.heightMm} className="mx-auto border border-brand-200 shadow-sm" /> : <p className="py-8 text-center text-xs text-gray-500">{lang === "sw" ? "Chagua bidhaa kuona preview." : "Select a product to see a preview."}</p>}</div></div>
           </div>

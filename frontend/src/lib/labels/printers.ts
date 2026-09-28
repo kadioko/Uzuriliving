@@ -46,6 +46,16 @@ export function renderTspl(products: LabelProduct[], template: LabelTemplate): s
   }).join("\n\n");
 }
 
+export function renderEpl(products: LabelProduct[], template: LabelTemplate): string {
+  return products.map((product) => {
+    const lines = productLines(product, template);
+    const barcode = labelBarcode(product, template);
+    const text = lines.map((line, index) => `A24,${24 + index * 24},0,3,1,1,N,"${escapeText(line)}"`).join("\n");
+    const barcodeCommand = barcode ? `B24,${Math.max(40, 24 + lines.length * 24)},0,1,2,4,60,B,"${escapeText(barcode)}"` : "";
+    return `N\n${text}${barcodeCommand ? `\n${barcodeCommand}` : ""}\nP1`;
+  }).join("\n\n");
+}
+
 function escPosText(value: string): string {
   return `${value}\n`;
 }
@@ -70,6 +80,7 @@ export function renderEscPos(products: LabelProduct[], template: LabelTemplate):
 export function renderPrinterFile(protocol: PrinterProtocol, products: LabelProduct[], template: LabelTemplate): { content: string; extension: string; mime: string } {
   if (protocol === "ZPL") return { content: renderZpl(products, template), extension: "zpl", mime: "text/plain;charset=utf-8" };
   if (protocol === "TSPL") return { content: renderTspl(products, template), extension: "tspl", mime: "text/plain;charset=utf-8" };
+  if (protocol === "EPL") return { content: renderEpl(products, template), extension: "epl", mime: "text/plain;charset=utf-8" };
   if (protocol === "ESCPOS") return { content: renderEscPos(products, template), extension: "escpos.hex", mime: "text/plain;charset=utf-8" };
   return { content: "", extension: "html", mime: "text/html;charset=utf-8" };
 }

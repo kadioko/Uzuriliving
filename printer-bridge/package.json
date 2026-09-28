@@ -1,0 +1,14 @@
+{
+  "name": "uzuriliving-print-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Uzuri Living bridge for sending label commands to a network thermal printer.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

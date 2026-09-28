@@ -128,4 +128,17 @@ Reduce the number of fields, choose a wider label, or increase the label height.
 
 ## Current support boundary
 
-Uzuri Living currently provides browser/SVG label preview and printing plus downloadable ZPL, TSPL, and ESC/POS-oriented output files. Direct USB, Bluetooth, and network transmission still requires a local print bridge or manufacturer utility. Printer profiles are intentionally protocol-based so future adapters can be added without changing product data or label templates.
+Uzuri Living currently provides browser/SVG label preview and printing plus downloadable ZPL, TSPL, EPL, and ESC/POS-oriented output files. For the first direct-print workflow, install the local **Uzuri Living Print Bridge** on a computer that can reach an Xprinter over LAN. The bridge sends TSPL to the printer over raw TCP, normally port 9100, while the web app continues to own the label template and product data.
+
+### Direct printing with Xprinter XP-D281B/D281E
+
+1. Buy the USB + Ethernet/LAN version and confirm that the exact unit supports TSPL and raw TCP printing.
+2. On the shop computer, install Node.js 20 or newer.
+3. Copy `printer-bridge/.env.example` to `.env` inside `printer-bridge` and set `UZURI_PRINTER_HOST` to the printer's LAN IP address.
+4. Run `npm start` from `printer-bridge`.
+5. Open Barcode management → Labels, save a printer profile with protocol **TSPL** and connection **Local bridge (LAN)**, then use **Test bridge**.
+6. Load matching 40 × 30 mm media and use the bridge's **Test print** endpoint before printing a batch.
+
+The bridge listens on `http://127.0.0.1:38100` by default and binds to loopback only. It exposes `GET /health`, `GET /printers`, `POST /test`, and `POST /print`. Do not expose its port to the public internet. Optional `UZURI_BRIDGE_TOKEN` support is available if the bridge needs to bind beyond loopback.
+
+Direct USB and Bluetooth adapters remain separate future modules. Printer profiles are intentionally protocol- and connection-based so those adapters can be added without changing product data or label templates.
