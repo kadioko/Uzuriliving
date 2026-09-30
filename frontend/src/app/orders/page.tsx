@@ -91,6 +91,7 @@ export default function OrdersPage() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [whatsappMsg, setWhatsappMsg] = useState<{ message: string; whatsappUrl: string | null } | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [orderSearch, setOrderSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
 
   useEffect(() => {
@@ -428,7 +429,21 @@ export default function OrdersPage() {
     const link = document.createElement("a"); link.download = `uzuri-order-${(batch[0].orderGroupId || batch[0].id).slice(-8)}.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.92); link.click();
   }
 
-  const filtered = statusFilter === "all" ? orders : orders.filter((o) => o.status === statusFilter);
+  const filtered = useMemo(() => {
+    const query = orderSearch.trim().toLowerCase();
+    return (statusFilter === "all" ? orders : orders.filter((o) => o.status === statusFilter)).filter((order) => {
+      if (!query) return true;
+      const searchable = [
+        order.id,
+        order.orderGroupId,
+        order.supplier.name,
+        order.supplier.phone,
+        order.note,
+        ...order.items.flatMap((item) => [item.product.name, item.product.id, item.note]),
+      ].filter(Boolean).join(" ").toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [orders, orderSearch, statusFilter]);
   const grouped = useMemo(() => {
     const batches = new Map<string, Order[]>();
     for (const order of filtered) {
@@ -471,12 +486,34 @@ export default function OrdersPage() {
           ))}
         </div>
 
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={orderSearch}
+            onChange={(event) => setOrderSearch(event.target.value)}
+            placeholder={lang === "sw" ? "Tafuta supplier, bidhaa, namba ya order..." : "Search supplier, product, order number..."}
+            aria-label={lang === "sw" ? "Tafuta supplier orders" : "Search supplier orders"}
+            className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-10 text-sm outline-none transition placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+          />
+          {orderSearch && (
+            <button
+              type="button"
+              onClick={() => setOrderSearch("")}
+              aria-label={lang === "sw" ? "Futa utafutaji" : "Clear search"}
+              className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 min-h-0"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
         {loading ? (
           <div className="text-center py-16 text-gray-400">{t("common.loading", lang)}</div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <Truck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">{t("orders.none", lang)}</p>
+            <p className="text-gray-500">{orderSearch ? (lang === "sw" ? "Hakuna order inayolingana na utafutaji." : "No supplier orders match your search.") : t("orders.none", lang)}</p>
+            {orderSearch && <button type="button" onClick={() => setOrderSearch("")} className="mt-3 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 min-h-0">{lang === "sw" ? "Futa utafutaji" : "Clear search"}</button>}
           </div>
         ) : (
           <div className="space-y-3">
