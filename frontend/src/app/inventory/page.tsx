@@ -660,7 +660,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                       >
                         <ArrowUp className="w-4 h-4" />
                       </button>}
-                      {canManageExpiry && !canAddInventory && <button
+                      {canManageExpiry && !(canAddInventory && canViewFinancials) && <button
                         onClick={() => { setExpiryProduct(p); setExpiryForm({ expiryDate: p.expiryDate ? p.expiryDate.slice(0, 10) : "", doesNotExpire: p.doesNotExpire }); }}
                         aria-label={`${lang === "sw" ? "Hariri tarehe ya mwisho" : "Edit expiry date"} ${p.name}`}
                         className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-orange-50 hover:text-orange-600 transition-colors min-h-0"

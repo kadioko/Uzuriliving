@@ -53,7 +53,7 @@ export default function StaffPage() {
   const permissionLabels = {
     canSell: lang === "sw" ? "Kuuza" : "Sell",
     canManageStock: lang === "sw" ? "Udhibiti wa stock" : "Stock controls",
-    canAddInventory: lang === "sw" ? "Ongeza inventory" : "Add inventory",
+    canAddInventory: lang === "sw" ? "Ongeza stock / inventory" : "Add stock / inventory",
     canManageExpiry: lang === "sw" ? "Tarehe za mwisho" : "Manage expiry dates",
     canRefundStock: lang === "sw" ? "Pokea stock iliyorudi" : "Receive returned stock",
     canManageStaff: lang === "sw" ? "Wafanyakazi" : "Staff",
