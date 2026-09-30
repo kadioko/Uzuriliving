@@ -12,6 +12,9 @@ interface StaffMember {
   role: string;
   canSell: boolean;
   canManageStock: boolean;
+  canAddInventory: boolean;
+  canManageExpiry: boolean;
+  canRefundStock: boolean;
   canManageStaff: boolean;
   canViewReports: boolean;
   canRecordExpenses: boolean;
@@ -42,14 +45,17 @@ export default function StaffPage() {
     await load();
   }
 
-  async function togglePermission(member: StaffMember, field: keyof Pick<StaffMember, "canSell" | "canManageStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "isActive">) {
+  async function togglePermission(member: StaffMember, field: keyof Pick<StaffMember, "canSell" | "canManageStock" | "canAddInventory" | "canManageExpiry" | "canRefundStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "isActive">) {
     await api.patch(`/staff/${member.id}`, { [field]: !member[field] }, lang);
     await load();
   }
 
   const permissionLabels = {
     canSell: lang === "sw" ? "Kuuza" : "Sell",
-    canManageStock: lang === "sw" ? "Bidhaa" : "Stock",
+    canManageStock: lang === "sw" ? "Udhibiti wa stock" : "Stock controls",
+    canAddInventory: lang === "sw" ? "Ongeza inventory" : "Add inventory",
+    canManageExpiry: lang === "sw" ? "Tarehe za mwisho" : "Manage expiry dates",
+    canRefundStock: lang === "sw" ? "Pokea stock iliyorudi" : "Receive returned stock",
     canManageStaff: lang === "sw" ? "Wafanyakazi" : "Staff",
     canViewReports: lang === "sw" ? "Ripoti" : "Reports",
     canRecordExpenses: lang === "sw" ? "Kurekodi matumizi" : "Record expenses",
@@ -93,7 +99,7 @@ export default function StaffPage() {
                   {member.isActive ? (lang === "sw" ? "Hai" : "Active") : (lang === "sw" ? "Imezimwa" : "Inactive")}
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+              <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
                 {(Object.keys(permissionLabels) as Array<keyof typeof permissionLabels>).map((field) => (
                   <label key={field} className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
                     <input type="checkbox" checked={member[field]} onChange={() => togglePermission(member, field)} />

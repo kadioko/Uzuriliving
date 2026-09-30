@@ -12,6 +12,7 @@ import {
   X,
   ArrowUp,
   ArrowDown,
+  Undo2,
   CalendarClock,
   Trash2,
   ScanLine,
@@ -56,7 +57,7 @@ interface Supplier {
 
 interface OwnerSupplierUser {
   role: string;
-  staff?: { role?: string; permissions?: { canViewReports?: boolean } };
+  staff?: { role?: string; permissions?: { canViewReports?: boolean; canManageStock?: boolean; canAddInventory?: boolean; canManageExpiry?: boolean; canRefundStock?: boolean } };
   shop?: { ownerSupplierManagementEnabled?: boolean } | null;
 }
 
@@ -94,6 +95,8 @@ export default function InventoryPage() {
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
+  const [expiryProduct, setExpiryProduct] = useState<Product | null>(null);
+  const [expiryForm, setExpiryForm] = useState({ expiryDate: "", doesNotExpire: false });
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [form, setForm] = useState({
     name: "", sku: "", unit: "pcs", buyingPrice: "", sellingPrice: "",
@@ -107,6 +110,10 @@ export default function InventoryPage() {
   const latestLoad = useRef(0);
   const mutationInFlight = useRef(false);
   const [canViewFinancials, setCanViewFinancials] = useState(true);
+  const [canManageStock, setCanManageStock] = useState(true);
+  const [canAddInventory, setCanAddInventory] = useState(true);
+  const [canManageExpiry, setCanManageExpiry] = useState(true);
+  const [canRefundStock, setCanRefundStock] = useState(true);
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const [labelProduct, setLabelProduct] = useState<Product | null>(null);
   const [stockCount, setStockCount] = useState<{ id: string; items: Array<{ id: string; expected: number; counted: number; product: { id: string; name: string; barcode?: string | null; unit: string } }> } | null>(null);
@@ -154,7 +161,13 @@ const [stockCountCode, setStockCountCode] = useState("");
   useEffect(() => {
     api.get<{ user: OwnerSupplierUser }>("/auth/me")
       .then((data) => {
-        setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports));
+        const fullAccess = data.user.role === "ADMIN" || (data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER" || data.user.staff.role === "MANAGER"));
+        const permissions = data.user.staff?.permissions;
+        setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewReports));
+        setCanManageStock(fullAccess || Boolean(permissions?.canManageStock));
+        setCanAddInventory(fullAccess || Boolean(permissions?.canAddInventory || permissions?.canManageStock));
+        setCanManageExpiry(fullAccess || Boolean(permissions?.canManageExpiry || permissions?.canManageStock));
+        setCanRefundStock(fullAccess || Boolean(permissions?.canRefundStock || permissions?.canManageStock));
         setCanManageOwnerSuppliers(Boolean(data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER") && data.user.shop?.ownerSupplierManagementEnabled));
       })
       .catch(() => setCanViewFinancials(false));
@@ -257,7 +270,7 @@ const [stockCountCode, setStockCountCode] = useState("");
     mutationInFlight.current = true;
     setSaving(true);
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         name: form.name, sku: form.sku || undefined, unit: form.unit,
         ...(canViewFinancials ? { buyingPrice: Number(form.buyingPrice) } : {}), sellingPrice: Number(form.sellingPrice),
         wholesalePrice: form.wholesalePrice === "" ? null : Number(form.wholesalePrice),
@@ -265,12 +278,14 @@ const [stockCountCode, setStockCountCode] = useState("");
         currentStock: Number(form.currentStock), minimumStock: Number(form.minimumStock),
         supplierId: form.supplierId || undefined,
         isReorderable: form.isReorderable, note: form.note.trim() || null,
-        doesNotExpire: form.doesNotExpire,
-        expiryDate: form.doesNotExpire ? null : (form.expiryDate || null),
         barcode: form.barcode || null,
         barcodeType: form.barcodeType || undefined,
         generateBarcode: form.generateBarcode,
       };
+      if (canManageExpiry) {
+        body.doesNotExpire = form.doesNotExpire;
+        body.expiryDate = form.doesNotExpire ? null : (form.expiryDate || null);
+      }
       const response = editProduct
         ? await api.patch<{ product: Product }>(`/products/${editProduct.id}`, body)
         : await api.post<{ product: Product }>("/products", body);
@@ -304,6 +319,10 @@ const [stockCountCode, setStockCountCode] = useState("");
       toast(lang === "sw" ? "Weka idadi sahihi ya namba kamili." : "Enter a valid whole quantity.", "error");
       return;
     }
+    if (adjustForm.type === "RETURN" && !adjustForm.note.trim()) {
+      toast(lang === "sw" ? "Andika sababu ya stock iliyorudi." : "Add a note explaining the returned stock.", "error");
+      return;
+    }
     mutationInFlight.current = true;
     setSaving(true);
     try {
@@ -322,6 +341,25 @@ const [stockCountCode, setStockCountCode] = useState("");
     } finally {
       setSaving(false);
       mutationInFlight.current = false;
+    }
+  }
+
+  async function handleExpirySave() {
+    if (!expiryProduct || !canManageExpiry) return;
+    setSaving(true);
+    try {
+      const response = await api.patch<{ product: Product }>(`/products/${expiryProduct.id}`, {
+        doesNotExpire: expiryForm.doesNotExpire,
+        expiryDate: expiryForm.doesNotExpire ? null : (expiryForm.expiryDate || null),
+      }, lang);
+      setProducts((current) => current.map((product) => product.id === response.product.id ? response.product : product));
+      setExpiryProduct(null);
+      toast(lang === "sw" ? "Tarehe ya mwisho imehifadhiwa." : "Expiry date updated.", "success");
+      await fetchProducts();
+    } catch (error: unknown) {
+      toast(error instanceof Error ? error.message : t("common.error", lang), "error");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -400,13 +438,19 @@ const [stockCountCode, setStockCountCode] = useState("");
     return true;
   });
 
+  const stockAdjustOptions = [
+    ...(canAddInventory ? [{ v: "IN", label: lang === "sw" ? "Ongeza stock" : "Add stock", icon: <ArrowUp className="w-4 h-4" />, color: "green" }] : []),
+    ...(canManageStock ? [{ v: "OUT", label: lang === "sw" ? "Toa stock" : "Remove stock", icon: <ArrowDown className="w-4 h-4" />, color: "red" }, { v: "ADJUSTMENT", label: lang === "sw" ? "Weka kiwango" : "Set quantity", icon: <Edit2 className="w-4 h-4" />, color: "blue" }] : []),
+    ...(canRefundStock ? [{ v: "RETURN", label: lang === "sw" ? "Pokea iliyorudi" : "Receive returned stock", icon: <Undo2 className="w-4 h-4" />, color: "orange" }] : []),
+  ];
+
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto pb-24 lg:pb-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("inventory.title", lang)}</h1>
-          <div className="flex gap-2">{canViewFinancials && <button onClick={startStockCount} aria-label="Start stock count" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 text-gray-600" title="Stock count"><ScanLine className="h-4 w-4" /></button>}{canViewFinancials && <button onClick={openAdd} aria-label={t("inventory.addProduct", lang)} className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus className="w-4 h-4" /><span className="hidden sm:inline">{t("inventory.addProduct", lang)}</span></button>}</div>
+          <div className="flex gap-2">{canViewFinancials && <button onClick={startStockCount} aria-label="Start stock count" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 text-gray-600" title="Stock count"><ScanLine className="h-4 w-4" /></button>}{canAddInventory && canViewFinancials && <button onClick={openAdd} aria-label={t("inventory.addProduct", lang)} className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus className="w-4 h-4" /><span className="hidden sm:inline">{t("inventory.addProduct", lang)}</span></button>}</div>
         </div>
 
         {stockCount && <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-brand-950">{lang === "sw" ? "Uhesabuji wa stock unaendelea" : "Stock count in progress"}</p><p className="text-xs text-brand-700">{stockCount.items.reduce((sum, item) => sum + item.counted, 0)} {lang === "sw" ? "zimescanwa" : "scanned"}</p></div><button onClick={() => setStockCountScannerOpen(true)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">Scan</button></div><div className="mt-3 flex gap-2"><input value={stockCountCode} onChange={(event) => setStockCountCode(event.target.value)} onKeyDown={(event) => event.key === "Enter" && scanStockCount(stockCountCode)} placeholder="Barcode" className="min-w-0 flex-1 rounded-lg border border-brand-200 px-3 py-2 text-sm" /><button onClick={() => scanStockCount(stockCountCode)} className="rounded-lg border border-brand-300 px-3 text-sm font-semibold text-brand-800">Add</button></div><div className="mt-3 max-h-32 overflow-y-auto text-xs">{stockCount.items.filter((item) => item.counted > 0).map((item) => <div key={item.id} className="flex justify-between border-t border-brand-100 py-1"><span>{item.product.name}</span><span>{item.expected} / {item.counted} ({item.counted - item.expected >= 0 ? "+" : ""}{item.counted - item.expected})</span></div>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => finishStockCount(false)} className="rounded-lg border border-brand-300 py-2 text-sm font-semibold text-brand-800">{lang === "sw" ? "Maliza bila kubadili" : "Finish only"}</button><button onClick={() => finishStockCount(true)} className="rounded-lg bg-brand-700 py-2 text-sm font-semibold text-white">{lang === "sw" ? "Tumia tofauti" : "Apply differences"}</button></div></div>}
@@ -605,26 +649,34 @@ const [stockCountCode, setStockCountCode] = useState("");
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       {p.barcode && <button onClick={() => setLabelProduct(p)} aria-label={`Print label for ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" title="Print barcode"><Printer className="h-4 w-4" /></button>}
-                      <button
+                      {(canAddInventory || canManageStock || canRefundStock) && <button
                         onClick={() => {
                           setAdjustProduct(p);
-                          setAdjustForm({ type: "IN", quantity: "", note: "" });
+                          setAdjustForm({ type: canAddInventory ? "IN" : canRefundStock ? "RETURN" : "OUT", quantity: "", note: "" });
                         }}
                         aria-label={`${t("inventory.adjustStock", lang)} ${p.name}`}
                         className="flex h-11 w-11 items-center justify-center text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors min-h-0"
                         title={t("inventory.adjustStock", lang)}
                       >
                         <ArrowUp className="w-4 h-4" />
-                      </button>
-                      <button
+                      </button>}
+                      {canManageExpiry && !canAddInventory && <button
+                        onClick={() => { setExpiryProduct(p); setExpiryForm({ expiryDate: p.expiryDate ? p.expiryDate.slice(0, 10) : "", doesNotExpire: p.doesNotExpire }); }}
+                        aria-label={`${lang === "sw" ? "Hariri tarehe ya mwisho" : "Edit expiry date"} ${p.name}`}
+                        className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-orange-50 hover:text-orange-600 transition-colors min-h-0"
+                        title={lang === "sw" ? "Hariri tarehe ya mwisho" : "Edit expiry date"}
+                      >
+                        <CalendarClock className="w-4 h-4" />
+                      </button>}
+                      {canAddInventory && canViewFinancials && <button
                         onClick={() => openEdit(p)}
                         aria-label={`${t("inventory.editTitle", lang)} ${p.name}`}
                         className="flex h-11 w-11 items-center justify-center text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors min-h-0"
                         title={t("common.edit", lang)}
                       >
                         <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
+                      </button>}
+                      {canAddInventory && <button
                         onClick={() => setDeleteProduct(p)}
                         disabled={saving}
                         aria-label={`${t("inventory.deleteProduct", lang)} ${p.name}`}
@@ -632,7 +684,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                         title={t("inventory.deleteProduct", lang)}
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 </div>
@@ -737,7 +789,7 @@ const [stockCountCode, setStockCountCode] = useState("");
             </Field>
 
             {/* Expiry section */}
-            <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+            {canManageExpiry && <div className="border border-gray-200 rounded-lg p-3 space-y-2">
               <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
                 <CalendarClock className="w-3.5 h-3.5" /> {t("inventory.expirySection", lang)}
               </p>
@@ -762,7 +814,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                   />
                 </Field>
               )}
-            </div>
+            </div>}
 
             <div className="flex gap-2 pt-2">
               <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm font-medium">
@@ -816,6 +868,34 @@ const [stockCountCode, setStockCountCode] = useState("");
         </Modal>
       )}
 
+      {expiryProduct && (
+        <Modal title={`${lang === "sw" ? "Hariri tarehe ya mwisho" : "Edit expiry date"}: ${expiryProduct.name}`} onClose={() => setExpiryProduct(null)}>
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={expiryForm.doesNotExpire}
+                onChange={(event) => setExpiryForm({ doesNotExpire: event.target.checked, expiryDate: "" })}
+                className="h-4 w-4 rounded border-gray-300 text-brand-600"
+              />
+              <span className="text-sm text-gray-700">{t("inventory.doesNotExpire", lang)}</span>
+            </label>
+            {!expiryForm.doesNotExpire && <Field label={t("inventory.expiryDateLabel", lang)}>
+              <input
+                type="date"
+                value={expiryForm.expiryDate}
+                onChange={(event) => setExpiryForm({ ...expiryForm, expiryDate: event.target.value })}
+                className={INPUT}
+              />
+            </Field>}
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setExpiryProduct(null)} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-600">{t("common.cancel", lang)}</button>
+              <button onClick={() => void handleExpirySave()} disabled={saving} className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-medium text-white disabled:opacity-60">{saving ? "..." : t("common.save", lang)}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Adjust Stock Modal */}
       {adjustProduct && (
         <Modal title={`${t("inventory.adjustStock", lang)}: ${adjustProduct.name}`} onClose={() => setAdjustProduct(null)}>
@@ -823,23 +903,19 @@ const [stockCountCode, setStockCountCode] = useState("");
             <p className="text-sm text-gray-500">
               {t("inventory.currentStockOf", lang)} <strong>{adjustProduct.currentStock} {adjustProduct.unit}</strong>
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { v: "IN", labelKey: "inventory.adjustIn", icon: <ArrowUp className="w-4 h-4" />, color: "green" },
-                { v: "OUT", labelKey: "inventory.adjustOut", icon: <ArrowDown className="w-4 h-4" />, color: "red" },
-                { v: "ADJUSTMENT", labelKey: "inventory.adjustSet", icon: <Edit2 className="w-4 h-4" />, color: "blue" },
-              ].map(({ v, labelKey, icon, color }) => (
+            <div className={`grid gap-2 ${stockAdjustOptions.length === 1 ? "grid-cols-1" : stockAdjustOptions.length === 2 ? "grid-cols-2" : stockAdjustOptions.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
+              {stockAdjustOptions.map(({ v, label, icon, color }) => (
                 <button
                   key={v}
                   onClick={() => setAdjustForm({ ...adjustForm, type: v })}
-                  aria-label={t(labelKey, lang)}
+                  aria-label={label}
                   className={`flex flex-col items-center gap-1 py-2 rounded-lg border text-xs font-medium transition-colors min-h-0 ${
                     adjustForm.type === v
                       ? `bg-${color}-50 border-${color}-300 text-${color}-700`
                       : "border-gray-200 text-gray-500"
                   }`}
                 >
-                  {icon}{t(labelKey, lang)}
+                  {icon}{label}
                 </button>
               ))}
             </div>
@@ -848,10 +924,10 @@ const [stockCountCode, setStockCountCode] = useState("");
                 onChange={(e) => setAdjustForm({ ...adjustForm, quantity: e.target.value })}
                 className={INPUT} placeholder="0" />
             </Field>
-            <Field label={t("inventory.adjustNote", lang)}>
+            <Field label={adjustForm.type === "RETURN" ? (lang === "sw" ? "Sababu ya stock iliyorudi *" : "Return reason *") : t("inventory.adjustNote", lang)}>
               <input aria-label={t("inventory.adjustNote", lang)} value={adjustForm.note}
                 onChange={(e) => setAdjustForm({ ...adjustForm, note: e.target.value })}
-                className={INPUT} placeholder={t("inventory.adjustNotePlaceholder", lang)} />
+                className={INPUT} placeholder={adjustForm.type === "RETURN" ? (lang === "sw" ? "Mfano: Mteja amerudisha bidhaa" : "Example: Customer returned item") : t("inventory.adjustNotePlaceholder", lang)} />
             </Field>
             <div className="flex gap-2 pt-2">
               <button onClick={() => setAdjustProduct(null)} className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm font-medium">
