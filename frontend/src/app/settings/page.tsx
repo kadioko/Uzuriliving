@@ -14,6 +14,7 @@ interface UserSettings {
   language: string;
   isStaff?: boolean;
   staffRole?: string;
+  staffPermissions?: { canManageBarcodeSettings?: boolean };
   shop?: {
     id: string;
     name: string;
@@ -339,7 +340,7 @@ export default function SettingsPage() {
           </SectionCard>
         )}
 
-        {barcodeSettings && settings?.role === "MERCHANT" && (
+        {barcodeSettings && settings?.role === "MERCHANT" && (!settings.isStaff || settings.staffPermissions?.canManageBarcodeSettings) && (
           <SectionCard title={lang === "sw" ? "Mipangilio ya Barcode" : "Barcode settings"} icon={<ScanLine className="w-4 h-4" />}>
             {[
               ["barcodeScanningEnabled", lang === "sw" ? "Ruhusu kuscan barcode" : "Enable barcode scanning"],
