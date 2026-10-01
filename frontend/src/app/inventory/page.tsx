@@ -57,7 +57,7 @@ interface Supplier {
 
 interface OwnerSupplierUser {
   role: string;
-  staff?: { role?: string; permissions?: { canViewReports?: boolean; canManageStock?: boolean; canAddInventory?: boolean; canManageExpiry?: boolean; canRefundStock?: boolean } };
+  staff?: { role?: string; permissions?: { canViewReports?: boolean; canManageStock?: boolean; canViewInventoryAndPrices?: boolean; canAddInventory?: boolean; canManageExpiry?: boolean; canRefundStock?: boolean } };
   shop?: { ownerSupplierManagementEnabled?: boolean } | null;
 }
 
@@ -111,6 +111,7 @@ export default function InventoryPage() {
   const mutationInFlight = useRef(false);
   const [canViewFinancials, setCanViewFinancials] = useState(true);
   const [canManageStock, setCanManageStock] = useState(true);
+  const [canViewInventoryAndPrices, setCanViewInventoryAndPrices] = useState(true);
   const [canAddInventory, setCanAddInventory] = useState(true);
   const [canManageExpiry, setCanManageExpiry] = useState(true);
   const [canRefundStock, setCanRefundStock] = useState(true);
@@ -165,6 +166,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         const permissions = data.user.staff?.permissions;
         setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewReports));
         setCanManageStock(fullAccess || Boolean(permissions?.canManageStock));
+        setCanViewInventoryAndPrices(fullAccess || Boolean(permissions?.canViewInventoryAndPrices || permissions?.canManageStock));
         setCanAddInventory(fullAccess || Boolean(permissions?.canAddInventory || permissions?.canManageStock));
         setCanManageExpiry(fullAccess || Boolean(permissions?.canManageExpiry || permissions?.canManageStock));
         setCanRefundStock(fullAccess || Boolean(permissions?.canRefundStock || permissions?.canManageStock));

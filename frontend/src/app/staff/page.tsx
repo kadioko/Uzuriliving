@@ -12,6 +12,7 @@ interface StaffMember {
   role: string;
   canSell: boolean;
   canManageStock: boolean;
+  canViewInventoryAndPrices: boolean;
   canAddInventory: boolean;
   canManageExpiry: boolean;
   canRefundStock: boolean;
@@ -45,7 +46,7 @@ export default function StaffPage() {
     await load();
   }
 
-  async function togglePermission(member: StaffMember, field: keyof Pick<StaffMember, "canSell" | "canManageStock" | "canAddInventory" | "canManageExpiry" | "canRefundStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "isActive">) {
+  async function togglePermission(member: StaffMember, field: keyof Pick<StaffMember, "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canAddInventory" | "canManageExpiry" | "canRefundStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "isActive">) {
     await api.patch(`/staff/${member.id}`, { [field]: !member[field] }, lang);
     await load();
   }
@@ -53,6 +54,7 @@ export default function StaffPage() {
   const permissionLabels = {
     canSell: lang === "sw" ? "Kuuza" : "Sell",
     canManageStock: lang === "sw" ? "Udhibiti wa stock" : "Stock controls",
+    canViewInventoryAndPrices: lang === "sw" ? "Kuona stock na bei tu" : "View inventory and prices (read-only)",
     canAddInventory: lang === "sw" ? "Ongeza stock / inventory" : "Add stock / inventory",
     canManageExpiry: lang === "sw" ? "Tarehe za mwisho" : "Manage expiry dates",
     canRefundStock: lang === "sw" ? "Pokea stock iliyorudi" : "Receive returned stock",

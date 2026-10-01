@@ -40,6 +40,7 @@ interface User {
     permissions: {
       canSell: boolean;
       canManageStock: boolean;
+      canViewInventoryAndPrices: boolean;
       canManageStaff: boolean;
       canViewReports: boolean;
       canRecordExpenses: boolean;
@@ -57,13 +58,13 @@ interface NavItem {
   labelKey?: string;
   label?: string;
   icon: typeof LayoutDashboard;
-  permission?: "canSell" | "canManageStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses";
+  permission?: "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canManageStaff" | "canViewReports" | "canRecordExpenses";
   feature?: "staff" | "assistant" | "exports";
 }
 
 const merchantNav: NavItem[] = [
   { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, permission: "canViewReports" },
-  { href: "/inventory", labelKey: "nav.inventory", icon: Package, permission: "canManageStock" },
+  { href: "/inventory", labelKey: "nav.inventory", icon: Package, permission: "canViewInventoryAndPrices" },
   { href: "/barcodes", label: "Barcodes", icon: ScanLine, permission: "canManageStock" },
   { href: "/sales", labelKey: "nav.sales", icon: ShoppingCart, permission: "canSell" },
   { href: "/debts", labelKey: "nav.debts", icon: HandCoins, permission: "canSell" },
