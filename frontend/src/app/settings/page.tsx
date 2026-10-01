@@ -13,6 +13,7 @@ interface UserSettings {
   role: string;
   language: string;
   isStaff?: boolean;
+  staffRole?: string;
   shop?: {
     id: string;
     name: string;
@@ -223,7 +224,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-xs text-gray-500 mb-0.5">{t("settings.role", lang)}</p>
               <p className="font-medium text-gray-800 capitalize">
-                {settings?.role === "MERCHANT" ? t("app.merchant", lang) : settings?.role === "SUPPLIER" ? t("app.supplier", lang) : settings?.role}
+                {settings?.isStaff ? settings.staffRole?.replace("_", " ") : settings?.role === "MERCHANT" ? t("app.merchant", lang) : settings?.role === "SUPPLIER" ? t("app.supplier", lang) : settings?.role}
               </p>
             </div>
           </div>

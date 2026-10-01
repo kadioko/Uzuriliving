@@ -273,6 +273,16 @@ async function requireUser(client: SupabaseClient, request: Request) {
   if (!user?.userId || typeof user.userId !== "string") return { response: json({ error: "Unauthorized" }, 401) };
   const shop = await shopForUser(client, user.userId);
   if (!shop) return { response: json({ error: "Shop not found" }, 404) };
+  if (typeof user.staffId === "string") {
+    const { data: staff, error: staffError } = await client.from("staff_members")
+      .select("id,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId")
+      .eq("id", user.staffId).eq("shopId", shop.id).eq("isActive", true).maybeSingle();
+    if (staffError) throw staffError;
+    if (!staff) return { response: json({ error: "Staff access expired" }, 401) };
+    user.staffRole = staff.role;
+    user.phone = staff.phone || user.phone;
+    user.permissions = staffPermissions(String(staff.role), staff);
+  }
   return { user, shop };
 }
 
@@ -871,12 +881,70 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
 function pathStatus(value: string, suffix: string) { return value.endsWith(`/${suffix}`); }
 
 async function settings(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
-  if (request.method === "GET" && path === "/settings") { const [{ data: account }, { data: currentShop }, { data: supplier }] = await Promise.all([client.from("users").select("id,phone,name,role,language,createdAt").eq("id", user.userId).maybeSingle(), client.from("shops").select("id,name,location,district,category,isCatalogPublished").eq("id", shop.id).maybeSingle(), client.from("suppliers").select("id,name,phone,address").eq("userId", user.userId).maybeSingle()]); return json({ settings: { ...account, shop: currentShop, supplier } }); }
+  if (request.method === "GET" && path === "/settings") {
+    const [{ data: account, error: accountError }, { data: currentShop, error: shopError }, { data: supplier, error: supplierError }] = await Promise.all([
+      client.from("users").select("id,phone,name,role,language,createdAt").eq("id", user.userId).maybeSingle(),
+      client.from("shops").select("id,name,location,district,category,isCatalogPublished").eq("id", shop.id).maybeSingle(),
+      client.from("suppliers").select("id,name,phone,address").eq("userId", user.userId).maybeSingle(),
+    ]);
+    if (accountError) throw accountError;
+    if (shopError) throw shopError;
+    if (supplierError) throw supplierError;
+    if (!account) return json({ error: "Account not found" }, 404);
+    let settingsAccount: Record<string, unknown> = { ...account, isStaff: false };
+    if (typeof user.staffId === "string") {
+      const { data: staff, error: staffError } = await client.from("staff_members")
+        .select("id,name,phone,role,language,isActive,shopId").eq("id", user.staffId).eq("shopId", shop.id).eq("isActive", true).maybeSingle();
+      if (staffError) throw staffError;
+      if (!staff) return json({ error: "Staff access expired" }, 401);
+      settingsAccount = {
+        ...account,
+        name: staff.name,
+        phone: staff.phone || account.phone,
+        language: staff.language || account.language,
+        isStaff: true,
+        staffRole: staff.role,
+      };
+    }
+    return json({ settings: { ...settingsAccount, shop: currentShop, supplier: typeof user.staffId === "string" ? null : supplier } });
+  }
   const body = await request.json().catch(() => ({})); const now = new Date().toISOString();
-  if (path === "/settings/language") { const language = String(body.language ?? "").toLowerCase(); if (!["en", "sw"].includes(language)) return json({ error: "Language must be 'en' or 'sw'" }, 400); const { error } = await client.from("users").update({ language, updatedAt: now }).eq("id", user.userId); if (error) throw error; return json({ message: "Language updated", language }); }
-  if (path === "/settings/profile") { const name = String(body.name ?? "").trim(); if (!name || name.length > 100) return json({ error: "Name must be 100 characters or less" }, 400); const { error } = await client.from("users").update({ name, updatedAt: now }).eq("id", user.userId); if (error) throw error; return json({ message: "Profile updated", name }); }
-  if (path === "/settings/shop") { const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "location", "district", "category", "isCatalogPublished"]) if (body[key] !== undefined) update[key] = body[key]; const { data, error } = await client.from("shops").update(update).eq("id", shop.id).select("*").single(); if (error) throw error; return json({ shop: data }); }
-  if (path === "/settings/pin") { const currentPin = String(body.currentPin ?? ""); const newPin = String(body.newPin ?? ""); const { data: account } = await client.from("users").select("pin").eq("id", user.userId).single(); if (!account || !(await bcrypt.compare(currentPin, account.pin))) return json({ error: "Current PIN is incorrect" }, 401); if (!/^\d{4,8}$/.test(newPin)) return json({ error: "New PIN must be 4 to 8 digits" }, 400); const { error } = await client.from("users").update({ pin: await bcrypt.hash(newPin, 10), updatedAt: now }).eq("id", user.userId); if (error) throw error; return json({ message: "PIN changed successfully" }); }
+  const staffId = typeof user.staffId === "string" ? user.staffId : null;
+  if (path === "/settings/language") {
+    const language = String(body.language ?? "").toLowerCase();
+    if (!["en", "sw"].includes(language)) return json({ error: "Language must be 'en' or 'sw'" }, 400);
+    const { error } = staffId
+      ? await client.from("staff_members").update({ language, updatedAt: now }).eq("id", staffId).eq("shopId", shop.id)
+      : await client.from("users").update({ language, updatedAt: now }).eq("id", user.userId);
+    if (error) throw error;
+    return json({ message: "Language updated", language });
+  }
+  if (path === "/settings/profile") {
+    const name = String(body.name ?? "").trim();
+    if (!name || name.length > 100) return json({ error: "Name must be 100 characters or less" }, 400);
+    const { error } = staffId
+      ? await client.from("staff_members").update({ name, updatedAt: now }).eq("id", staffId).eq("shopId", shop.id)
+      : await client.from("users").update({ name, updatedAt: now }).eq("id", user.userId);
+    if (error) throw error;
+    return json({ message: "Profile updated", name });
+  }
+  if (path === "/settings/shop") {
+    const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "location", "district", "category", "isCatalogPublished"]) if (body[key] !== undefined) update[key] = body[key]; const { data, error } = await client.from("shops").update(update).eq("id", shop.id).select("*").single(); if (error) throw error; return json({ shop: data });
+  }
+  if (path === "/settings/pin") {
+    const currentPin = String(body.currentPin ?? ""); const newPin = String(body.newPin ?? "");
+    const { data: account, error: accountError } = staffId
+      ? await client.from("staff_members").select("pin").eq("id", staffId).eq("shopId", shop.id).maybeSingle()
+      : await client.from("users").select("pin").eq("id", user.userId).maybeSingle();
+    if (accountError) throw accountError;
+    if (!account || !(await bcrypt.compare(currentPin, account.pin))) return json({ error: "Current PIN is incorrect" }, 401);
+    if (!/^\d{4,8}$/.test(newPin)) return json({ error: "New PIN must be 4 to 8 digits" }, 400);
+    const { error } = staffId
+      ? await client.from("staff_members").update({ pin: await bcrypt.hash(newPin, 10), updatedAt: now }).eq("id", staffId).eq("shopId", shop.id)
+      : await client.from("users").update({ pin: await bcrypt.hash(newPin, 10), updatedAt: now }).eq("id", user.userId);
+    if (error) throw error;
+    return json({ message: "PIN changed successfully" });
+  }
   return json({ error: "Settings route not found" }, 404);
 }
 
