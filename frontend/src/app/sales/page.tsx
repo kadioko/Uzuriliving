@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
-import { Plus, X, ShoppingCart, Check, Minus, Search, Clock, WifiOff, RefreshCw, Trash2, ScanLine } from "lucide-react";
+import { Plus, X, ShoppingCart, Check, Minus, Search, Clock, WifiOff, RefreshCw, Trash2, ScanLine, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { t, useLang } from "@/lib/i18n";
 import { useToast } from "@/components/ui/Toast";
 import { BarcodeScanner } from "@/components/barcode/BarcodeScanner";
@@ -36,6 +36,12 @@ interface SaleRecord {
   totalAmount: number;
   profit: number | null;
   paymentMethod: string;
+  pricingTier?: "RETAIL" | "WHOLESALE";
+  channel?: "POS" | "ONLINE";
+  customerPhone?: string | null;
+  paymentRef?: string | null;
+  clientReference?: string | null;
+  note?: string | null;
   createdAt: string;
   items: Array<{ quantity: number; unitPrice: number; totalPrice: number; product: { name: string; unit: string } }>;
 }
@@ -78,6 +84,7 @@ const PENDING_SALES_KEY = "uzuriliving_pending_sales";
 const SYNC_HISTORY_KEY = "uzuriliving_sales_sync_history";
 const SYNC_DEVICE_KEY = "uzuriliving_sync_device_id";
 const SYNC_DEVICE_LABEL_KEY = "uzuriliving_sync_device_label";
+const HISTORY_PAGE_SIZE = 30;
 
 function readPendingSales(): PendingSale[] {
   if (typeof window === "undefined") return [];
@@ -157,6 +164,15 @@ export default function SalesPage() {
   const [recentSales, setRecentSales] = useState<SaleRecord[]>([]);
   const [view, setView] = useState<"pos" | "history">("pos");
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySearchInput, setHistorySearchInput] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyPaymentMethod, setHistoryPaymentMethod] = useState("ALL");
+  const [historyPricingTier, setHistoryPricingTier] = useState("ALL");
+  const [historyChannel, setHistoryChannel] = useState("ALL");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [syncHistory, setSyncHistory] = useState<SyncEvent[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -306,14 +322,50 @@ export default function SalesPage() {
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
-    const data = await api.get<{ sales: SaleRecord[] }>("/sales?limit=30");
-    setRecentSales(data.sales);
-    setHistoryLoading(false);
-  }, []);
+    try {
+      const params = new URLSearchParams({ limit: String(HISTORY_PAGE_SIZE), offset: String((historyPage - 1) * HISTORY_PAGE_SIZE) });
+      if (historySearch) params.set("search", historySearch);
+      if (historyPaymentMethod !== "ALL") params.set("paymentMethod", historyPaymentMethod);
+      if (historyPricingTier !== "ALL") params.set("pricingTier", historyPricingTier);
+      if (historyChannel !== "ALL") params.set("channel", historyChannel);
+      if (historyFrom) params.set("from", historyFrom);
+      if (historyTo) params.set("to", historyTo);
+      const data = await api.get<{ sales: SaleRecord[]; total?: number }>(`/sales?${params.toString()}`);
+      setRecentSales(data.sales);
+      setHistoryTotal(data.total ?? data.sales.length);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : t("common.error", lang), "error");
+      setRecentSales([]);
+      setHistoryTotal(0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyChannel, historyFrom, historyPage, historyPaymentMethod, historyPricingTier, historySearch, historyTo, lang, toast]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setHistorySearch((current) => current === historySearchInput.trim() ? current : historySearchInput.trim());
+      setHistoryPage((current) => current === 1 ? current : 1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [historySearchInput]);
 
   useEffect(() => {
     if (view === "history") fetchHistory();
   }, [view, fetchHistory]);
+
+  function clearHistoryFilters() {
+    setHistorySearchInput("");
+    setHistorySearch("");
+    setHistoryPaymentMethod("ALL");
+    setHistoryPricingTier("ALL");
+    setHistoryChannel("ALL");
+    setHistoryFrom("");
+    setHistoryTo("");
+    setHistoryPage(1);
+  }
+
+  const historyTotalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
 
   const query = search.trim().toLowerCase();
   const filtered = products.filter((p) => !query || `${p.name} ${p.sku || ""} ${p.barcode || ""}`.toLowerCase().includes(query));
@@ -624,6 +676,66 @@ export default function SalesPage() {
           </section>
         )}
 
+        {view === "history" && (
+          <section className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-brand-600" />
+                <h2 className="text-sm font-semibold text-gray-800">{lang === "sw" ? "Chuja historia ya mauzo" : "Filter sales history"}</h2>
+              </div>
+              <button type="button" onClick={clearHistoryFilters} className="text-xs font-semibold text-brand-700 hover:text-brand-900">
+                {lang === "sw" ? "Futa vichujio" : "Clear filters"}
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+              <div className="relative sm:col-span-2 lg:col-span-2">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={historySearchInput}
+                  onChange={(event) => setHistorySearchInput(event.target.value)}
+                  placeholder={lang === "sw" ? "Tafuta bidhaa, simu, ref..." : "Search product, phone, reference..."}
+                  aria-label={lang === "sw" ? "Tafuta historia ya mauzo" : "Search sales history"}
+                  className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                />
+              </div>
+              <select value={historyPaymentMethod} onChange={(event) => { setHistoryPaymentMethod(event.target.value); setHistoryPage(1); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                <option value="ALL">{lang === "sw" ? "Malipo yote" : "All payments"}</option>
+                {PAYMENT_METHODS.map((method) => <option key={method.value} value={method.value}>{t(method.labelKey, lang)}</option>)}
+              </select>
+              <select value={historyPricingTier} onChange={(event) => { setHistoryPricingTier(event.target.value); setHistoryPage(1); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                <option value="ALL">{lang === "sw" ? "Bei zote" : "All price types"}</option>
+                <option value="RETAIL">{t("sales.retail", lang)}</option>
+                <option value="WHOLESALE">{t("sales.wholesale", lang)}</option>
+              </select>
+              <select value={historyChannel} onChange={(event) => { setHistoryChannel(event.target.value); setHistoryPage(1); }} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                <option value="ALL">{lang === "sw" ? "Njia zote" : "All channels"}</option>
+                <option value="POS">POS</option>
+                <option value="ONLINE">Online</option>
+              </select>
+              <div className="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-2">
+                <label className="text-[11px] font-medium text-gray-500">
+                  {lang === "sw" ? "Kuanzia" : "From"}
+                  <input type="date" value={historyFrom} onChange={(event) => { setHistoryFrom(event.target.value); setHistoryPage(1); }} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-sm text-gray-700" />
+                </label>
+                <label className="text-[11px] font-medium text-gray-500">
+                  {lang === "sw" ? "Hadi" : "To"}
+                  <input type="date" value={historyTo} onChange={(event) => { setHistoryTo(event.target.value); setHistoryPage(1); }} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-sm text-gray-700" />
+                </label>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+              <span>{lang === "sw" ? `Inaonyesha ${recentSales.length} kati ya ${historyTotal}` : `Showing ${recentSales.length} of ${historyTotal}`}</span>
+              {historyTotalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={historyPage <= 1 || historyLoading} onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 disabled:opacity-40" aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></button>
+                  <span>{historyPage} / {historyTotalPages}</span>
+                  <button type="button" disabled={historyPage >= historyTotalPages || historyLoading} onClick={() => setHistoryPage((page) => Math.min(historyTotalPages, page + 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 disabled:opacity-40" aria-label="Next page"><ChevronRight className="h-4 w-4" /></button>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {view === "pos" ? (
           <div className="lg:grid lg:grid-cols-2 lg:gap-6">
             {/* Product picker */}
@@ -821,9 +933,14 @@ export default function SalesPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                          {t(PAYMENT_METHODS.find((m) => m.value === sale.paymentMethod)?.labelKey || "sales.cash", lang)}
-                        </span>
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                            {t(PAYMENT_METHODS.find((m) => m.value === sale.paymentMethod)?.labelKey || "sales.cash", lang)}
+                          </span>
+                          {sale.pricingTier && <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">{sale.pricingTier === "WHOLESALE" ? t("sales.wholesale", lang) : t("sales.retail", lang)}</span>}
+                        </div>
+                        {sale.customerPhone && <p className="mt-1 text-[11px] text-gray-400">{sale.customerPhone}</p>}
+                        {sale.clientReference && <p className="mt-0.5 text-[11px] text-gray-400">#{sale.clientReference.slice(-12)}</p>}
                         {canViewFinancials && sale.profit != null && <p className="text-sm font-bold text-green-600 mt-1">+{formatTZS(sale.profit)}</p>}
                       </div>
                     </div>

@@ -617,11 +617,59 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
   if (method === "GET") {
     const url = new URL(request.url); const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 100); const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
     let query = client.from("sales").select("*,items:sale_items(*,product:products(id,name,unit))", { count: "exact" }).eq("shopId", shop.id);
-    if (url.searchParams.get("paymentMethod")) query = query.eq("paymentMethod", url.searchParams.get("paymentMethod")!.toUpperCase());
-    if (url.searchParams.get("channel")) query = query.eq("channel", url.searchParams.get("channel")!.toUpperCase());
+    const paymentMethod = url.searchParams.get("paymentMethod")?.trim().toUpperCase();
+    const pricingTier = url.searchParams.get("pricingTier")?.trim().toUpperCase();
+    const channel = url.searchParams.get("channel")?.trim().toUpperCase();
+    const fromValue = url.searchParams.get("from")?.trim();
+    const toValue = url.searchParams.get("to")?.trim();
+    const search = url.searchParams.get("search")?.trim();
+    if (paymentMethod && !salePaymentMethods.has(paymentMethod)) return json({ error: "Invalid payment method filter" }, 400);
+    if (pricingTier && !["RETAIL", "WHOLESALE"].includes(pricingTier)) return json({ error: "Invalid pricing tier filter" }, 400);
+    if (channel && !["POS", "ONLINE"].includes(channel)) return json({ error: "Invalid sales channel filter" }, 400);
+    if (paymentMethod) query = query.eq("paymentMethod", paymentMethod);
+    if (pricingTier) query = query.eq("pricingTier", pricingTier);
+    if (channel) query = query.eq("channel", channel);
+    const parseLocalDate = (value: string | null, endOfDay = false) => {
+      if (!value) return null;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+      const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+03:00`);
+      return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+    };
+    const from = parseLocalDate(fromValue);
+    const to = parseLocalDate(toValue, true);
+    if (from === undefined || to === undefined) return json({ error: "Date filters must use YYYY-MM-DD" }, 400);
+    if (from && to && from > to) return json({ error: "The start date cannot be after the end date" }, 400);
+    if (from) query = query.gte("createdAt", from.toISOString());
+    if (to) query = query.lte("createdAt", to.toISOString());
+    if (search) {
+      const pattern = `%${search.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+      const [customerMatches, paymentMatches, referenceMatches, noteMatches, idMatches, productNameMatches, productSkuMatches, productBarcodeMatches] = await Promise.all([
+        client.from("sales").select("id").eq("shopId", shop.id).ilike("customerPhone", pattern),
+        client.from("sales").select("id").eq("shopId", shop.id).ilike("paymentRef", pattern),
+        client.from("sales").select("id").eq("shopId", shop.id).ilike("clientReference", pattern),
+        client.from("sales").select("id").eq("shopId", shop.id).ilike("note", pattern),
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search) ? client.from("sales").select("id").eq("shopId", shop.id).eq("id", search) : Promise.resolve({ data: [], error: null }),
+        client.from("products").select("id").eq("shopId", shop.id).ilike("name", pattern),
+        client.from("products").select("id").eq("shopId", shop.id).ilike("sku", pattern),
+        client.from("products").select("id").eq("shopId", shop.id).ilike("barcode", pattern),
+      ]);
+      const searchErrors = [customerMatches, paymentMatches, referenceMatches, noteMatches, idMatches, productNameMatches, productSkuMatches, productBarcodeMatches].map((result) => result.error).filter(Boolean);
+      if (searchErrors.length) throw searchErrors[0];
+      const matchingSaleIds = new Set<string>();
+      for (const result of [customerMatches, paymentMatches, referenceMatches, noteMatches, idMatches]) for (const row of result.data ?? []) matchingSaleIds.add(row.id);
+      const productIds = [...new Set([...(productNameMatches.data ?? []), ...(productSkuMatches.data ?? []), ...(productBarcodeMatches.data ?? [])].map((product) => product.id))];
+      if (productIds.length) {
+        const { data: itemMatches, error: itemError } = await client.from("sale_items").select("saleId").in("productId", productIds);
+        if (itemError) throw itemError;
+        for (const row of itemMatches ?? []) matchingSaleIds.add(row.saleId);
+      }
+      if (!matchingSaleIds.size) return json({ sales: [], total: 0, pagination: { limit, offset, total: 0, totalPages: 0 } });
+      query = query.in("id", [...matchingSaleIds]);
+    }
     const { data, count, error } = await query.order("createdAt", { ascending: false }).range(offset, offset + limit - 1);
     if (error) throw error;
-    return json({ sales: (data ?? []).map((sale) => user.role === "ADMIN" ? sale : { ...sale, profit: undefined, items: sale.items?.map((item: Record<string, unknown>) => ({ ...item, buyingPrice: undefined })) }), total: count ?? 0 });
+    const total = count ?? 0;
+    return json({ sales: (data ?? []).map((sale) => user.role === "ADMIN" ? sale : { ...sale, profit: undefined, items: sale.items?.map((item: Record<string, unknown>) => ({ ...item, buyingPrice: undefined })) }), total, pagination: { limit, offset, total, totalPages: Math.ceil(total / limit) } });
   }
   if (method !== "POST") return json({ error: "Method not allowed" }, 405);
   const body = await request.json().catch(() => ({})); const items = Array.isArray(body.items) ? body.items : []; const paymentMethod = String(body.paymentMethod ?? "CASH").toUpperCase();
