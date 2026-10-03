@@ -75,6 +75,7 @@ const merchantNav: NavItem[] = [
   { href: "/debts", labelKey: "nav.debts", icon: HandCoins, permission: "canSell" },
   { href: "/expenses", labelKey: "nav.expenses", icon: ReceiptText, permission: "canRecordExpenses" },
   { href: "/orders", labelKey: "nav.orders", icon: ClipboardList, permission: "canManageStock" },
+  { href: "/purchases", labelKey: "nav.purchases", icon: ShoppingBag, permission: "canViewReports" },
   { href: "/orders/customers", labelKey: "nav.customerOrders", icon: ShoppingBag, permission: "canSell" },
   { href: "/suppliers", labelKey: "nav.suppliers", icon: Truck, permission: "canManageStock" },
   { href: "/staff", labelKey: "nav.staff", icon: Users, permission: "canManageStaff", feature: "staff" },

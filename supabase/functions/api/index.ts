@@ -1000,6 +1000,111 @@ async function dashboardAnalytics(client: SupabaseClient, shop: Record<string, u
   return json({ period, features: {}, summary: { totalSales, totalProfit, totalExpenses, netProfit: totalProfit - totalExpenses, expenseCount: expenseRows.length, salesCount: saleRows.length, pendingOrders: pendingOrders?.length ?? 0, totalProducts: productRows.length, lowStockCount: low.length, outOfStockCount: productRows.filter((p) => p.currentStock === 0).length }, allTimeSummary: { totalSales: sum(allSales, "totalAmount"), totalProfit: sum(allSales, "profit"), totalExpenses: sum(allExpenses, "amount"), netProfit: sum(allSales, "profit") - sum(allExpenses, "amount"), expenseCount: allExpenses.length, salesCount: allSales.length, firstSaleAt: allSales[0]?.createdAt ?? null }, lowStockAlerts: low, recentSales: saleRows.slice(0, 10), dailyChart: [...dailyMap.values()], paymentBreakdown: [...paymentMap.values()].sort((a, b) => b.totalAmount - a.totalAmount), historyTimeline: [...historyMap.values()], topProducts });
 }
 
+async function purchaseAnalytics(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
+  if (!hasStaffPermission(user, "canViewReports")) return json({ error: "You do not have permission to view purchase analytics" }, 403);
+  const url = new URL(request.url);
+  const period = String(url.searchParams.get("period") ?? "month").toLowerCase();
+  if (!["month", "all", "custom", "quarter", "year"].includes(period)) return json({ error: "period must be month, all, quarter, year, or custom" }, 400);
+  const timeZone = shopTimeZone(shop);
+  const now = new Date();
+  const nowParts = timeZoneParts(now, timeZone);
+  let from: Date | null = null;
+  let to: Date | null = null;
+  if (period === "month") {
+    from = startOfMonthInTimeZone(now, timeZone);
+    to = startOfTimeZoneDate(`${nowParts.year}-${String(Number(nowParts.month) + 1).padStart(2, "0")}-01`, timeZone);
+  } else if (period === "year") {
+    from = startOfTimeZoneDate(`${nowParts.year}-01-01`, timeZone);
+    to = startOfTimeZoneDate(`${Number(nowParts.year) + 1}-01-01`, timeZone);
+  } else if (period === "quarter") {
+    const quarter = Math.floor((Number(nowParts.month) - 1) / 3) * 3 + 1;
+    const nextQuarter = new Date(Date.UTC(Number(nowParts.year), quarter + 2, 1));
+    from = startOfTimeZoneDate(`${nowParts.year}-${String(quarter).padStart(2, "0")}-01`, timeZone);
+    to = startOfTimeZoneDate(`${nextQuarter.getUTCFullYear()}-${String(nextQuarter.getUTCMonth() + 1).padStart(2, "0")}-01`, timeZone);
+  } else if (period === "custom") {
+    const customFrom = url.searchParams.get("from");
+    const customTo = url.searchParams.get("to");
+    if (!customFrom || !customTo) return json({ error: "from and to are required for a custom date range" }, 400);
+    from = parseDateInTimeZone(customFrom, timeZone);
+    const parsedTo = parseDateInTimeZone(customTo, timeZone);
+    if (!from || !parsedTo) return json({ error: "Enter a valid purchase date range" }, 400);
+    to = addCalendarDaysInTimeZone(parsedTo, 1, timeZone);
+    if (from >= to) return json({ error: "Enter a valid purchase date range" }, 400);
+  }
+
+  const supplierId = url.searchParams.get("supplierId")?.trim() || "";
+  const search = url.searchParams.get("search")?.trim().toLowerCase() || "";
+  const deliveredOrders: Record<string, unknown>[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data: page, error } = await client.from("orders")
+      .select("id,totalAmount,receivedTotalAmount,receivedAt,updatedAt,createdAt,supplier:suppliers(id,name),items:order_items(quantity,unitPrice,product:products(id,name,unit))")
+      .eq("shopId", shop.id)
+      .eq("status", "DELIVERED")
+      .order("receivedAt", { ascending: false, nullsFirst: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    deliveredOrders.push(...((page ?? []) as Record<string, unknown>[]));
+    if (!page || page.length < pageSize) break;
+  }
+
+  const orders = deliveredOrders.filter((order) => {
+    const receivedAt = order.receivedAt || order.updatedAt || order.createdAt;
+    const receivedDate = new Date(receivedAt);
+    if (from && receivedDate < from) return false;
+    if (to && receivedDate >= to) return false;
+    const supplier = Array.isArray(order.supplier) ? order.supplier[0] : order.supplier;
+    if (supplierId && supplier?.id !== supplierId) return false;
+    if (!search) return true;
+    const productNames = (order.items ?? []).map((item: Record<string, unknown>) => {
+      const product = Array.isArray(item.product) ? item.product[0] : item.product;
+      return String(product?.name ?? "");
+    }).join(" ");
+    return `${supplier?.name ?? ""} ${productNames} ${order.id}`.toLowerCase().includes(search);
+  });
+
+  const group = period === "all" || period === "year" ? "month" : "day";
+  const chartMap = new Map<string, { label: string; amount: number; orders: number; unitsPurchased: number }>();
+  const supplierMap = new Map<string, { id: string; name: string; amount: number; orders: number; unitsPurchased: number }>();
+  let totalAmount = 0;
+  let unitsPurchased = 0;
+  const resultOrders = orders.map((order) => {
+    const supplier = Array.isArray(order.supplier) ? order.supplier[0] : order.supplier;
+    const amount = Number(order.receivedTotalAmount ?? order.totalAmount ?? 0);
+    const units = (order.items ?? []).reduce((sum: number, item: Record<string, unknown>) => sum + Number(item.quantity ?? 0), 0);
+    const receivedAt = order.receivedAt || order.updatedAt || order.createdAt;
+    const parts = timeZoneParts(new Date(receivedAt), timeZone);
+    const label = group === "month" ? `${parts.year}-${parts.month}` : `${parts.year}-${parts.month}-${parts.day}`;
+    const chartRow = chartMap.get(label) ?? { label, amount: 0, orders: 0, unitsPurchased: 0 };
+    chartRow.amount += amount;
+    chartRow.orders += 1;
+    chartRow.unitsPurchased += units;
+    chartMap.set(label, chartRow);
+    totalAmount += amount;
+    unitsPurchased += units;
+    if (supplier?.id) {
+      const supplierRow = supplierMap.get(supplier.id) ?? { id: supplier.id, name: supplier.name, amount: 0, orders: 0, unitsPurchased: 0 };
+      supplierRow.amount += amount;
+      supplierRow.orders += 1;
+      supplierRow.unitsPurchased += units;
+      supplierMap.set(supplier.id, supplierRow);
+    }
+    return { id: order.id, receivedAt, amount, unitsPurchased: units, productCount: (order.items ?? []).length, supplier: supplier ?? null };
+  });
+
+  return json({
+    period,
+    timeZone,
+    from,
+    to,
+    group,
+    summary: { totalPurchaseAmount: totalAmount, purchaseCount: orders.length, unitsPurchased, averagePurchaseAmount: orders.length ? Math.round(totalAmount / orders.length) : 0 },
+    chart: [...chartMap.values()].sort((a, b) => a.label.localeCompare(b.label)),
+    suppliers: [...supplierMap.values()].sort((a, b) => b.amount - a.amount),
+    orders: resultOrders,
+  });
+}
+
 async function profitAnalytics(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
   if (!hasStaffPermission(user, "canViewReports")) return json({ error: "You do not have permission to view analytics" }, 403);
   const url = new URL(request.url);
@@ -1158,7 +1263,9 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
     if (pathStatus(id, "confirm-delivery")) {
       if (!["CONFIRMED", "OUT_FOR_DELIVERY"].includes(existing.status)) return json({ error: `Cannot confirm delivery from ${existing.status}` }, 400);
       const now = new Date().toISOString();
-      const { error: updateError } = await client.from("orders").update({ status: "DELIVERED", updatedAt: now }).eq("id", orderId).eq("shopId", shop.id);
+      const requestedReceivedTotal = body.actualTotalAmount == null ? Number(existing.totalAmount ?? 0) : Number(body.actualTotalAmount);
+      if (!Number.isInteger(requestedReceivedTotal) || requestedReceivedTotal < 0) return json({ error: "The received purchase amount must be a whole number that is zero or greater" }, 400);
+      const { error: updateError } = await client.from("orders").update({ status: "DELIVERED", receivedAt: now, receivedTotalAmount: requestedReceivedTotal, updatedAt: now }).eq("id", orderId).eq("shopId", shop.id);
       if (updateError) throw updateError;
       for (const item of existing.items ?? []) {
         const { data: product } = await client.from("products").select("currentStock").eq("id", item.productId).single();
@@ -1607,6 +1714,12 @@ async function handle(request: Request) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     return path === "/dashboard/profit" || path === "/dashboard/analytics" ? profitAnalytics(db, access.user!, access.shop!, request) : dashboardAnalytics(db, access.shop!, request);
+  }
+
+  if (path === "/purchases/analytics") {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    return purchaseAnalytics(db, access.user!, access.shop!, request);
   }
 
   if (path === "/staff" || path.startsWith("/staff/")) {

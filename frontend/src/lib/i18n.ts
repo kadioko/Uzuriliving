@@ -20,6 +20,7 @@ const translations: Record<string, Record<Lang, string>> = {
   "nav.debts": { sw: "Madeni", en: "Debts" },
   "nav.expenses": { sw: "Matumizi", en: "Expenses" },
   "nav.orders": { sw: "Maagizo", en: "Orders" },
+  "nav.purchases": { sw: "Manunuzi", en: "Purchases" },
   "nav.suppliers": { sw: "Wasambazaji", en: "Suppliers" },
   "nav.staff": { sw: "Wafanyakazi", en: "Staff" },
   "nav.assistant": { sw: "Msaidizi AI", en: "AI Assistant" },
