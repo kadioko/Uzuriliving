@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { Barcode, Check, ClipboardList, Printer, RefreshCw, ScanLine, Search, Tags } from "lucide-react";
+import { Barcode, Check, ClipboardList, Filter, Printer, RefreshCw, ScanLine, Search, Tags } from "lucide-react";
 import AppShell from "@/components/layout/AppShell";
 import { BarcodeLabel } from "@/components/barcode/BarcodeLabel";
 import { api, formatTZS } from "@/lib/api";
 import { DEFAULT_LABEL_TEMPLATE, LABEL_FIELD_OPTIONS, type LabelField, type LabelPriceMode, type LabelTemplate, type PrinterConnection, type PrinterProfile, type PrinterProtocol } from "@/lib/labels/types";
 import { openAndroidPrint, type AndroidPrintConfig, type AndroidPrintTransport } from "@/lib/labels/android";
+import { renderLabelImageSvg } from "@/lib/labels/images";
 import { renderPrinterFile } from "@/lib/labels/printers";
 import { useLang } from "@/lib/i18n";
 
@@ -25,6 +26,8 @@ type Product = {
 type Report = { withoutBarcodes: Array<{ id: string; name: string; currentStock: number }>; mostScanned: Array<{ barcode: string; scans: number; product: Product | null }>; duplicateAttempts: number };
 type Scan = { id: string; barcode: string; context: string; found: boolean; createdAt: string; product?: { id: string; name: string } | null };
 type SavedTemplate = LabelTemplate & { isDefault?: boolean };
+type ImageDownloadFormat = "SVG" | "PNG";
+type DownloadFormat = ImageDownloadFormat | PrinterProtocol;
 
 const SIZE_PRESETS = [
   { label: "40 × 30 mm", widthMm: 40, heightMm: 30 },
@@ -46,6 +49,10 @@ export default function BarcodesPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [scans, setScans] = useState<Scan[]>([]);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyResult, setHistoryResult] = useState<"all" | "found" | "notFound">("all");
+  const [historyContext, setHistoryContext] = useState("all");
+  const [historyRange, setHistoryRange] = useState<"all" | "today" | "7d" | "30d">("all");
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [template, setTemplate] = useState<LabelTemplate>(DEFAULT_LABEL_TEMPLATE);
   const [productSearch, setProductSearch] = useState("");
@@ -56,6 +63,7 @@ export default function BarcodesPage() {
   const [printerName, setPrinterName] = useState("Browser printing");
   const [printerProtocol, setPrinterProtocol] = useState<PrinterProtocol>("BROWSER");
   const [printerConnection, setPrinterConnection] = useState<PrinterConnection>("BROWSER");
+  const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>("SVG");
   const [bridgeUrl, setBridgeUrl] = useState("http://127.0.0.1:38100");
   const [bridgeToken, setBridgeToken] = useState("");
   const [androidTransport, setAndroidTransport] = useState<AndroidPrintTransport>("LAN");
@@ -74,7 +82,7 @@ export default function BarcodesPage() {
       const [reportData, productData, historyData, templateData, profileData] = await Promise.all([
         api.get<Report>("/barcodes/report"),
         api.get<{ products: Product[] }>("/products?limit=1000"),
-        api.get<{ scans: Scan[] }>("/barcodes/history?limit=50"),
+        api.get<{ scans: Scan[] }>("/barcodes/history?limit=500"),
         api.get<{ templates: SavedTemplate[] }>("/barcodes/label-templates").catch(() => ({ templates: [] as SavedTemplate[] })),
         api.get<{ profiles: PrinterProfile[] }>("/barcodes/printer-profiles").catch(() => ({ profiles: [] as PrinterProfile[] })),
       ]);
@@ -113,6 +121,25 @@ export default function BarcodesPage() {
     const query = productSearch.trim().toLowerCase();
     return products.filter((product) => !query || `${product.name} ${product.sku || ""} ${product.barcode || ""}`.toLowerCase().includes(query));
   }, [products, productSearch]);
+
+  const historyContexts = useMemo(
+    () => [...new Set(scans.map((scan) => scan.context).filter(Boolean))].sort(),
+    [scans],
+  );
+
+  const filteredScans = useMemo(() => {
+    const query = historySearch.trim().toLowerCase();
+    const now = Date.now();
+    const rangeMs = historyRange === "today" ? 24 * 60 * 60 * 1000 : historyRange === "7d" ? 7 * 24 * 60 * 60 * 1000 : historyRange === "30d" ? 30 * 24 * 60 * 60 * 1000 : null;
+    return scans.filter((scan) => {
+      const searchable = `${scan.product?.name || ""} ${scan.barcode} ${scan.context}`.toLowerCase();
+      const matchesSearch = !query || searchable.includes(query);
+      const matchesResult = historyResult === "all" || (historyResult === "found" ? scan.found : !scan.found);
+      const matchesContext = historyContext === "all" || scan.context === historyContext;
+      const matchesRange = rangeMs === null || now - new Date(scan.createdAt).getTime() <= rangeMs;
+      return matchesSearch && matchesResult && matchesContext && matchesRange;
+    });
+  }, [scans, historySearch, historyResult, historyContext, historyRange]);
 
   const printProducts = useMemo(
     () => products.flatMap((product) => Array.from({ length: Math.min(selected[product.id] || 0, 100) }, () => product)),
@@ -186,9 +213,81 @@ export default function BarcodesPage() {
     }
   };
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const downloadImage = async (format: ImageDownloadFormat) => {
+    if (!printProducts.length) return;
+    const svg = renderLabelImageSvg(printProducts, template);
+    if (format === "SVG") {
+      downloadBlob(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), "uzuri-labels.svg");
+      setProfileMessage(`Downloaded ${printProducts.length} label${printProducts.length === 1 ? "" : "s"} as an exact-size SVG roll.`);
+      return;
+    }
+    const imageUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+    try {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = imageUrl;
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("The label image could not be rendered."));
+      });
+      const dpiScale = 8;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(template.widthMm * dpiScale));
+      canvas.height = Math.max(1, Math.round(template.heightMm * printProducts.length * dpiScale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("PNG export is not available in this browser.");
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!png) throw new Error("The PNG file could not be created.");
+      downloadBlob(png, "uzuri-labels.png");
+      setProfileMessage(`Downloaded ${printProducts.length} label${printProducts.length === 1 ? "" : "s"} as an 8-dot/mm PNG roll.`);
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+    }
+  };
+
+  const downloadPrinterFile = (protocol: Exclude<PrinterProtocol, "BROWSER">) => {
+    if (!printProducts.length) return;
+    const output = renderPrinterFile(protocol, printProducts, template);
+    downloadBlob(new Blob([output.content], { type: output.mime }), `uzuri-labels-${protocol.toLowerCase()}.${output.extension}`);
+    setProfileMessage(`Downloaded ${protocol} commands. Send this raw file through the printer utility or Uzuri Living print bridge; do not open and re-save it in a text editor.`);
+  };
+
+  const downloadSelectedOutput = async () => {
+    if (downloadFormat === "SVG" || downloadFormat === "PNG") {
+      await downloadImage(downloadFormat);
+      return;
+    }
+    if (downloadFormat !== "BROWSER") downloadPrinterFile(downloadFormat);
+  };
+
+  const browserPrint = () => {
+    const style = document.createElement("style");
+    style.dataset.uzuriLabelPrint = "true";
+    style.textContent = `@media print { @page { size: ${template.widthMm}mm ${template.heightMm}mm; margin: 0; } }`;
+    document.head.appendChild(style);
+    const cleanup = () => style.remove();
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.setTimeout(cleanup, 30000);
+    window.print();
+  };
+
   const exportLabels = async () => {
     if (!selectedPrinter || selectedPrinter.protocol === "BROWSER") {
-      window.print();
+      browserPrint();
       return;
     }
     const output = renderPrinterFile(selectedPrinter.protocol, printProducts, template);
@@ -286,6 +385,7 @@ export default function BarcodesPage() {
       {tab === "labels" && <div className="space-y-4">
         <section className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-gray-950">{lang === "sw" ? "Chapisha labels" : "Print labels"}</h2><p className="text-xs text-gray-500">{lang === "sw" ? "Chagua bidhaa, muonekano, ukubwa na idadi." : "Choose products, fields, size, and copies."}</p></div><button disabled={!printProducts.length || bridgeBusy} onClick={() => void exportLabels()} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"><Printer className="h-4 w-4" />{selectedPrinter?.connection === "BRIDGE" ? "Print directly" : selectedPrinter?.connection === "ANDROID" ? "Print on Android" : selectedPrinter && selectedPrinter.protocol !== "BROWSER" ? "Download printer file" : "Print"} ({printProducts.length})</button></div>
+          <div className="mt-3 rounded-lg border border-brand-100 bg-brand-50 p-3"><div className="flex flex-wrap items-center gap-2"><label htmlFor="label-download-format" className="text-xs font-semibold text-brand-800">Download output</label><select id="label-download-format" value={downloadFormat} onChange={(event) => setDownloadFormat(event.target.value as DownloadFormat)} className="rounded-lg border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-900"><option value="SVG">SVG image (exact size)</option><option value="PNG">PNG image (8-dot/mm)</option><option value="ZPL">ZPL raw commands</option><option value="TSPL">TSPL raw commands</option><option value="EPL">EPL raw commands</option><option value="ESCPOS">ESC/POS hex commands</option></select><button type="button" disabled={!printProducts.length} onClick={() => void downloadSelectedOutput()} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-brand-800 ring-1 ring-brand-200 disabled:opacity-40">Download file</button></div><p className="mt-2 text-[11px] text-brand-800/80">PDF/browser printing is sized to the selected label and prints one label per page. Raw printer files must be sent through the printer utility or print bridge, not opened and re-saved in a text editor.</p></div>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_280px]">
             <div className="space-y-3">
               <div><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Muundo wa label" : "Label content"}</p><div className="grid gap-2 sm:grid-cols-2">{FIELD_PRESETS.map((preset) => <button key={preset.label} type="button" onClick={() => setFields(preset.fields)} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-semibold ${JSON.stringify(template.fields) === JSON.stringify(preset.fields) ? "border-brand-400 bg-brand-50 text-brand-800" : "border-gray-200 text-gray-600"}`}><span>{lang === "sw" ? preset.sw : preset.label}</span>{JSON.stringify(template.fields) === JSON.stringify(preset.fields) && <Check className="h-4 w-4" />}</button>)}</div></div>
@@ -313,7 +413,7 @@ export default function BarcodesPage() {
           </div>
         </section>
         <section className="overflow-hidden rounded-lg border border-gray-200 bg-white"><div className="border-b border-gray-100 p-4"><div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta bidhaa, SKU au barcode" : "Search product, SKU, or barcode"} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" /></div><p className="mt-2 text-xs text-gray-500">{filteredProducts.length} of {products.length} products · max 100 copies each</p></div><div className="divide-y divide-gray-100">{filteredProducts.map((product) => <div key={product.id} className="flex items-center gap-3 px-4 py-3"><input type="checkbox" checked={Boolean(selected[product.id])} onChange={() => toggleLabel(product.id)} className="h-5 w-5 rounded border-gray-300 text-brand-600" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-800">{product.name}</p><p className="font-mono text-xs text-gray-500">{product.barcode || "No barcode"}{product.sku ? ` · ${product.sku}` : ""}</p></div><input aria-label={`Label quantity for ${product.name}`} type="number" min="0" max="100" value={selected[product.id] || ""} onChange={(event) => setQuantity(product.id, event.target.value)} className="w-16 rounded-lg border border-gray-300 px-2 py-2 text-sm" placeholder="0" /></div>)}</div>{!filteredProducts.length && <div className="p-10 text-center text-sm text-gray-500">{lang === "sw" ? "Hakuna bidhaa zinazolingana." : "No matching products."}</div>}</section>
-        <div className="print-labels hidden print:grid print:grid-cols-2 print:gap-2">{printProducts.map((product, index) => <BarcodeLabel key={`${product.id}-${index}`} value={product.barcode} barcodeType={product.barcodeType} name={product.name} price={labelPrice(product)} sku={product.sku} unit={product.unit} customText={template.customText} fields={template.fields} widthMm={template.widthMm} heightMm={template.heightMm} className="label-print-item border border-gray-300" />)}</div>
+        <div className="print-labels hidden print:block" style={{ "--label-width": `${template.widthMm}mm`, "--label-height": `${template.heightMm}mm` } as CSSProperties}>{printProducts.map((product, index) => <BarcodeLabel key={`${product.id}-${index}`} value={product.barcode} barcodeType={product.barcodeType} name={product.name} price={labelPrice(product)} sku={product.sku} unit={product.unit} customText={template.customText} fields={template.fields} widthMm={template.widthMm} heightMm={template.heightMm} className="label-print-item border border-gray-300" />)}</div>
       </div>}
       {tab === "history" && <section className="overflow-hidden rounded-lg border border-gray-200 bg-white"><div className="border-b border-gray-100 px-4 py-3"><h2 className="font-semibold text-gray-950">{lang === "sw" ? "Historia ya scan" : "Barcode scan history"}</h2></div>{scans.length ? <div className="divide-y divide-gray-100">{scans.map((scan) => <div key={scan.id} className="flex items-center justify-between gap-4 px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-gray-800">{scan.product?.name || scan.barcode}</p><p className="font-mono text-xs text-gray-500">{scan.barcode} · {scan.context}</p></div><div className="text-right"><p className={`text-xs font-bold ${scan.found ? "text-green-700" : "text-red-700"}`}>{scan.found ? "FOUND" : "NOT FOUND"}</p><p className="text-xs text-gray-400">{new Date(scan.createdAt).toLocaleString()}</p></div></div>)}</div> : <div className="p-10 text-center text-sm text-gray-500"><Search className="mx-auto mb-2 h-6 w-6" />{lang === "sw" ? "Hakuna scan bado." : "No barcode scans yet."}</div>}</section>}
     </>}

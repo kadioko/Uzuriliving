@@ -47,8 +47,10 @@ html {
 @media print {
   body * { visibility: hidden; }
   .print-labels, .print-labels * { visibility: visible; }
-  .print-labels { position: absolute; left: 0; top: 0; padding: 0; }
-  .label-print-item, .label-card { break-inside: avoid; page-break-inside: avoid; }
+  html, body { width: var(--label-width); margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  .print-labels { position: absolute; left: 0; top: 0; display: block !important; width: var(--label-width); padding: 0 !important; margin: 0 !important; }
+  .label-print-item, .label-card { display: flex !important; width: var(--label-width) !important; height: var(--label-height) !important; min-height: var(--label-height) !important; margin: 0 !important; border: 0 !important; break-inside: avoid; page-break-inside: avoid; break-after: page; page-break-after: always; }
+  .label-print-item:last-child { break-after: auto; page-break-after: auto; }
 }
 
 @page { margin: 0; }
