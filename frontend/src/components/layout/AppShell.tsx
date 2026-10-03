@@ -79,7 +79,7 @@ const merchantNav: NavItem[] = [
   { href: "/suppliers", labelKey: "nav.suppliers", icon: Truck, permission: "canManageStock" },
   { href: "/staff", labelKey: "nav.staff", icon: Users, permission: "canManageStaff", feature: "staff" },
   { href: "/assistant", labelKey: "nav.assistant", icon: Sparkles, permission: "canViewReports", feature: "assistant" },
-  { href: "/profit", labelKey: "nav.profit", icon: ChartNoAxesCombined, permission: "canViewReports" },
+  { href: "/analytics", labelKey: "nav.analytics", icon: ChartNoAxesCombined, permission: "canViewReports" },
   { href: "/billing", labelKey: "nav.billing", icon: CreditCard, permission: "canManageStaff" },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
   { href: "/reports", label: "Report Issue", icon: AlertTriangle },
