@@ -2,7 +2,7 @@ import type { LabelProduct, LabelTemplate, PrinterProtocol } from "./types";
 import { normalizeBarcode, printerCodeFor } from "./barcodes";
 
 function escapeText(value: unknown): string {
-  return String(value ?? "").replace(/[\^~\\]/g, " ").replace(/[\r\n]+/g, " ").trim();
+  return String(value ?? "").replace(/[\^~\\"]/g, " ").replace(/[\r\n]+/g, " ").trim();
 }
 
 function productLines(product: LabelProduct, template: LabelTemplate): string[] {
