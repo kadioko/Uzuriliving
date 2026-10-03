@@ -1061,7 +1061,7 @@ async function profitAnalytics(client: SupabaseClient, user: Record<string, unkn
   const saleMap = new Map(saleRows.map((sale) => [sale.id, sale.createdAt]));
   const productMap = new Map((products ?? []).map((product) => [product.id, product]));
   const group = period === "today" ? "hour" : period === "year" ? "month" : "day";
-  const chartMap = new Map<string, { label: string; revenue: number; costOfGoodsSold: number; grossProfit: number }>();
+  const chartMap = new Map<string, { label: string; revenue: number; costOfGoodsSold: number; grossProfit: number; unitsSold: number; saleIds: Set<string> }>();
   const productTotals = new Map<string, { id: string; name: string; unit: string; imageUrl: string | null; revenue: number; costOfGoodsSold: number; grossProfit: number; unitsSold: number }>();
   const supplierTotals = new Map<string, { id: string; name: string; revenue: number; unitsSold: number; productsSold: number }>();
   let revenue = 0;
@@ -1083,10 +1083,12 @@ async function profitAnalytics(client: SupabaseClient, user: Record<string, unkn
     if (createdAt) {
       const parts = timeZoneParts(new Date(createdAt), timeZone);
       const label = group === "hour" ? `${parts.hour}:00` : group === "month" ? `${parts.year}-${parts.month}` : `${parts.year}-${parts.month}-${parts.day}`;
-      const chartRow = chartMap.get(label) ?? { label, revenue: 0, costOfGoodsSold: 0, grossProfit: 0 };
+      const chartRow = chartMap.get(label) ?? { label, revenue: 0, costOfGoodsSold: 0, grossProfit: 0, unitsSold: 0, saleIds: new Set<string>() };
       chartRow.revenue += itemRevenue;
       chartRow.costOfGoodsSold += itemCogs;
       chartRow.grossProfit += itemRevenue - itemCogs;
+      chartRow.unitsSold += quantity;
+      chartRow.saleIds.add(item.saleId);
       chartMap.set(label, chartRow);
     }
 
@@ -1126,7 +1128,7 @@ async function profitAnalytics(client: SupabaseClient, user: Record<string, unkn
       unitsSold: units,
       missingCostSalesRevenue,
     },
-    chart: [...chartMap.values()].sort((a, b) => a.label.localeCompare(b.label)),
+    chart: [...chartMap.values()].sort((a, b) => a.label.localeCompare(b.label)).map(({ saleIds, ...row }) => ({ ...row, salesCount: saleIds.size })),
     topProducts,
     topSupplier,
   });
