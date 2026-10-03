@@ -521,7 +521,7 @@ async function stockMovementHistory(client: SupabaseClient, user: Record<string,
   if (!canViewStockMovementHistory(user)) return json({ error: "Only the owner or admin can view stock movement history" }, 403);
   const url = new URL(request.url);
   const requestedType = String(url.searchParams.get("type") ?? "RECEIVED_AND_RETURNED").toUpperCase();
-  const types = requestedType === "ALL" ? ["IN", "OUT", "ADJUSTMENT", "RETURN"] : requestedType === "IN" || requestedType === "RETURN" ? [requestedType] : ["IN", "RETURN"];
+  const types = requestedType === "IN" || requestedType === "RETURN" ? [requestedType] : ["IN", "RETURN"];
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
   const { data: products, error: productsError } = await client.from("products").select("id,name,unit").eq("shopId", shop.id);
   if (productsError) throw productsError;
