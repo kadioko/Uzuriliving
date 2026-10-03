@@ -59,7 +59,7 @@ interface Supplier {
 
 interface OwnerSupplierUser {
   role: string;
-  staff?: { role?: string; permissions?: { canViewReports?: boolean; canManageStock?: boolean; canViewInventoryAndPrices?: boolean; canAddInventory?: boolean; canManageExpiry?: boolean; canRefundStock?: boolean } };
+  staff?: { role?: string; permissions?: { canViewReports?: boolean; canManageStock?: boolean; canViewInventoryAndPrices?: boolean; canViewProductPerformance?: boolean; canAddInventory?: boolean; canManageExpiry?: boolean; canRefundStock?: boolean } };
   shop?: { ownerSupplierManagementEnabled?: boolean } | null;
 }
 
@@ -114,6 +114,7 @@ export default function InventoryPage() {
   const [canViewFinancials, setCanViewFinancials] = useState(true);
   const [canManageStock, setCanManageStock] = useState(true);
   const [canViewInventoryAndPrices, setCanViewInventoryAndPrices] = useState(true);
+  const [canViewProductPerformance, setCanViewProductPerformance] = useState(true);
   const [canAddInventory, setCanAddInventory] = useState(true);
   const [canManageExpiry, setCanManageExpiry] = useState(true);
   const [canRefundStock, setCanRefundStock] = useState(true);
@@ -169,6 +170,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewReports));
         setCanManageStock(fullAccess || Boolean(permissions?.canManageStock));
         setCanViewInventoryAndPrices(fullAccess || Boolean(permissions?.canViewInventoryAndPrices || permissions?.canManageStock));
+        setCanViewProductPerformance(fullAccess || Boolean(permissions?.canViewProductPerformance));
         setCanAddInventory(fullAccess || Boolean(permissions?.canAddInventory || permissions?.canManageStock));
         setCanManageExpiry(fullAccess || Boolean(permissions?.canManageExpiry || permissions?.canManageStock));
         setCanRefundStock(fullAccess || Boolean(permissions?.canRefundStock || permissions?.canManageStock));
@@ -652,7 +654,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                       </div>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
-                      <Link href={`/product-analytics/${p.id}`} aria-label={`${lang === "sw" ? "Angalia utendaji wa" : "View performance for"} ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-brand-50 hover:text-brand-700" title={lang === "sw" ? "Utendaji wa bidhaa" : "Product performance"}><BarChart3 className="h-4 w-4" /></Link>
+                      {canViewProductPerformance && <Link href={`/product-analytics/${p.id}`} aria-label={`${lang === "sw" ? "Angalia utendaji wa" : "View performance for"} ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-brand-50 hover:text-brand-700" title={lang === "sw" ? "Utendaji wa bidhaa" : "Product performance"}><BarChart3 className="h-4 w-4" /></Link>}
                       {p.barcode && <button onClick={() => setLabelProduct(p)} aria-label={`Print label for ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" title="Print barcode"><Printer className="h-4 w-4" /></button>}
                       {(canAddInventory || canManageStock || canRefundStock) && <button
                         onClick={() => {

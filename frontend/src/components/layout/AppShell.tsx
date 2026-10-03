@@ -42,6 +42,7 @@ interface User {
       canSell: boolean;
       canManageStock: boolean;
       canViewInventoryAndPrices: boolean;
+      canViewProductPerformance: boolean;
       canManageStaff: boolean;
       canViewReports: boolean;
       canRecordExpenses: boolean;
