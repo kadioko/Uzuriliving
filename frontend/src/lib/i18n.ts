@@ -15,6 +15,7 @@ const listeners = new Set<() => void>();
 const translations: Record<string, Record<Lang, string>> = {
   "nav.dashboard": { sw: "Dashibodi", en: "Dashboard" },
   "nav.inventory": { sw: "Hifadhi ya Bidhaa", en: "Inventory" },
+  "nav.stockHistory": { sw: "Historia ya Stock", en: "Stock History" },
   "nav.sales": { sw: "Mauzo", en: "Sales" },
   "nav.debts": { sw: "Madeni", en: "Debts" },
   "nav.expenses": { sw: "Matumizi", en: "Expenses" },
