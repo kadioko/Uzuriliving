@@ -463,7 +463,7 @@ async function productAnalytics(client: SupabaseClient, user: Record<string, unk
   const productIds = [...new Set([productId, ...compareIds])].slice(0, 5);
   const [{ data: products, error: productError }, { data: availableProducts, error: availableError }] = await Promise.all([
     client.from("products").select("id,name,sku,barcode,unit,buyingPrice,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,minimumStock,isReorderable,imageUrl,supplier:suppliers(id,name)").in("id", productIds).eq("shopId", shop.id),
-    client.from("products").select("id,name,unit,currentStock").eq("shopId", shop.id).eq("isActive", true).order("name").limit(1000),
+    client.from("products").select("id,name,sku,barcode,unit,currentStock").eq("shopId", shop.id).eq("isActive", true).order("name").limit(1000),
   ]);
   if (productError) throw productError;
   if (availableError) throw availableError;
@@ -515,7 +515,7 @@ async function productAnalytics(client: SupabaseClient, user: Record<string, unk
   const canViewFinancials = user.role === "ADMIN" || !user.staffId || (user.permissions as Record<string, unknown> | undefined)?.canViewReports === true;
   const buildSummary = (id: string) => { const product = productMap.get(id)!; const sales = summaries.get(id)!; const stockData = stock.get(id)!; const orderData = orders.get(id)!; const customerData = customer.get(id)!; const grossProfit = sales.revenue - sales.costOfGoods; return { product: canViewFinancials ? product : { ...product, buyingPrice: null }, sales: { ...sales, averageSellingPrice: sales.unitsSold ? Math.round(sales.revenue / sales.unitsSold) : 0, grossProfit: canViewFinancials ? grossProfit : null, grossMargin: canViewFinancials && sales.revenue ? Number(((grossProfit / sales.revenue) * 100).toFixed(1)) : null }, stock: { ...stockData, currentStock: product.currentStock, minimumStock: product.minimumStock }, orders: orderData, customerOrders: customerData, trend: [...(trends.get(id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date)) }; };
   const result = productIds.map(buildSummary);
-  return json({ period: days == null ? "all" : String(days), from: from?.toISOString() ?? null, primary: result[0], comparisons: result.slice(1), availableProducts: (availableProducts ?? []).map((product) => ({ id: product.id, name: product.name, unit: product.unit, currentStock: product.currentStock })), recentMovements: (movements ?? []).filter((movement) => movement.productId === productId).slice(0, 20) });
+  return json({ period: days == null ? "all" : String(days), from: from?.toISOString() ?? null, primary: result[0], comparisons: result.slice(1), availableProducts: (availableProducts ?? []).map((product) => ({ id: product.id, name: product.name, sku: product.sku, barcode: product.barcode, unit: product.unit, currentStock: product.currentStock })), recentMovements: (movements ?? []).filter((movement) => movement.productId === productId).slice(0, 20) });
 }
 
 async function productCreate(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {

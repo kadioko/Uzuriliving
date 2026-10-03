@@ -7,7 +7,7 @@ import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
 import { formatAppDate } from "@/lib/timezone";
-import { ArrowLeft, BarChart3, Package, TrendingUp } from "lucide-react";
+import { ArrowLeft, BarChart3, Package, Search, TrendingUp } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -24,7 +24,7 @@ type AnalyticsData = {
   period: string;
   primary: ProductSummary;
   comparisons: ProductSummary[];
-  availableProducts: Array<{ id: string; name: string; unit: string; currentStock: number }>;
+  availableProducts: Array<{ id: string; name: string; sku?: string | null; barcode?: string | null; unit: string; currentStock: number }>;
   recentMovements: Array<{ type: string; quantity: number; note?: string | null; createdAt: string }>;
 };
 
@@ -44,6 +44,7 @@ export default function ProductAnalyticsPage() {
   const { toast } = useToast();
   const [period, setPeriod] = useState("30");
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareSearch, setCompareSearch] = useState("");
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -61,6 +62,12 @@ export default function ProductAnalyticsPage() {
   }, [id, period, compareIds, toast, lang]);
 
   const summaries = data ? [data.primary, ...data.comparisons] : [];
+  const comparisonCandidates = useMemo(() => {
+    const query = compareSearch.trim().toLowerCase();
+    return (data?.availableProducts ?? [])
+      .filter((product) => product.id !== data?.primary.product.id)
+      .filter((product) => !query || [product.name, product.sku, product.barcode].some((value) => String(value ?? "").toLowerCase().includes(query)));
+  }, [data, compareSearch]);
   const chartData = useMemo(() => {
     const dates = [...new Set(summaries.flatMap((summary) => summary.trend.map((point) => point.date)))].sort();
     return dates.map((date) => Object.fromEntries(["date", ...summaries.map((summary) => summary.product.id)].map((key) => [key, key === "date" ? date : summaries.find((summary) => summary.product.id === key)?.trend.find((point) => point.date === date)?.revenue ?? 0])));
@@ -107,7 +114,7 @@ export default function ProductAnalyticsPage() {
             <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Bei na mchanganyiko wa mauzo" : "Pricing and sales mix"}</h2><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><Fact label={lang === "sw" ? "Bei ya kuuza" : "Selling price"} value={formatTZS(primary.product.sellingPrice)} /><Fact label={lang === "sw" ? "Bei ya wastani" : "Average price"} value={formatTZS(primary.sales.averageSellingPrice)} /><Fact label="Retail units" value={`${primary.sales.retailUnits}`} /><Fact label="Wholesale units" value={`${primary.sales.wholesaleUnits}`} /><Fact label={lang === "sw" ? "Margin" : "Gross margin"} value={primary.sales.grossMargin == null ? "—" : `${primary.sales.grossMargin}%`} /><Fact label={lang === "sw" ? "Mauzo ya mwisho" : "Last sold"} value={dateLabel(primary.sales.lastSoldAt, lang)} /></div></section>
           </div>
 
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-brand-700" /><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Linganisha bidhaa" : "Compare products"}</h2></div><p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Chagua hadi bidhaa nne kuona mwenendo pamoja na bidhaa hii." : "Select up to four products to compare against this product."}</p><div className="mt-3 grid max-h-36 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">{data.availableProducts.filter((product) => product.id !== primary.product.id).map((product) => <label key={product.id} className="flex items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={compareIds.includes(product.id)} onChange={() => toggleCompare(product.id)} /><span className="truncate">{product.name}</span><span className="ml-auto text-xs text-gray-400">{product.currentStock} {product.unit}</span></label>)}</div>{data.comparisons.length > 0 && <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="px-2 py-2">Product</th><th className="px-2 py-2">Units sold</th><th className="px-2 py-2">Revenue</th><th className="px-2 py-2">Gross profit</th><th className="px-2 py-2">Current stock</th></tr></thead><tbody>{summaries.map((summary) => <tr key={summary.product.id} className="border-b border-gray-50"><td className="px-2 py-2 font-medium">{summary.product.name}</td><td className="px-2 py-2">{summary.sales.unitsSold}</td><td className="px-2 py-2">{formatTZS(summary.sales.revenue)}</td><td className="px-2 py-2">{summary.sales.grossProfit == null ? "—" : formatTZS(summary.sales.grossProfit)}</td><td className="px-2 py-2">{summary.stock.currentStock} {summary.product.unit}</td></tr>)}</tbody></table></div>}</section>
+          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-brand-700" /><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Linganisha bidhaa" : "Compare products"}</h2></div><p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Chagua hadi bidhaa nne kuona mwenendo pamoja na bidhaa hii." : "Select up to four products to compare against this product."}</p><div className="relative mt-3"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={compareSearch} onChange={(event) => setCompareSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta kwa jina, SKU au barcode" : "Search by name, SKU, or barcode"} aria-label={lang === "sw" ? "Tafuta bidhaa za kulinganisha" : "Search comparison products"} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" /></div><div className="mt-3 grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">{comparisonCandidates.map((product) => <label key={product.id} className="flex items-center gap-2 rounded-lg border border-gray-100 px-3 py-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={compareIds.includes(product.id)} onChange={() => toggleCompare(product.id)} /><span className="min-w-0 flex-1 truncate" title={[product.name, product.sku, product.barcode].filter(Boolean).join(" · ")}>{product.name}</span><span className="ml-auto whitespace-nowrap text-xs text-gray-400">{product.currentStock} {product.unit}</span></label>)}{comparisonCandidates.length === 0 && <p className="col-span-full py-4 text-center text-sm text-gray-400">{lang === "sw" ? "Hakuna bidhaa inayolingana." : "No matching products."}</p>}</div>{data.comparisons.length > 0 && <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead><tr className="border-b border-gray-100 text-xs text-gray-500"><th className="px-2 py-2">Product</th><th className="px-2 py-2">Units sold</th><th className="px-2 py-2">Revenue</th><th className="px-2 py-2">Gross profit</th><th className="px-2 py-2">Current stock</th></tr></thead><tbody>{summaries.map((summary) => <tr key={summary.product.id} className="border-b border-gray-50"><td className="px-2 py-2 font-medium">{summary.product.name}</td><td className="px-2 py-2">{summary.sales.unitsSold}</td><td className="px-2 py-2">{formatTZS(summary.sales.revenue)}</td><td className="px-2 py-2">{summary.sales.grossProfit == null ? "—" : formatTZS(summary.sales.grossProfit)}</td><td className="px-2 py-2">{summary.stock.currentStock} {summary.product.unit}</td></tr>)}</tbody></table></div>}</section>
 
           <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-2"><Package className="h-5 w-5 text-brand-700" /><h2 className="font-semibold text-gray-900">{lang === "sw" ? "Maelezo ya ziada" : "Additional signals"}</h2></div><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Fact label={lang === "sw" ? "Maagizo yote ya wateja" : "Customer orders"} value={`${primary.customerOrders.orderCount}`} /><Fact label={lang === "sw" ? "Yanayosubiri" : "Pending demand"} value={`${primary.customerOrders.pendingQuantity} ${primary.product.unit}`} /><Fact label={lang === "sw" ? "Supplier" : "Supplier"} value={primary.product.supplier?.name || "—"} /><Fact label={lang === "sw" ? "Stock adjustments" : "Stock adjustments"} value={`${primary.stock.adjustmentCount}`} /></div></section>
 
