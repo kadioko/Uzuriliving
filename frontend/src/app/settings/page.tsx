@@ -3,8 +3,9 @@ import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
 import { t, useLang, setLanguage as setAppLanguage } from "@/lib/i18n";
-import { Store, User, Lock, Globe, Check, ChevronDown, Bell, ScanLine } from "lucide-react";
+import { Store, User, Lock, Globe, Check, ChevronDown, Bell, ScanLine, Clock } from "lucide-react";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
+import { DEFAULT_TIME_ZONE, getDeviceTimeZone, isValidTimeZone, setAppTimeZone, timeZoneOffsetLabel } from "@/lib/timezone";
 
 interface UserSettings {
   id: string;
@@ -22,6 +23,7 @@ interface UserSettings {
     district?: string | null;
     category: string;
     isCatalogPublished: boolean;
+    timeZone?: string | null;
   };
 }
 
@@ -68,6 +70,9 @@ export default function SettingsPage() {
   const [shopDistrict, setShopDistrict] = useState("");
   const [shopCategory, setShopCategory] = useState("general");
   const [catalogPublished, setCatalogPublished] = useState(true);
+  const [shopTimeZone, setShopTimeZone] = useState(DEFAULT_TIME_ZONE);
+  const [detectedTimeZone, setDetectedTimeZone] = useState(DEFAULT_TIME_ZONE);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [shopSaving, setShopSaving] = useState(false);
   const [shopMsg, setShopMsg] = useState("");
   const [shopError, setShopError] = useState("");
@@ -88,6 +93,7 @@ export default function SettingsPage() {
   const [barcodeSettings, setBarcodeSettings] = useState<Record<string, boolean> | null>(null);
 
   useEffect(() => {
+    setDetectedTimeZone(getDeviceTimeZone());
     api.get<{ settings: UserSettings }>("/settings")
       .then((d) => {
         const s = d.settings;
@@ -99,11 +105,17 @@ export default function SettingsPage() {
           setShopDistrict(s.shop.district || "");
           setShopCategory(s.shop.category);
           setCatalogPublished(s.shop.isCatalogPublished !== false);
+          setShopTimeZone(s.shop.timeZone || DEFAULT_TIME_ZONE);
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
     api.get<{ settings: Record<string, boolean> }>("/barcodes/settings").then((data) => setBarcodeSettings(data.settings)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   async function saveShop(e: React.FormEvent) {
@@ -122,11 +134,13 @@ export default function SettingsPage() {
         district: shopDistrict.trim() || null,
         category: shopCategory,
         isCatalogPublished: catalogPublished,
+        timeZone: shopTimeZone,
       });
+      setAppTimeZone(shopTimeZone);
       setShopMsg(t("settings.saved", lang));
       setSettings((prev) => prev ? {
         ...prev,
-        shop: prev.shop ? { ...prev.shop, name: shopName.trim(), location: shopLocation.trim(), district: shopDistrict.trim() || null, category: shopCategory, isCatalogPublished: catalogPublished } : prev.shop,
+        shop: prev.shop ? { ...prev.shop, name: shopName.trim(), location: shopLocation.trim(), district: shopDistrict.trim() || null, category: shopCategory, isCatalogPublished: catalogPublished, timeZone: shopTimeZone } : prev.shop,
       } : prev);
       setTimeout(() => setShopMsg(""), 3000);
     } catch (err: unknown) {
@@ -319,6 +333,46 @@ export default function SettingsPage() {
                     ))}
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div className="rounded-lg border border-brand-100 bg-brand-50/60 p-3">
+                <div className="flex items-start gap-3">
+                  <Clock className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-600" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-gray-800">{t("settings.timeZoneSection", lang)}</h3>
+                    <p className="mt-1 text-xs leading-5 text-gray-600">{t("settings.timeZoneDescription", lang)}</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t("settings.timeZone", lang)}</label>
+                        <input
+                          list="uzuri-time-zones"
+                          value={shopTimeZone}
+                          onChange={(e) => setShopTimeZone(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                          aria-describedby="timezone-current-time"
+                        />
+                        <datalist id="uzuri-time-zones">
+                          {["Africa/Nairobi", "Africa/Dar_es_Salaam", "Africa/Kampala", "Africa/Addis_Ababa", "Africa/Johannesburg", "Africa/Lagos", "Europe/London", "Europe/Paris", "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "America/New_York", "America/Los_Angeles", "Australia/Sydney", "UTC"].map((zone) => <option key={zone} value={zone} />)}
+                        </datalist>
+                        <p className="mt-1 text-xs text-gray-500">{isValidTimeZone(shopTimeZone) ? timeZoneOffsetLabel(shopTimeZone, currentTime) : ""}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShopTimeZone(detectedTimeZone)}
+                        className="rounded-lg border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+                      >
+                        {t("settings.detectTimeZone", lang)}<br />
+                        <span className="font-normal text-gray-500">{detectedTimeZone}</span>
+                      </button>
+                    </div>
+                    {isValidTimeZone(shopTimeZone) ? (
+                      <p id="timezone-current-time" className="mt-3 text-sm font-semibold text-brand-800">
+                        {t("settings.currentTime", lang)}: {new Intl.DateTimeFormat(lang === "sw" ? "sw-TZ" : "en-US", { timeZone: shopTimeZone, dateStyle: "medium", timeStyle: "short" }).format(currentTime)}
+                      </p>
+                    ) : (
+                      <p id="timezone-current-time" className="mt-3 text-xs text-red-600">{t("settings.invalidTimeZone", lang)}</p>
+                    )}
+                  </div>
                 </div>
               </div>
               {shopMsg && <SuccessBanner msg={shopMsg} />}

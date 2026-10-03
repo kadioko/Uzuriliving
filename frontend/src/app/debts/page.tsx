@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
+import { formatAppDate } from "@/lib/timezone";
 import { MessageCircle } from "lucide-react";
 
 interface Debt {
@@ -137,14 +138,14 @@ export default function DebtsPage() {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {debt.payments.slice(0, 3).map((payment) => (
                         <span key={payment.id} className="rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-800">
-                          {formatTZS(payment.amount)} {payment.paymentMethod} - {new Date(payment.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US")}
+                          {formatTZS(payment.amount)} {payment.paymentMethod} - {formatAppDate(payment.createdAt, lang === "sw" ? "sw-TZ" : "en-US")}
                         </span>
                       ))}
                     </div>
                   )}
                   {debt.dueDate && (
                     <p className="mt-1 text-xs text-amber-700">
-                      {lang === "sw" ? "Mwisho" : "Due"} {new Date(debt.dueDate).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US")}
+                      {lang === "sw" ? "Mwisho" : "Due"} {formatAppDate(debt.dueDate, lang === "sw" ? "sw-TZ" : "en-US")}
                     </p>
                   )}
                 </div>

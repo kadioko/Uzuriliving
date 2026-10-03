@@ -99,6 +99,67 @@ function validPin(pin: string) {
   return /^\d{4,8}$/.test(pin);
 }
 
+const DEFAULT_TIME_ZONE = "Africa/Nairobi";
+
+function validTimeZone(value: unknown): value is string {
+  const timeZone = String(value ?? "").trim();
+  if (!timeZone || timeZone.length > 100) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function shopTimeZone(shop: Record<string, unknown>) {
+  return validTimeZone(shop.timeZone) ? String(shop.timeZone) : DEFAULT_TIME_ZONE;
+}
+
+function timeZoneParts(value: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(value);
+  return Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+}
+
+function timeZoneOffsetMs(value: Date, timeZone: string) {
+  const parts = timeZoneParts(value, timeZone);
+  return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second)) - value.getTime();
+}
+
+function startOfTimeZoneDate(dateKey: string, timeZone: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const wallClock = Date.UTC(year, month - 1, day);
+  let result = new Date(wallClock);
+  for (let index = 0; index < 3; index += 1) result = new Date(wallClock - timeZoneOffsetMs(result, timeZone));
+  return result;
+}
+
+function dateKeyInTimeZone(value: Date, timeZone: string) {
+  const parts = timeZoneParts(value, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function shiftDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
+function addCalendarDaysInTimeZone(value: Date, days: number, timeZone: string) {
+  return startOfTimeZoneDate(shiftDateKey(dateKeyInTimeZone(value, timeZone), days), timeZone);
+}
+
+function startOfMonthInTimeZone(value: Date, timeZone: string) {
+  const parts = timeZoneParts(value, timeZone);
+  return startOfTimeZoneDate(`${parts.year}-${parts.month}-01`, timeZone);
+}
+
+function parseDateInTimeZone(value: string, timeZone: string, endOfDay = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const start = startOfTimeZoneDate(value, timeZone);
+  return endOfDay ? new Date(addCalendarDaysInTimeZone(start, 1, timeZone).getTime() - 1) : start;
+}
+
 function readCookies(request: Request) {
   const header = request.headers.get("cookie") ?? "";
   return Object.fromEntries(header.split(";").map((part) => {
@@ -150,7 +211,7 @@ async function profile(client: SupabaseClient, userId: string, staffId?: string)
   if (error) throw error;
   if (!user) return null;
   const [{ data: shop }, { data: supplier }] = await Promise.all([
-    client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,ownerSupplierManagementEnabled").eq("userId", userId).maybeSingle(),
+    client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,ownerSupplierManagementEnabled,timeZone").eq("userId", userId).maybeSingle(),
     client.from("suppliers").select("id,name,phone,address").eq("userId", userId).maybeSingle(),
   ]);
   if (!staffId) return { ...user, shop: shop ?? null, supplier: supplier ?? null };
@@ -162,7 +223,7 @@ async function profile(client: SupabaseClient, userId: string, staffId?: string)
     phone: staff.phone || user.phone,
     name: staff.name,
     language: staff.language || user.language,
-    shop: { id: shop.id, name: shop.name, location: shop.location, district: shop.district, category: shop.category, ownerSupplierManagementEnabled: shop.ownerSupplierManagementEnabled },
+    shop: { id: shop.id, name: shop.name, location: shop.location, district: shop.district, category: shop.category, ownerSupplierManagementEnabled: shop.ownerSupplierManagementEnabled, timeZone: shop.timeZone },
     supplier: null,
     staff: { id: staff.id, name: staff.name, role: staff.role, permissions: staffPermissions(String(staff.role), staff) },
   };
@@ -263,7 +324,7 @@ async function verifyOtpReset(client: SupabaseClient, request: Request) {
 }
 
 async function shopForUser(client: SupabaseClient, userId: string) {
-  const { data, error } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,barcodeGenerationEnabled,ownerSupplierManagementEnabled").eq("userId", userId).maybeSingle();
+  const { data, error } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,barcodeGenerationEnabled,ownerSupplierManagementEnabled,timeZone").eq("userId", userId).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -611,8 +672,8 @@ const expensePaymentMethods = new Set(["CASH", "MOBILE_MONEY", "MPESA", "TIGOPES
 function expenseCategory(value: unknown) { const category = String(value ?? "OTHER").toUpperCase(); return expenseCategories.has(category) ? category : "OTHER"; }
 function expensePaymentMethod(value: unknown) { const method = String(value ?? "CASH").toUpperCase(); return expensePaymentMethods.has(method) ? method : "CASH"; }
 function expenseTitle(value: unknown) { return String(value ?? "").trim(); }
-async function expenseDuplicate(client: SupabaseClient, shopId: string, body: Record<string, unknown>, spentAt: string) {
-  const start = new Date(spentAt); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 1);
+async function expenseDuplicate(client: SupabaseClient, shopId: string, body: Record<string, unknown>, spentAt: string, timeZone: string) {
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(spentAt) ? parseDateInTimeZone(spentAt, timeZone) : startOfTimeZoneDate(dateKeyInTimeZone(new Date(spentAt), timeZone), timeZone); if (!start) return null; const end = addCalendarDaysInTimeZone(start, 1, timeZone);
   const { data } = await client.from("expenses").select("id,title,amount,category,vendor,spentAt").eq("shopId", shopId).eq("amount", Number(body.amount)).eq("category", expenseCategory(body.category)).gte("spentAt", start.toISOString()).lt("spentAt", end.toISOString()).ilike("title", expenseTitle(body.title));
   return data?.find((row) => String(row.vendor ?? "").trim().toLowerCase() === String(body.vendor ?? "").trim().toLowerCase()) ?? null;
 }
@@ -628,10 +689,10 @@ async function expenses(client: SupabaseClient, shop: Record<string, unknown>, r
     const result = templateId ? await client.from("recurring_expense_templates").update(update).eq("id", templateId).eq("shopId", shop.id).select("*").single() : await client.from("recurring_expense_templates").insert({ id: crypto.randomUUID(), ...update, shopId: shop.id, createdAt: now }).select("*").single(); if (result.error) throw result.error; return json({ template: result.data }, templateId ? 200 : 201);
   }
   const url = new URL(request.url);
-  if (method === "GET") { const category = String(url.searchParams.get("category") ?? "").toUpperCase(); const search = url.searchParams.get("search")?.trim(); const vendor = url.searchParams.get("vendor")?.trim(); const from = url.searchParams.get("from"); const to = url.searchParams.get("to"); let query = client.from("expenses").select("*").eq("shopId", shop.id).order("spentAt", { ascending: false }).limit(500); if (expenseCategories.has(category)) query = query.eq("category", category); if (search) query = query.or(`title.ilike.%${search}%,note.ilike.%${search}%`); if (vendor) query = query.ilike("vendor", `%${vendor}%`); if (from) query = query.gte("spentAt", new Date(`${from}T00:00:00`).toISOString()); if (to) query = query.lt("spentAt", new Date(`${to}T23:59:59.999`).toISOString()); const { data, error } = await query; if (error) throw error; const rows = data ?? []; return json({ expenses: rows, summary: { total: rows.reduce((sum, row) => sum + Number(row.amount), 0), count: rows.length }, templates: [] }); }
+  if (method === "GET") { const category = String(url.searchParams.get("category") ?? "").toUpperCase(); const search = url.searchParams.get("search")?.trim(); const vendor = url.searchParams.get("vendor")?.trim(); const timeZone = shopTimeZone(shop); const from = url.searchParams.get("from"); const to = url.searchParams.get("to"); let query = client.from("expenses").select("*").eq("shopId", shop.id).order("spentAt", { ascending: false }).limit(500); if (expenseCategories.has(category)) query = query.eq("category", category); if (search) query = query.or(`title.ilike.%${search}%,note.ilike.%${search}%`); if (vendor) query = query.ilike("vendor", `%${vendor}%`); if (from) { const parsedFrom = parseDateInTimeZone(from, timeZone); if (!parsedFrom) return json({ error: "The start date must use YYYY-MM-DD" }, 400); query = query.gte("spentAt", parsedFrom.toISOString()); } if (to) { const parsedTo = parseDateInTimeZone(to, timeZone, true); if (!parsedTo) return json({ error: "The end date must use YYYY-MM-DD" }, 400); query = query.lt("spentAt", parsedTo.toISOString()); } const { data, error } = await query; if (error) throw error; const rows = data ?? []; return json({ expenses: rows, summary: { total: rows.reduce((sum, row) => sum + Number(row.amount), 0), count: rows.length }, templates: [] }); }
   if (method === "DELETE" && id) { const { error } = await client.from("expenses").delete().eq("id", id).eq("shopId", shop.id); if (error) throw error; return json({ message: "Expense deleted" }); }
   const body = await request.json().catch(() => ({})); const amount = Number(body.amount); const title = expenseTitle(body.title); if (!title || !Number.isInteger(amount) || amount <= 0) return json({ error: "Title and a whole positive TZS amount are required" }, 400); const category = expenseCategory(body.category); const paymentMethod = expensePaymentMethod(body.paymentMethod); const now = new Date().toISOString(); const spentAt = body.spentAt || now;
-  if (method === "POST") { const duplicate = !body.allowDuplicate && await expenseDuplicate(client, String(shop.id), body, spentAt); if (duplicate) return json({ error: "A very similar expense already exists for this date. Add it anyway only if this is intentional.", duplicateWarning: true, duplicate }, 409); const { data, error } = await client.from("expenses").insert({ id: crypto.randomUUID(), title, amount, category, vendor: body.vendor || null, note: body.note || null, paymentMethod, spentAt, createdAt: now, updatedAt: now, shopId: shop.id }).select("*").single(); if (error) throw error; return json({ expense: data }, 201); }
+  if (method === "POST") { const duplicate = !body.allowDuplicate && await expenseDuplicate(client, String(shop.id), body, spentAt, shopTimeZone(shop)); if (duplicate) return json({ error: "A very similar expense already exists for this date. Add it anyway only if this is intentional.", duplicateWarning: true, duplicate }, 409); const { data, error } = await client.from("expenses").insert({ id: crypto.randomUUID(), title, amount, category, vendor: body.vendor || null, note: body.note || null, paymentMethod, spentAt, createdAt: now, updatedAt: now, shopId: shop.id }).select("*").single(); if (error) throw error; return json({ expense: data }, 201); }
   if (!id) return json({ error: "Expense not found" }, 404); const update = { ...(body.title !== undefined ? { title } : {}), ...(body.amount !== undefined ? { amount } : {}), ...(body.category !== undefined ? { category } : {}), ...(body.vendor !== undefined ? { vendor: body.vendor || null } : {}), ...(body.note !== undefined ? { note: body.note || null } : {}), ...(body.paymentMethod !== undefined ? { paymentMethod } : {}), ...(body.spentAt !== undefined ? { spentAt } : {}), updatedAt: now }; const { data, error } = await client.from("expenses").update(update).eq("id", id).eq("shopId", shop.id).select("*").single(); if (error) throw error; return json({ expense: data });
 }
 
@@ -695,7 +756,9 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
   if (method === "GET" && id === "summary") {
     const period = new URL(request.url).searchParams.get("period") ?? "today";
     const now = new Date();
-    const from = period === "month" ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) : period === "week" ? new Date(now.getTime() - 7 * 86400000) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const timeZone = shopTimeZone(shop);
+    const today = startOfTimeZoneDate(dateKeyInTimeZone(now, timeZone), timeZone);
+    const from = period === "month" ? startOfMonthInTimeZone(now, timeZone) : period === "week" ? addCalendarDaysInTimeZone(today, -6, timeZone) : today;
     const { data, error } = await client.from("sales").select("id,totalAmount,profit,paymentMethod,createdAt").eq("shopId", shop.id).gte("createdAt", from.toISOString()).order("createdAt", { ascending: false });
     if (error) throw error;
     const rows = data ?? []; const byPayment: Record<string, number> = {};
@@ -725,8 +788,8 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
     const parseLocalDate = (value: string | null, endOfDay = false) => {
       if (!value) return null;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-      const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}+03:00`);
-      return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+      const parsed = parseDateInTimeZone(value, shopTimeZone(shop), endOfDay);
+      return !parsed || Number.isNaN(parsed.getTime()) ? undefined : parsed;
     };
     const from = parseLocalDate(fromValue);
     const to = parseLocalDate(toValue, true);
@@ -912,16 +975,16 @@ async function adminSubscription(client: SupabaseClient, user: Record<string, un
 }
 
 async function dashboard(client: SupabaseClient, shop: Record<string, unknown>, request: Request) {
-  const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const from = period === "all" ? null : period === "month" ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)) : period === "week" ? new Date(now.getTime() - 7 * 86400000) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const timeZone = shopTimeZone(shop); const today = tzDayStart(now, timeZone); const from = period === "all" ? null : period === "month" ? startOfMonthInTimeZone(now, timeZone) : period === "week" ? addCalendarDaysInTimeZone(today, -6, timeZone) : today;
   let salesQuery = client.from("sales").select("id,totalAmount,profit,paymentMethod,createdAt").eq("shopId", shop.id); let expenseQuery = client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id); if (from) { salesQuery = salesQuery.gte("createdAt", from.toISOString()); expenseQuery = expenseQuery.gte("spentAt", from.toISOString()); }
   const [{ data: salesRows }, { data: expenseRows }, { data: products }, { data: allSales }, { data: allExpenses }] = await Promise.all([salesQuery, expenseQuery, client.from("products").select("id,name,currentStock,minimumStock,unit").eq("shopId", shop.id).eq("isActive", true), client.from("sales").select("totalAmount,profit,createdAt").eq("shopId", shop.id), client.from("expenses").select("amount").eq("shopId", shop.id)]);
   const salesData = salesRows ?? []; const expensesData = expenseRows ?? []; const low = (products ?? []).filter((p) => p.currentStock <= p.minimumStock); const summary = { totalSales: salesData.reduce((s, x) => s + x.totalAmount, 0), totalProfit: salesData.reduce((s, x) => s + x.profit, 0), totalExpenses: expensesData.reduce((s, x) => s + x.amount, 0), netProfit: salesData.reduce((s, x) => s + x.profit, 0) - expensesData.reduce((s, x) => s + x.amount, 0), expenseCount: expensesData.length, salesCount: salesData.length, totalProducts: products?.length ?? 0, lowStockCount: low.length, outOfStockCount: (products ?? []).filter((p) => p.currentStock === 0).length, pendingOrders: 0 }; return json({ period, features: {}, summary, allTimeSummary: { totalSales: (allSales ?? []).reduce((s, x) => s + x.totalAmount, 0), totalProfit: (allSales ?? []).reduce((s, x) => s + x.profit, 0), totalExpenses: (allExpenses ?? []).reduce((s, x) => s + x.amount, 0), salesCount: allSales?.length ?? 0, expenseCount: allExpenses?.length ?? 0 }, lowStockAlerts: low, recentSales: salesData.slice(0, 10), dailyChart: [], paymentBreakdown: [], historyTimeline: [], topProducts: [] });
 }
 
-function tzDayStart(value = new Date()) { const shifted = new Date(value.getTime() + 3 * 60 * 60 * 1000); return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - 3 * 60 * 60 * 1000); }
+function tzDayStart(value = new Date(), timeZone = DEFAULT_TIME_ZONE) { return startOfTimeZoneDate(dateKeyInTimeZone(value, timeZone), timeZone); }
 
 async function dashboardAnalytics(client: SupabaseClient, shop: Record<string, unknown>, request: Request) {
-  const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const today = tzDayStart(now); const from = period === "all" ? null : period === "month" ? new Date(Date.UTC(new Date(now.getTime() + 3 * 60 * 60 * 1000).getUTCFullYear(), new Date(now.getTime() + 3 * 60 * 60 * 1000).getUTCMonth(), 1) - 3 * 60 * 60 * 1000) : period === "week" ? new Date(today.getTime() - 6 * 86400000) : today;
+  const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const timeZone = shopTimeZone(shop); const today = tzDayStart(now, timeZone); const from = period === "all" ? null : period === "month" ? startOfMonthInTimeZone(now, timeZone) : period === "week" ? addCalendarDaysInTimeZone(today, -6, timeZone) : today;
   const [{ data: sales }, { data: expenses }, { data: products }, { data: pendingOrders }] = await Promise.all([
     (() => { let query = client.from("sales").select("id,totalAmount,profit,paymentMethod,createdAt").eq("shopId", shop.id); if (from) query = query.gte("createdAt", from.toISOString()); return query.order("createdAt", { ascending: false }); })(),
     (() => { let query = client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id); if (from) query = query.gte("spentAt", from.toISOString()); return query.order("spentAt", { ascending: false }); })(),
@@ -930,16 +993,16 @@ async function dashboardAnalytics(client: SupabaseClient, shop: Record<string, u
   ]);
   const saleRows = sales ?? []; const expenseRows = expenses ?? []; const productRows = products ?? []; const low = productRows.filter((p) => p.currentStock <= p.minimumStock); const sum = (rows: Array<Record<string, number>>, key: string) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0); const totalSales = sum(saleRows, "totalAmount"); const totalProfit = sum(saleRows, "profit"); const totalExpenses = sum(expenseRows, "amount");
   const allSalesQuery = await client.from("sales").select("id,totalAmount,profit,createdAt").eq("shopId", shop.id).order("createdAt", { ascending: true }); const allSales = allSalesQuery.data ?? []; const allExpensesQuery = await client.from("expenses").select("amount").eq("shopId", shop.id); const allExpenses = allExpensesQuery.data ?? [];
-  const dailyMap = new Map<string, { date: string; sales: number; profit: number }>(); for (let i = 6; i >= 0; i--) { const day = new Date(today.getTime() - i * 86400000); const key = day.toISOString().slice(0, 10); dailyMap.set(key, { date: key, sales: 0, profit: 0 }); } for (const sale of allSales) { const key = tzDayStart(new Date(sale.createdAt)).toISOString().slice(0, 10); const row = dailyMap.get(key); if (row) { row.sales += sale.totalAmount; row.profit += sale.profit; } }
+  const dailyMap = new Map<string, { date: string; sales: number; profit: number }>(); const todayKey = dateKeyInTimeZone(today, timeZone); for (let i = 6; i >= 0; i--) { const key = shiftDateKey(todayKey, -i); dailyMap.set(key, { date: key, sales: 0, profit: 0 }); } for (const sale of allSales) { const key = dateKeyInTimeZone(new Date(sale.createdAt), timeZone); const row = dailyMap.get(key); if (row) { row.sales += sale.totalAmount; row.profit += sale.profit; } }
   const paymentMap = new Map<string, { paymentMethod: string; totalAmount: number; salesCount: number }>(); for (const sale of saleRows) { const row = paymentMap.get(sale.paymentMethod) ?? { paymentMethod: sale.paymentMethod, totalAmount: 0, salesCount: 0 }; row.totalAmount += sale.totalAmount; row.salesCount += 1; paymentMap.set(sale.paymentMethod, row); }
-  const historyMap = new Map<string, { period: string; sales: number; profit: number; salesCount: number }>(); for (const sale of allSales) { const shifted = new Date(new Date(sale.createdAt).getTime() + 3 * 60 * 60 * 1000); const key = `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`; const row = historyMap.get(key) ?? { period: key, sales: 0, profit: 0, salesCount: 0 }; row.sales += sale.totalAmount; row.profit += sale.profit; row.salesCount += 1; historyMap.set(key, row); }
+  const historyMap = new Map<string, { period: string; sales: number; profit: number; salesCount: number }>(); for (const sale of allSales) { const parts = timeZoneParts(new Date(sale.createdAt), timeZone); const key = `${parts.year}-${parts.month}`; const row = historyMap.get(key) ?? { period: key, sales: 0, profit: 0, salesCount: 0 }; row.sales += sale.totalAmount; row.profit += sale.profit; row.salesCount += 1; historyMap.set(key, row); }
   const saleIds = allSales.map((sale) => sale.id); const { data: itemRows } = saleIds.length ? await client.from("sale_items").select("quantity,totalPrice,productId").in("saleId", saleIds) : { data: [] }; const topMap = new Map<string, { totalQuantity: number; totalRevenue: number }>(); for (const item of itemRows ?? []) { const row = topMap.get(item.productId) ?? { totalQuantity: 0, totalRevenue: 0 }; row.totalQuantity += item.quantity; row.totalRevenue += item.totalPrice; topMap.set(item.productId, row); } const productMap = new Map(productRows.map((product) => [product.id, product])); const topProducts = [...topMap.entries()].sort((a, b) => b[1].totalRevenue - a[1].totalRevenue).slice(0, 5).map(([productId, values]) => ({ product: productMap.get(productId) ?? { id: productId, name: "Unknown product", unit: "pcs" }, ...values }));
   return json({ period, features: {}, summary: { totalSales, totalProfit, totalExpenses, netProfit: totalProfit - totalExpenses, expenseCount: expenseRows.length, salesCount: saleRows.length, pendingOrders: pendingOrders?.length ?? 0, totalProducts: productRows.length, lowStockCount: low.length, outOfStockCount: productRows.filter((p) => p.currentStock === 0).length }, allTimeSummary: { totalSales: sum(allSales, "totalAmount"), totalProfit: sum(allSales, "profit"), totalExpenses: sum(allExpenses, "amount"), netProfit: sum(allSales, "profit") - sum(allExpenses, "amount"), expenseCount: allExpenses.length, salesCount: allSales.length, firstSaleAt: allSales[0]?.createdAt ?? null }, lowStockAlerts: low, recentSales: saleRows.slice(0, 10), dailyChart: [...dailyMap.values()], paymentBreakdown: [...paymentMap.values()].sort((a, b) => b.totalAmount - a.totalAmount), historyTimeline: [...historyMap.values()], topProducts });
 }
 
 async function profitAnalytics(client: SupabaseClient, shop: Record<string, unknown>, request: Request) {
-  const url = new URL(request.url); const period = String(url.searchParams.get("period") ?? "today").toLowerCase(); if (!["today", "month", "quarter", "year", "custom"].includes(period)) return json({ error: "period must be today, month, quarter, year, or custom" }, 400); let from: Date; let to: Date; const now = new Date(); if (period === "today") { from = tzDayStart(now); to = new Date(from.getTime() + 86400000); } else if (period === "month") { const shifted = new Date(now.getTime() + 3 * 60 * 60 * 1000); from = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1) - 3 * 60 * 60 * 1000); to = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 1) - 3 * 60 * 60 * 1000); } else if (period === "year") { const shifted = new Date(now.getTime() + 3 * 60 * 60 * 1000); from = new Date(Date.UTC(shifted.getUTCFullYear(), 0, 1) - 3 * 60 * 60 * 1000); to = new Date(Date.UTC(shifted.getUTCFullYear() + 1, 0, 1) - 3 * 60 * 60 * 1000); } else if (period === "quarter") { const shifted = new Date(now.getTime() + 3 * 60 * 60 * 1000); const quarter = Math.floor(shifted.getUTCMonth() / 3) * 3; from = new Date(Date.UTC(shifted.getUTCFullYear(), quarter, 1) - 3 * 60 * 60 * 1000); to = new Date(Date.UTC(shifted.getUTCFullYear(), quarter + 3, 1) - 3 * 60 * 60 * 1000); } else { if (!url.searchParams.get("from") || !url.searchParams.get("to")) return json({ error: "from and to are required for a custom date range" }, 400); from = new Date(`${url.searchParams.get("from")}T00:00:00+03:00`); to = new Date(`${url.searchParams.get("to")}T00:00:00+03:00`); to = new Date(to.getTime() + 86400000); if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) return json({ error: "Enter a valid date range" }, 400); }
-  const { data: sales } = await client.from("sales").select("id,createdAt").eq("shopId", shop.id).gte("createdAt", from.toISOString()).lt("createdAt", to.toISOString()); const saleIds = (sales ?? []).map((sale) => sale.id); const { data: items } = saleIds.length ? await client.from("sale_items").select("quantity,totalPrice,buyingPrice,saleId").in("saleId", saleIds) : { data: [] }; const saleMap = new Map((sales ?? []).map((sale) => [sale.id, sale.createdAt])); const group = period === "today" ? "hour" : period === "year" ? "month" : "day"; const chartMap = new Map<string, { label: string; revenue: number; costOfGoodsSold: number; grossProfit: number }>(); let revenue = 0; let cogs = 0; let units = 0; for (const item of items ?? []) { const itemRevenue = item.totalPrice; const itemCogs = item.buyingPrice * item.quantity; revenue += itemRevenue; cogs += itemCogs; units += item.quantity; const shifted = new Date(new Date(saleMap.get(item.saleId)!).getTime() + 3 * 60 * 60 * 1000); const label = group === "hour" ? `${String(shifted.getUTCHours()).padStart(2, "0")}:00` : group === "month" ? `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}` : shifted.toISOString().slice(0, 10); const row = chartMap.get(label) ?? { label, revenue: 0, costOfGoodsSold: 0, grossProfit: 0 }; row.revenue += itemRevenue; row.costOfGoodsSold += itemCogs; row.grossProfit += itemRevenue - itemCogs; chartMap.set(label, row); } return json({ period, from, to, group, summary: { salesRevenue: revenue, costOfGoodsSold: cogs, grossProfit: revenue - cogs, grossProfitMargin: revenue ? Number((((revenue - cogs) / revenue) * 100).toFixed(1)) : 0, salesCount: sales?.length ?? 0, unitsSold: units, missingCostSalesRevenue: 0 }, chart: [...chartMap.values()].sort((a, b) => a.label.localeCompare(b.label)) });
+  const url = new URL(request.url); const period = String(url.searchParams.get("period") ?? "today").toLowerCase(); if (!["today", "month", "quarter", "year", "custom"].includes(period)) return json({ error: "period must be today, month, quarter, year, or custom" }, 400); let from: Date; let to: Date; const now = new Date(); const timeZone = shopTimeZone(shop); const nowParts = timeZoneParts(now, timeZone); if (period === "today") { from = tzDayStart(now, timeZone); to = addCalendarDaysInTimeZone(from, 1, timeZone); } else if (period === "month") { from = startOfMonthInTimeZone(now, timeZone); to = startOfTimeZoneDate(`${nowParts.year}-${String(Number(nowParts.month) + 1).padStart(2, "0")}-01`, timeZone); } else if (period === "year") { from = startOfTimeZoneDate(`${nowParts.year}-01-01`, timeZone); to = startOfTimeZoneDate(`${Number(nowParts.year) + 1}-01-01`, timeZone); } else if (period === "quarter") { const quarter = Math.floor((Number(nowParts.month) - 1) / 3) * 3 + 1; const quarterKey = `${nowParts.year}-${String(quarter).padStart(2, "0")}-01`; const nextQuarter = new Date(Date.UTC(Number(nowParts.year), quarter + 2, 1)); from = startOfTimeZoneDate(quarterKey, timeZone); to = startOfTimeZoneDate(`${nextQuarter.getUTCFullYear()}-${String(nextQuarter.getUTCMonth() + 1).padStart(2, "0")}-01`, timeZone); } else { const customFrom = url.searchParams.get("from"); const customTo = url.searchParams.get("to"); if (!customFrom || !customTo) return json({ error: "from and to are required for a custom date range" }, 400); const parsedFrom = parseDateInTimeZone(customFrom, timeZone); const parsedTo = parseDateInTimeZone(customTo, timeZone); if (!parsedFrom || !parsedTo) return json({ error: "Enter a valid date range" }, 400); from = parsedFrom; to = addCalendarDaysInTimeZone(parsedTo, 1, timeZone); if (from >= to) return json({ error: "Enter a valid date range" }, 400); }
+  const { data: sales } = await client.from("sales").select("id,createdAt").eq("shopId", shop.id).gte("createdAt", from.toISOString()).lt("createdAt", to.toISOString()); const saleIds = (sales ?? []).map((sale) => sale.id); const { data: items } = saleIds.length ? await client.from("sale_items").select("quantity,totalPrice,buyingPrice,saleId").in("saleId", saleIds) : { data: [] }; const saleMap = new Map((sales ?? []).map((sale) => [sale.id, sale.createdAt])); const group = period === "today" ? "hour" : period === "year" ? "month" : "day"; const chartMap = new Map<string, { label: string; revenue: number; costOfGoodsSold: number; grossProfit: number }>(); let revenue = 0; let cogs = 0; let units = 0; for (const item of items ?? []) { const itemRevenue = item.totalPrice; const itemCogs = item.buyingPrice * item.quantity; revenue += itemRevenue; cogs += itemCogs; units += item.quantity; const parts = timeZoneParts(new Date(saleMap.get(item.saleId)!), timeZone); const label = group === "hour" ? `${parts.hour}:00` : group === "month" ? `${parts.year}-${parts.month}` : `${parts.year}-${parts.month}-${parts.day}`; const row = chartMap.get(label) ?? { label, revenue: 0, costOfGoodsSold: 0, grossProfit: 0 }; row.revenue += itemRevenue; row.costOfGoodsSold += itemCogs; row.grossProfit += itemRevenue - itemCogs; chartMap.set(label, row); } return json({ period, from, to, group, summary: { salesRevenue: revenue, costOfGoodsSold: cogs, grossProfit: revenue - cogs, grossProfitMargin: revenue ? Number((((revenue - cogs) / revenue) * 100).toFixed(1)) : 0, salesCount: sales?.length ?? 0, unitsSold: units, missingCostSalesRevenue: 0 }, chart: [...chartMap.values()].sort((a, b) => a.label.localeCompare(b.label)) });
 }
 
 async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, request: Request) {
@@ -1025,7 +1088,7 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
   if (request.method === "GET" && path === "/settings") {
     const [{ data: account, error: accountError }, { data: currentShop, error: shopError }, { data: supplier, error: supplierError }] = await Promise.all([
       client.from("users").select("id,phone,name,role,language,createdAt").eq("id", user.userId).maybeSingle(),
-      client.from("shops").select("id,name,location,district,category,isCatalogPublished").eq("id", shop.id).maybeSingle(),
+      client.from("shops").select("id,name,location,district,category,isCatalogPublished,timeZone").eq("id", shop.id).maybeSingle(),
       client.from("suppliers").select("id,name,phone,address").eq("userId", user.userId).maybeSingle(),
     ]);
     if (accountError) throw accountError;
@@ -1071,7 +1134,9 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
     return json({ message: "Profile updated", name });
   }
   if (path === "/settings/shop") {
-    const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "location", "district", "category", "isCatalogPublished"]) if (body[key] !== undefined) update[key] = body[key]; const { data, error } = await client.from("shops").update(update).eq("id", shop.id).select("*").single(); if (error) throw error; return json({ shop: data });
+    if (staffId && user.staffRole !== "OWNER") return json({ error: "Only the shop owner can change shop settings" }, 403);
+    if (body.timeZone !== undefined && !validTimeZone(body.timeZone)) return json({ error: "timeZone must be a valid IANA time zone such as Africa/Nairobi" }, 400);
+    const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "location", "district", "category", "isCatalogPublished", "timeZone"]) if (body[key] !== undefined) update[key] = key === "timeZone" ? String(body[key]).trim() : body[key]; const { data, error } = await client.from("shops").update(update).eq("id", shop.id).select("*").single(); if (error) throw error; return json({ shop: data });
   }
   if (path === "/settings/pin") {
     const currentPin = String(body.currentPin ?? ""); const newPin = String(body.newPin ?? "");

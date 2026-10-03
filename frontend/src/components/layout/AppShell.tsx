@@ -29,12 +29,13 @@ import { t, useLang, setLanguage as setAppLanguage, type Lang } from "@/lib/i18n
 import LogoMark from "@/components/brand/LogoMark";
 import ShortcutUsageTracker from "@/components/analytics/ShortcutUsageTracker";
 import clsx from "clsx";
+import { setAppTimeZone } from "@/lib/timezone";
 
 interface User {
   name: string;
   role: string;
   language?: Lang;
-  shop?: { name: string };
+  shop?: { name: string; timeZone?: string | null };
   supplier?: { name: string };
   staff?: {
     role: string;
@@ -111,6 +112,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     api.get<{ user: User }>("/auth/me")
       .then((d) => {
         setUser(d.user);
+        if (d.user.shop?.timeZone) setAppTimeZone(d.user.shop.timeZone);
         if (d.user.language === "sw" || d.user.language === "en") {
           setAppLanguage(d.user.language);
         }

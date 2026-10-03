@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
+import { formatAppDate, formatAppDateTime, formatAppTime } from "@/lib/timezone";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -263,7 +264,7 @@ export default function DashboardPage() {
           />
           <KpiCard
             label={t("dashboard.started", lang)}
-            value={allTime?.firstSaleAt ? new Date(allTime.firstSaleAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { month: "short", year: "numeric" }) : "-"}
+            value={allTime?.firstSaleAt ? formatAppDate(allTime.firstSaleAt, lang === "sw" ? "sw-TZ" : "en-US", { month: "short", year: "numeric" }) : "-"}
             icon={<Clock className="w-5 h-5 text-amber-600" />}
             color="orange"
           />
@@ -305,8 +306,7 @@ export default function DashboardPage() {
                   dataKey="date"
                   tick={{ fontSize: 11 }}
                   tickFormatter={(v) => {
-                    const d = new Date(v);
-                    return d.toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { weekday: "short" });
+                    return formatAppDateTime(`${v}T12:00:00Z`, lang === "sw" ? "sw-TZ" : "en-US", { weekday: "short" });
                   }}
                 />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
@@ -402,7 +402,7 @@ export default function DashboardPage() {
                     <p className="text-sm font-medium text-gray-800">{formatTZS(s.totalAmount)}</p>
                     <p className="text-xs text-gray-500">
                       {paymentLabel(s.paymentMethod)} â€¢{" "}
-                      {new Date(s.createdAt).toLocaleTimeString(lang === "sw" ? "sw-TZ" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                      {formatAppTime(s.createdAt, lang === "sw" ? "sw-TZ" : "en-US")}
                     </p>
                   </div>
                   <div className="text-right">

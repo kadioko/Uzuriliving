@@ -6,6 +6,7 @@ import { Plus, X, ShoppingCart, Check, Minus, Search, Clock, WifiOff, RefreshCw,
 import { t, useLang } from "@/lib/i18n";
 import { useToast } from "@/components/ui/Toast";
 import { BarcodeScanner } from "@/components/barcode/BarcodeScanner";
+import { formatAppDateTime, formatAppTime } from "@/lib/timezone";
 
 interface Product {
   id: string;
@@ -144,7 +145,7 @@ function reportSyncEvent(event: { status: "QUEUED" | "SYNCED" | "FAILED" | "REMO
 
 function formatSyncTime(value: string | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatAppTime(value);
 }
 
 export default function SalesPage() {
@@ -638,7 +639,7 @@ export default function SalesPage() {
                           {formatTZS(sale.total)} - {sale.payload.items.length} {lang === "sw" ? "bidhaa" : "item(s)"}
                         </p>
                         <p className="mt-0.5 text-gray-500">
-                          {new Date(sale.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          {formatAppDateTime(sale.createdAt, undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                           {" - "}
                           {lang === "sw" ? "Majaribio" : "Attempts"} {sale.attempts || 0}
                         </p>
@@ -668,7 +669,7 @@ export default function SalesPage() {
                       </p>
                       <p className="mt-0.5 text-gray-600">{event.message}</p>
                     </div>
-                    <p className="whitespace-nowrap text-gray-400">{new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                    <p className="whitespace-nowrap text-gray-400">{formatAppTime(event.at)}</p>
                   </div>
                 ))}
               </div>
@@ -927,7 +928,7 @@ export default function SalesPage() {
                       <div>
                         <p className="font-semibold text-gray-900">{formatTZS(sale.totalAmount)}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
-                          {new Date(sale.createdAt).toLocaleString(lang === "sw" ? "sw-TZ" : "en-US", {
+                          {formatAppDateTime(sale.createdAt, lang === "sw" ? "sw-TZ" : "en-US", {
                             day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
                           })}
                         </p>

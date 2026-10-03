@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
+import { formatAppDate } from "@/lib/timezone";
 import { ArrowLeft, BarChart3, Package, TrendingUp } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -33,7 +34,7 @@ const PERIODS = [
 const LINE_COLORS = ["#0f766e", "#7c3aed", "#ea580c", "#2563eb", "#be123c"];
 
 function dateLabel(value: string | null | undefined, lang: string) {
-  return value ? new Date(value).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  return value ? formatAppDate(value, lang === "sw" ? "sw-TZ" : "en-US", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 }
 
 export default function ProductAnalyticsPage() {

@@ -5,6 +5,7 @@ import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
 import { Users, ChevronDown, ChevronUp, Phone, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { formatAppDate } from "@/lib/timezone";
 
 interface CustomerOrderItem {
   quantity: number;
@@ -167,7 +168,7 @@ export default function CustomerOrdersPage() {
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">
                         #{order.id.slice(-8).toUpperCase()} •{" "}
-                        {new Date(order.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", {
+                        {formatAppDate(order.createdAt, lang === "sw" ? "sw-TZ" : "en-US", {
                           day: "numeric",
                           month: "short",
                           year: "numeric",

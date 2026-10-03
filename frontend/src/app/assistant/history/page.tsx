@@ -5,6 +5,7 @@ import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
+import { formatAppDateTime } from "@/lib/timezone";
 import { ArrowLeft, CheckCircle2, Clock, ExternalLink, XCircle } from "lucide-react";
 
 interface AssistantAction {
@@ -102,7 +103,7 @@ export default function AssistantHistoryPage() {
                       </div>
                       <p className="mt-2 font-semibold text-gray-950">{action.title}</p>
                       <p className="mt-1 text-xs text-gray-500">
-                        {lang === "sw" ? "Mwisho kubadilishwa" : "Last updated"} {new Date(action.updatedAt).toLocaleString()}
+                        {lang === "sw" ? "Mwisho kubadilishwa" : "Last updated"} {formatAppDateTime(action.updatedAt)}
                       </p>
                     </div>
                     <Link href={action.href} className="inline-flex items-center justify-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">

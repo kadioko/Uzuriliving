@@ -5,6 +5,7 @@ import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
+import { formatAppDateTime } from "@/lib/timezone";
 import { CheckCircle2, MessageCircle, ReceiptText, Send, Smartphone } from "lucide-react";
 
 interface SubscriptionStatus {
@@ -243,7 +244,7 @@ export default function BillingPage() {
                       "bg-amber-100 text-amber-700"
                     }`}>{report.status}</span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">{new Date(report.createdAt).toLocaleString()}</p>
+                  <p className="mt-1 text-xs text-gray-500">{formatAppDateTime(report.createdAt)}</p>
                   {report.adminNotes && <p className="mt-1 text-xs text-gray-600">{report.adminNotes}</p>}
                 </div>
               ))}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, downloadFile } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
+import { formatAppDate } from "@/lib/timezone";
 import { AlertTriangle, Send, CheckCircle, Clock, XCircle, Download } from "lucide-react";
 
 const reportTypes = [
@@ -283,7 +284,7 @@ export default function ReportsPage() {
                       <span className={`px-2 py-0.5 rounded ${priorities.find(p => p.value === report.priority)?.color}`}>
                         {report.priority}
                       </span>
-                      <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+                      <span>{formatAppDate(report.createdAt, lang === "sw" ? "sw-TZ" : "en-US")}</span>
                     </div>
                     {report.adminNotes && (
                       <div className="mt-3 p-2 bg-blue-50 rounded-lg">

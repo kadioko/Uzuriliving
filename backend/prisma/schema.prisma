@@ -139,6 +139,7 @@ model Shop {
   subscriptionEndsAt   DateTime?
   isActive             Boolean               @default(true)
   isCatalogPublished   Boolean               @default(true)
+  timeZone             String                @default("Africa/Nairobi")
   isDemo               Boolean               @default(false)
   onboardingStatus     OnboardingStatus      @default(NEW)
   lastContactedAt      DateTime?

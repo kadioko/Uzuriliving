@@ -5,6 +5,7 @@ import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
 import { Plus, MessageCircle, RotateCcw, Check, X, Truck, Clock, ChevronDown, ChevronUp, PackagePlus, Download, FileImage, Search, Edit2, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { formatAppDate } from "@/lib/timezone";
 
 interface Supplier {
   id: string;
@@ -344,7 +345,7 @@ export default function OrdersPage() {
 
   function orderMarkup(batch: Order[]) {
     const first = batch[0];
-    const date = new Date(first.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
+    const date = formatAppDate(first.createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
     return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Suppliers:</b> ${batch.map((order) => escapeHtml(order.supplier.name)).join(", ")} &nbsp; <b>Order:</b> #${(first.orderGroupId || first.id).slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p>${batch.map((order) => `<h3>${escapeHtml(order.supplier.name)} <span class="status">${escapeHtml(order.status)}</span></h3><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td class="product">${item.product.imageUrl ? `<img src="${item.product.imageUrl}" alt="" />` : ""}<span>${escapeHtml(item.product.name)}</span></td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>`).join("")}<h3>Total: ${formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0))}</h3></div>`;
   }
 
@@ -395,7 +396,7 @@ export default function OrdersPage() {
     context.fillStyle = "#b56600"; context.font = "bold 42px Arial"; context.fillText("Uzuri Living", pagePadding + 32, 105);
     context.fillStyle = "#1f2937"; context.font = "bold 28px Arial"; context.fillText("Supplier order follow-up", pagePadding + 32, 150);
     context.fillStyle = "#64748b"; context.font = "20px Arial"; context.fillText(`Order #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, pagePadding + 32, 194);
-    const date = new Date(batch[0].createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
+    const date = formatAppDate(batch[0].createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
     context.fillText(date, width - pagePadding - 220, 194);
     const supplierText = batch.map((order) => order.supplier.name).join(", ");
     context.font = "bold 18px Arial"; context.fillStyle = "#854b08"; context.fillText("SUPPLIERS", width - pagePadding - 360, 90);
@@ -534,7 +535,7 @@ export default function OrdersPage() {
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       #{batchKey.slice(-8).toUpperCase()} •{" "}
-                      {new Date(order.createdAt).toLocaleDateString(lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short" })}
+                      {formatAppDate(order.createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short" })}
                     </p>
                     {canViewOrderQuantities && batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0))}</p>

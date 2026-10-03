@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
+import { formatAppDate } from "@/lib/timezone";
 import { Plus, Phone, MapPin, Package, X, Edit2, Truck, CheckCircle, ShieldCheck } from "lucide-react";
 
 interface Supplier {
@@ -129,7 +130,7 @@ export default function SuppliersPage() {
                             ? (lang === "sw" ? "Haijapitishwa" : "Rejected")
                             : (lang === "sw" ? "Inahitaji ukaguzi" : "Needs review")}
                       </span>
-                      {s.verifiedAt && <span className="text-xs text-gray-400">{new Date(s.verifiedAt).toLocaleDateString()}</span>}
+                      {s.verifiedAt && <span className="text-xs text-gray-400">{formatAppDate(s.verifiedAt, lang === "sw" ? "sw-TZ" : "en-US")}</span>}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1.5 text-sm text-gray-500">
                       <Phone className="w-3.5 h-3.5" />
