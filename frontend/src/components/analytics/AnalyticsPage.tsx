@@ -87,6 +87,15 @@ export default function AnalyticsPage() {
 
   const periodKeys: Period[] = ["today", "month", "quarter", "year", "custom"];
   const chartHasValues = Boolean(data?.chart.length);
+  const shiftDisplayedMonth = (offset: number) => {
+    const base = period === "custom" ? new Date(`${from}T12:00:00`) : new Date();
+    const target = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+    const end = new Date(target.getFullYear(), target.getMonth() + 1, 0);
+    setFrom(getAppDateInputValue(target));
+    setTo(getAppDateInputValue(end));
+    setPeriod("custom");
+    setSelectedMetric(null);
+  };
 
   return <AppShell>
     <div className="mx-auto max-w-7xl pb-20 lg:pb-6">
@@ -100,11 +109,11 @@ export default function AnalyticsPage() {
           <div className="flex items-center gap-2 text-sm font-medium text-gray-500"><CalendarDays className="h-4 w-4" /><span>{timeZone} ({timeZoneOffsetLabel(timeZone)})</span></div>
         </div>
         <div className="mt-5 flex items-center gap-2">
-          <button type="button" aria-label={lang === "sw" ? "Kipindi kilichopita" : "Previous period"} className="hidden border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 sm:block"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" onClick={() => shiftDisplayedMonth(-1)} aria-label={lang === "sw" ? "Mwezi uliopita" : "Previous month"} className="hidden border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 sm:block"><ChevronLeft className="h-4 w-4" /></button>
           <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto bg-gray-100 p-1">
             {periodKeys.map((key) => <button key={key} type="button" onClick={() => setPeriod(key)} className={`whitespace-nowrap px-3 py-2 text-sm font-semibold ${period === key ? "bg-white text-brand-800 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>{labels[key]}</button>)}
           </div>
-          <button type="button" aria-label={lang === "sw" ? "Kipindi kijacho" : "Next period"} className="hidden border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 sm:block"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" onClick={() => shiftDisplayedMonth(1)} aria-label={lang === "sw" ? "Mwezi ujao" : "Next month"} className="hidden border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 sm:block"><ChevronRight className="h-4 w-4" /></button>
         </div>
         {period === "custom" && <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium text-gray-700">{lang === "sw" ? "Kuanzia" : "From"}<input aria-label={lang === "sw" ? "Kuanzia" : "From"} type="date" value={from} max={to} onChange={(event) => setFrom(event.target.value)} className="mt-1 block w-full border border-gray-300 px-3 py-2" /></label><label className="text-sm font-medium text-gray-700">{lang === "sw" ? "Mpaka" : "To"}<input aria-label={lang === "sw" ? "Mpaka" : "To"} type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} className="mt-1 block w-full border border-gray-300 px-3 py-2" /></label></div>}
       </section>
