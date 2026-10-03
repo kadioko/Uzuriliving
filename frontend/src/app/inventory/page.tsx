@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
+import Link from "next/link";
 import {
   Plus,
   Search,
@@ -17,6 +18,7 @@ import {
   Trash2,
   ScanLine,
   Printer,
+  BarChart3,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { BarcodeScanner } from "@/components/barcode/BarcodeScanner";
@@ -650,6 +652,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                       </div>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
+                      <Link href={`/product-analytics/${p.id}`} aria-label={`${lang === "sw" ? "Angalia utendaji wa" : "View performance for"} ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-brand-50 hover:text-brand-700" title={lang === "sw" ? "Utendaji wa bidhaa" : "Product performance"}><BarChart3 className="h-4 w-4" /></Link>
                       {p.barcode && <button onClick={() => setLabelProduct(p)} aria-label={`Print label for ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" title="Print barcode"><Printer className="h-4 w-4" /></button>}
                       {(canAddInventory || canManageStock || canRefundStock) && <button
                         onClick={() => {

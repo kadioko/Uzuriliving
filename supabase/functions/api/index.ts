@@ -392,6 +392,71 @@ async function productGet(client: SupabaseClient, user: Record<string, unknown>,
   return product ? json({ product: redactProduct(product, user) }) : json({ error: "Product not found" }, 404);
 }
 
+async function productAnalytics(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, productId: string) {
+  if (!hasStaffPermission(user, "canViewInventoryAndPrices")) return json({ error: "You do not have permission to view product analytics" }, 403);
+  const url = new URL(request.url);
+  const periodParam = String(url.searchParams.get("period") ?? "30").toLowerCase();
+  const days = periodParam === "7" ? 7 : periodParam === "90" ? 90 : periodParam === "365" ? 365 : periodParam === "all" ? null : 30;
+  const from = days == null ? null : new Date(Date.now() - days * 86400000);
+  const compareIds = String(url.searchParams.get("compareIds") ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  const productIds = [...new Set([productId, ...compareIds])].slice(0, 5);
+  const [{ data: products, error: productError }, { data: availableProducts, error: availableError }] = await Promise.all([
+    client.from("products").select("id,name,sku,barcode,unit,buyingPrice,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,minimumStock,isReorderable,imageUrl,supplier:suppliers(id,name)").in("id", productIds).eq("shopId", shop.id),
+    client.from("products").select("id,name,unit,currentStock").eq("shopId", shop.id).eq("isActive", true).order("name").limit(1000),
+  ]);
+  if (productError) throw productError;
+  if (availableError) throw availableError;
+  const productRows = products ?? [];
+  const primary = productRows.find((product) => product.id === productId);
+  if (!primary) return json({ error: "Product not found" }, 404);
+  const productMap = new Map(productRows.map((product) => [product.id, product]));
+
+  let salesQuery = client.from("sales").select("id,createdAt,pricingTier").eq("shopId", shop.id).order("createdAt", { ascending: true }).limit(5000);
+  if (from) salesQuery = salesQuery.gte("createdAt", from.toISOString());
+  const { data: sales, error: salesError } = await salesQuery;
+  if (salesError) throw salesError;
+  const saleRows = sales ?? [];
+  const saleIds = saleRows.map((sale) => sale.id);
+  const { data: saleItems, error: saleItemsError } = saleIds.length ? await client.from("sale_items").select("saleId,productId,quantity,unitPrice,buyingPrice,totalPrice").in("saleId", saleIds).in("productId", productIds).limit(10000) : { data: [], error: null };
+  if (saleItemsError) throw saleItemsError;
+  const saleMap = new Map(saleRows.map((sale) => [sale.id, sale]));
+  const summaries = new Map(productIds.map((id) => [id, { salesCount: 0, unitsSold: 0, revenue: 0, costOfGoods: 0, retailUnits: 0, wholesaleUnits: 0, lastSoldAt: null as string | null }]));
+  const trends = new Map<string, Map<string, { date: string; unitsSold: number; revenue: number }>>();
+  for (const item of saleItems ?? []) {
+    const sale = saleMap.get(item.saleId); const summary = summaries.get(item.productId);
+    if (!sale || !summary) continue;
+    const quantity = Number(item.quantity ?? 0); const revenue = Number(item.totalPrice ?? Number(item.unitPrice ?? 0) * quantity);
+    summary.salesCount += 1; summary.unitsSold += quantity; summary.revenue += revenue; summary.costOfGoods += Number(item.buyingPrice ?? 0) * quantity;
+    if (sale.pricingTier === "WHOLESALE") summary.wholesaleUnits += quantity; else summary.retailUnits += quantity;
+    if (!summary.lastSoldAt || new Date(sale.createdAt).getTime() > new Date(summary.lastSoldAt).getTime()) summary.lastSoldAt = sale.createdAt;
+    const date = new Date(sale.createdAt).toISOString().slice(0, 10); const productTrend = trends.get(item.productId) ?? new Map(); const trend = productTrend.get(date) ?? { date, unitsSold: 0, revenue: 0 };
+    trend.unitsSold += quantity; trend.revenue += revenue; productTrend.set(date, trend); trends.set(item.productId, productTrend);
+  }
+
+  const { data: movements, error: movementsError } = await client.from("stock_movements").select("productId,type,quantity,createdAt,note").in("productId", productIds).order("createdAt", { ascending: false }).limit(5000);
+  if (movementsError) throw movementsError;
+  const stock = new Map(productIds.map((id) => [id, { receivedQuantity: 0, returnedQuantity: 0, removedQuantity: 0, adjustmentCount: 0, lastMovementAt: null as string | null }]));
+  for (const movement of movements ?? []) { const row = stock.get(movement.productId); if (!row) continue; if (movement.type === "IN") row.receivedQuantity += Number(movement.quantity ?? 0); if (movement.type === "RETURN") row.returnedQuantity += Number(movement.quantity ?? 0); if (movement.type === "OUT") row.removedQuantity += Number(movement.quantity ?? 0); if (movement.type === "ADJUSTMENT") row.adjustmentCount += 1; if (!row.lastMovementAt) row.lastMovementAt = movement.createdAt; }
+
+  const { data: openOrders, error: openOrdersError } = await client.from("orders").select("id,status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
+  if (openOrdersError) throw openOrdersError;
+  const orders = new Map(productIds.map((id) => [id, { orderedQuantity: 0, onTheWayQuantity: 0, openOrderCount: 0 }]));
+  for (const order of openOrders ?? []) for (const item of order.items ?? []) { const row = orders.get(item.productId); if (!row) continue; row.orderedQuantity += Number(item.quantity ?? 0); if (order.status === "OUT_FOR_DELIVERY") row.onTheWayQuantity += Number(item.quantity ?? 0); row.openOrderCount += 1; }
+
+  const { data: customerItems, error: customerItemsError } = await client.from("customer_order_items").select("productId,quantity,orderId").in("productId", productIds).limit(5000);
+  if (customerItemsError) throw customerItemsError;
+  const customerOrderIds = [...new Set((customerItems ?? []).map((item) => item.orderId))];
+  const { data: customerOrders, error: customerOrdersError } = customerOrderIds.length ? await client.from("customer_orders").select("id,status").eq("shopId", shop.id).in("id", customerOrderIds) : { data: [], error: null };
+  if (customerOrdersError) throw customerOrdersError;
+  const customerOrderMap = new Map((customerOrders ?? []).map((order) => [order.id, order])); const customer = new Map(productIds.map((id) => [id, { orderCount: 0, requestedQuantity: 0, pendingQuantity: 0 }]));
+  for (const item of customerItems ?? []) { const order = customerOrderMap.get(item.orderId); const row = customer.get(item.productId); if (!order || !row) continue; const quantity = Number(item.quantity ?? 0); row.orderCount += 1; row.requestedQuantity += quantity; if (["PENDING", "CONFIRMED"].includes(order.status)) row.pendingQuantity += quantity; }
+
+  const canViewFinancials = user.role === "ADMIN" || !user.staffId || (user.permissions as Record<string, unknown> | undefined)?.canViewReports === true;
+  const buildSummary = (id: string) => { const product = productMap.get(id)!; const sales = summaries.get(id)!; const stockData = stock.get(id)!; const orderData = orders.get(id)!; const customerData = customer.get(id)!; const grossProfit = sales.revenue - sales.costOfGoods; return { product: canViewFinancials ? product : { ...product, buyingPrice: null }, sales: { ...sales, averageSellingPrice: sales.unitsSold ? Math.round(sales.revenue / sales.unitsSold) : 0, grossProfit: canViewFinancials ? grossProfit : null, grossMargin: canViewFinancials && sales.revenue ? Number(((grossProfit / sales.revenue) * 100).toFixed(1)) : null }, stock: { ...stockData, currentStock: product.currentStock, minimumStock: product.minimumStock }, orders: orderData, customerOrders: customerData, trend: [...(trends.get(id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date)) }; };
+  const result = productIds.map(buildSummary);
+  return json({ period: days == null ? "all" : String(days), from: from?.toISOString() ?? null, primary: result[0], comparisons: result.slice(1), availableProducts: (availableProducts ?? []).map((product) => ({ id: product.id, name: product.name, unit: product.unit, currentStock: product.currentStock })), recentMovements: (movements ?? []).filter((movement) => movement.productId === productId).slice(0, 20) });
+}
+
 async function productCreate(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
   const permissions = user.permissions as Record<string, unknown> | undefined;
   const canEditProductDetails = user.role === "ADMIN" || !user.staffId || permissions?.canViewReports === true;
@@ -1300,6 +1365,7 @@ async function handle(request: Request) {
       url.searchParams.set("limit", "1000");
       return productList(db, new Request(url, request), productUser!, shop!);
     }
+    if (request.method === "GET" && productId?.endsWith("/analytics")) return productAnalytics(db, productUser!, shop!, request, productId.slice(0, -"/analytics".length));
     if (request.method === "GET" && productId) return productGet(db, productUser!, shop!, productId);
     if (request.method === "GET") return productList(db, request, productUser!, shop!);
     if (request.method === "POST" && !productId) return productCreate(db, productUser!, shop!, request);
