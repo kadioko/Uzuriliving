@@ -444,7 +444,7 @@ const [stockCountCode, setStockCountCode] = useState("");
 
   const stockAdjustOptions = [
     ...(canAddInventory ? [{ v: "IN", label: lang === "sw" ? "Ongeza stock" : "Add stock", icon: <ArrowUp className="w-4 h-4" />, color: "green" }] : []),
-    ...(canManageStock ? [{ v: "OUT", label: lang === "sw" ? "Toa stock" : "Remove stock", icon: <ArrowDown className="w-4 h-4" />, color: "red" }, { v: "ADJUSTMENT", label: lang === "sw" ? "Weka kiwango" : "Set quantity", icon: <Edit2 className="w-4 h-4" />, color: "blue" }] : []),
+    ...(canManageStock ? [{ v: "OUT", label: lang === "sw" ? "Toa stock" : "Remove stock", icon: <ArrowDown className="w-4 h-4" />, color: "red" }, { v: "ADJUSTMENT", label: t("inventory.adjustSet", lang), icon: <Edit2 className="w-4 h-4" />, color: "blue" }] : []),
     ...(canRefundStock ? [{ v: "RETURN", label: lang === "sw" ? "Pokea iliyorudi" : "Receive returned stock", icon: <Undo2 className="w-4 h-4" />, color: "orange" }] : []),
   ];
 
@@ -508,7 +508,7 @@ const [stockCountCode, setStockCountCode] = useState("");
               <select
                 value={supplierFilter}
                 onChange={(e) => setSupplierFilter(e.target.value)}
-                aria-label={t("inventory.filterSupplier", lang)}
+                aria-label={lang === "sw" ? "Chuja bidhaa" : "Filter products"}
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="all">{t("inventory.filterAllSuppliers", lang)}</option>

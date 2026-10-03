@@ -9,7 +9,8 @@ function normalizeBaseUrl(url: string): string {
 }
 
 function getBaseUrl(): string {
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost") return PROD_API_URL;
+  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return PROD_API_URL;
+  if (typeof window !== "undefined") return PROD_API_URL;
   if (process.env.NEXT_PUBLIC_API_URL) {
     return normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL);
   }
