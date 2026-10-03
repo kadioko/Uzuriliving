@@ -349,7 +349,7 @@ function canViewOrderQuantities(user: Record<string, unknown>) {
 }
 
 function canViewStockMovementHistory(user: Record<string, unknown>) {
-  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER"));
+  return user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER");
 }
 
 async function productList(client: SupabaseClient, request: Request, user: Record<string, unknown>, shop: Record<string, unknown>) {
@@ -583,17 +583,15 @@ async function stockMovements(client: SupabaseClient, shop: Record<string, unkno
 }
 
 async function stockMovementHistory(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
-  if (!canViewStockMovementHistory(user)) return json({ error: "Only the owner or admin can view stock movement history" }, 403);
+  if (!canViewStockMovementHistory(user)) return json({ error: "Only the shop owner can view stock movement history" }, 403);
   const url = new URL(request.url);
   const requestedType = String(url.searchParams.get("type") ?? "RECEIVED_AND_RETURNED").toUpperCase();
   const types = requestedType === "IN" || requestedType === "RETURN" ? [requestedType] : ["IN", "RETURN"];
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
-  const { data: products, error: productsError } = await client.from("products").select("id,name,unit").eq("shopId", shop.id);
-  if (productsError) throw productsError;
-  const productRows = products ?? [];
-  if (!productRows.length) return json({ movements: [] });
-  const productMap = new Map(productRows.map((product) => [product.id, product]));
-  const { data: movements, error: movementError } = await client.from("stock_movements").select("id,type,quantity,note,productId,createdAt,createdById,createdByStaffId").in("productId", productRows.map((product) => product.id)).in("type", types).order("createdAt", { ascending: false }).limit(limit);
+  // Filter through the related product instead of building a URL with every
+  // product ID. Large shops can have more than 1,000 products, which made the
+  // previous .in(productId, allShopProducts) query exceed the request limit.
+  const { data: movements, error: movementError } = await client.from("stock_movements").select("id,type,quantity,note,productId,createdAt,createdById,createdByStaffId,product:products!inner(id,name,unit,shopId)").eq("product.shopId", shop.id).in("type", types).order("createdAt", { ascending: false }).limit(limit);
   if (movementError) throw movementError;
   const actorIds = [...new Set((movements ?? []).map((movement) => movement.createdById).filter((id): id is string => Boolean(id)))];
   const staffIds = [...new Set((movements ?? []).map((movement) => movement.createdByStaffId).filter((id): id is string => Boolean(id)))];
@@ -605,7 +603,7 @@ async function stockMovementHistory(client: SupabaseClient, user: Record<string,
   if (staffActorsError) throw staffActorsError;
   const actorMap = new Map((actors ?? []).map((actor) => [actor.id, actor]));
   const staffActorMap = new Map((staffActors ?? []).map((actor) => [actor.id, actor]));
-  return json({ movements: (movements ?? []).map((movement) => ({ ...movement, product: productMap.get(movement.productId) ?? null, actor: movement.createdByStaffId ? staffActorMap.get(movement.createdByStaffId) ?? null : movement.createdById ? actorMap.get(movement.createdById) ?? null : null })) });
+  return json({ movements: (movements ?? []).map((movement) => ({ ...movement, actor: movement.createdByStaffId ? staffActorMap.get(movement.createdByStaffId) ?? null : movement.createdById ? actorMap.get(movement.createdById) ?? null : null })) });
 }
 
 const expenseCategories = new Set(["RENT", "SALARY", "UTILITIES", "TRANSPORT", "STOCK", "MARKETING", "TAX", "OTHER"]);

@@ -33,7 +33,7 @@ export default function StockHistoryPage() {
 
   useEffect(() => {
     api.get<{ user: CurrentUser }>("/auth/me")
-      .then(({ user }) => setAllowed(user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staff || user.staff.role === "OWNER"))))
+      .then(({ user }) => setAllowed(user.role === "MERCHANT" && (!user.staff || user.staff.role === "OWNER")))
       .catch(() => setAllowed(false));
   }, []);
 

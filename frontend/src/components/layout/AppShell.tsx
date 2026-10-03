@@ -85,7 +85,6 @@ const merchantNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { href: "/admin", label: "Admin", icon: LayoutDashboard },
-  { href: "/stock-history", labelKey: "nav.stockHistory", icon: History },
   { href: "/suppliers", labelKey: "nav.suppliers", icon: Truck },
   { href: "/reports", label: "Reports", icon: AlertTriangle },
 ];
