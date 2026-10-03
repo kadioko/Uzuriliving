@@ -1021,7 +1021,9 @@ async function labelProfiles(client: SupabaseClient, user: Record<string, unknow
     if (!fields.length) return json({ error: "A label template must contain at least one field" }, 400);
     const widthMm = Math.max(20, Math.min(200, Number(body.widthMm) || 40));
     const heightMm = Math.max(15, Math.min(150, Number(body.heightMm) || 30));
-    const update = { name: String(body.name ?? "Product label").trim().slice(0, 80) || "Product label", widthMm, heightMm, fields, priceMode: body.priceMode === "WHOLESALE" ? "WHOLESALE" : "RETAIL", customText: String(body.customText ?? "").slice(0, 200), ...(body.isDefault === true ? { isDefault: true } : {}), updatedAt: now };
+    const customTextPosition = ["TOP", "ABOVE_BARCODE", "BELOW_BARCODE"].includes(String(body.customTextPosition).toUpperCase()) ? String(body.customTextPosition).toUpperCase() : "ABOVE_BARCODE";
+    const customTextSize = ["SMALL", "MEDIUM", "LARGE"].includes(String(body.customTextSize).toUpperCase()) ? String(body.customTextSize).toUpperCase() : "SMALL";
+    const update = { name: String(body.name ?? "Product label").trim().slice(0, 80) || "Product label", widthMm, heightMm, fields, priceMode: body.priceMode === "WHOLESALE" ? "WHOLESALE" : "RETAIL", customText: String(body.customText ?? "").slice(0, 200), customTextPosition, customTextSize, ...(body.isDefault === true ? { isDefault: true } : {}), updatedAt: now };
     if (!update.name) return json({ error: "Template name is required" }, 400);
     if (id) {
       const { data, error } = await client.from(table).update(update).eq("id", id).eq("shopId", shop.id).select("*").single();

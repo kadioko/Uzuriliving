@@ -1,5 +1,7 @@
 export type LabelField = "name" | "price" | "barcode" | "sku" | "unit" | "custom";
 export type LabelPriceMode = "RETAIL" | "WHOLESALE";
+export type LabelTextPosition = "TOP" | "ABOVE_BARCODE" | "BELOW_BARCODE";
+export type LabelTextSize = "SMALL" | "MEDIUM" | "LARGE";
 export type BarcodeType = "EAN13" | "UPC" | "CODE128" | "INTERNAL";
 export type PrinterProtocol = "BROWSER" | "ZPL" | "TSPL" | "EPL" | "ESCPOS";
 export type PrinterConnection = "BROWSER" | "DOWNLOAD" | "BRIDGE" | "ANDROID" | "USB" | "NETWORK" | "BLUETOOTH";
@@ -12,6 +14,8 @@ export interface LabelTemplate {
   fields: LabelField[];
   priceMode: LabelPriceMode;
   customText: string;
+  customTextPosition?: LabelTextPosition;
+  customTextSize?: LabelTextSize;
 }
 
 export interface LabelProduct {
@@ -43,6 +47,8 @@ export const DEFAULT_LABEL_TEMPLATE: LabelTemplate = {
   fields: ["name", "price", "barcode"],
   priceMode: "RETAIL",
   customText: "",
+  customTextPosition: "ABOVE_BARCODE",
+  customTextSize: "SMALL",
 };
 
 export const LABEL_FIELD_OPTIONS: Array<{ value: LabelField; label: string; sw: string }> = [

@@ -10,6 +10,8 @@ CREATE TABLE "label_templates" (
     "fields" TEXT[] NOT NULL DEFAULT ARRAY['name', 'price', 'barcode'],
     "priceMode" TEXT NOT NULL DEFAULT 'RETAIL',
     "customText" TEXT NOT NULL DEFAULT '',
+    "customTextPosition" TEXT NOT NULL DEFAULT 'ABOVE_BARCODE',
+    "customTextSize" TEXT NOT NULL DEFAULT 'SMALL',
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
     "createdById" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -24,7 +24,6 @@ function productLines(product: LabelProduct, template: LabelTemplate): string[] 
   }
   if (template.fields.includes("sku") && product.sku) lines.push(`SKU: ${shorten(product.sku, 26)}`);
   if (template.fields.includes("unit") && product.unit) lines.push(shorten(product.unit, 26));
-  if (template.fields.includes("custom") && template.customText) lines.push(shorten(template.customText, 26));
   return lines;
 }
 
@@ -46,18 +45,28 @@ export function renderLabelImageSvg(products: LabelProduct[], template: LabelTem
   const labelMarkup = products.map((product, index) => {
     const offsetY = index * height;
     const lines = productLines(product, template);
+    const customText = template.fields.includes("custom") ? shorten(template.customText, 26) : "";
+    const customPosition = template.customTextPosition ?? "ABOVE_BARCODE";
+    const customSize = template.customTextSize === "LARGE" ? 2.9 : template.customTextSize === "MEDIUM" ? 2.5 : 2.1;
+    const renderText = (line: string, lineIndex: number, size = lineIndex === 0 ? 2.5 : 2.1, weight = lineIndex === 0 ? 700 : 400) => {
+      const y = offsetY + padding + 3 + lineIndex * 2.8;
+      return `<text x="${width / 2}" y="${y.toFixed(2)}" text-anchor="middle" font-size="${size}" font-family="Arial, sans-serif" font-weight="${weight}" fill="#102a43">${escapeXml(line)}</text>`;
+    };
+    const topText = customText && customPosition === "TOP" ? renderText(customText, 0, customSize, 600) : "";
     const textMarkup = lines.map((line, lineIndex) => {
       const isPrice = template.fields.includes("price") && line.startsWith("TZS ");
-      const y = offsetY + padding + 3 + lineIndex * 2.8;
-      return `<text x="${width / 2}" y="${y.toFixed(2)}" text-anchor="middle" font-size="${isPrice ? 2.8 : lineIndex === 0 ? 2.5 : 2.1}" font-family="Arial, sans-serif" font-weight="${isPrice || lineIndex === 0 ? 700 : 400}" fill="#102a43">${escapeXml(line)}</text>`;
+      const adjustedIndex = customText && customPosition === "TOP" ? lineIndex + 1 : lineIndex;
+      return renderText(line, adjustedIndex, isPrice ? 2.8 : adjustedIndex === 0 ? 2.5 : 2.1, isPrice || adjustedIndex === 0 ? 700 : 400);
     }).join("");
-    const barcodeY = offsetY + Math.max(padding + 5 + lines.length * 2.8, height - barcodeHeight - 2);
+    const aboveBarcode = customText && customPosition === "ABOVE_BARCODE" ? renderText(customText, lines.length, customSize, 600) : "";
+    const belowSpace = customText && customPosition === "BELOW_BARCODE" ? 3.5 : 0;
+    const barcodeY = offsetY + Math.max(padding + 5 + lines.length * 2.8 + (customText && customPosition === "ABOVE_BARCODE" ? 2.8 : 0), height - barcodeHeight - 2 - belowSpace);
     const barcode = template.fields.includes("barcode")
       ? renderBarcode(product.barcode, product.barcodeType, padding, barcodeY, width - padding * 2, barcodeHeight)
       : "";
-    return `<g><rect x="0" y="${offsetY}" width="${width}" height="${height}" fill="#fff"/>${textMarkup}${barcode}</g>`;
+    const belowBarcode = customText && customPosition === "BELOW_BARCODE" ? `<text x="${width / 2}" y="${(offsetY + height - 1).toFixed(2)}" text-anchor="middle" font-size="${customSize}" font-family="Arial, sans-serif" font-weight="600" fill="#102a43">${escapeXml(customText)}</text>` : "";
+    return `<g><rect x="0" y="${offsetY}" width="${width}" height="${height}" fill="#fff"/>${topText}${textMarkup}${aboveBarcode}${barcode}${belowBarcode}</g>`;
   }).join("");
   const totalHeight = Math.max(height, products.length * height);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}mm" height="${totalHeight}mm" viewBox="0 0 ${width} ${totalHeight}" role="img" aria-label="Uzuri Living product labels">${labelMarkup}</svg>`;
 }
-

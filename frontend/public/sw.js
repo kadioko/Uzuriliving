@@ -1,7 +1,7 @@
 // Uzuri Living Service Worker â€” offline support
 // Strategy: cache-first for static assets, network-first for API calls
 
-const CACHE_NAME = "uzuriliving-v1";
+const CACHE_NAME = "uzuriliving-v2";
 
 // Static assets to pre-cache on install
 const PRECACHE_URLS = [
@@ -88,8 +88,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Uzuri Living";
   const options = {
     body: payload.body || "You have a new shop alert.",
-    icon: "/logo/uzuriliving-logo.svg",
-    badge: "/logo/uzuriliving-logo.svg",
+    icon: "/logo/uzuriliving-icon-192.png",
+    badge: "/logo/uzuriliving-icon-96.png",
     tag: payload.tag || "uzuriliving-alert",
     data: { href: payload.href || "/notifications" },
   };
