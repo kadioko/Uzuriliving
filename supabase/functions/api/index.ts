@@ -348,6 +348,10 @@ function canViewOrderQuantities(user: Record<string, unknown>) {
   return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER")) || permissions?.canManageStock === true;
 }
 
+function canViewStockMovementHistory(user: Record<string, unknown>) {
+  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER"));
+}
+
 async function productList(client: SupabaseClient, request: Request, user: Record<string, unknown>, shop: Record<string, unknown>) {
   if (!hasStaffPermission(user, "canViewInventoryAndPrices")) return json({ error: "You do not have permission to view inventory and prices" }, 403);
   const url = new URL(request.url);
@@ -425,7 +429,7 @@ async function productCreate(client: SupabaseClient, user: Record<string, unknow
     throw error;
   }
   if (currentStock > 0) {
-    await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: currentStock, note: "Initial stock", productId: data.id });
+    await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: currentStock, note: "Initial stock", productId: data.id, createdById: user.userId, createdByStaffId: user.staffId ?? null });
   }
   return json({ product: redactProduct(data, user) }, 201);
 }
@@ -499,7 +503,7 @@ async function stockAdjust(client: SupabaseClient, user: Record<string, unknown>
   const now = new Date().toISOString();
   const { data: updated, error: updateError } = await client.from("products").update({ currentStock: nextStock, updatedAt: now }).eq("id", product.id).eq("currentStock", product.currentStock).select("*").single();
   if (updateError) throw updateError;
-  const { data: movement, error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type, quantity, note: body.note || null, productId: product.id }).select("*").single();
+  const { data: movement, error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type, quantity, note: body.note || null, productId: product.id, createdById: user.userId, createdByStaffId: user.staffId ?? null }).select("*").single();
   if (movementError) throw movementError;
   return json({ product: updated, movement });
 }
@@ -511,6 +515,32 @@ async function stockMovements(client: SupabaseClient, shop: Record<string, unkno
   const { data: movements, error: movementError } = await client.from("stock_movements").select("*").eq("productId", id).order("createdAt", { ascending: false }).limit(50);
   if (movementError) throw movementError;
   return json({ product, movements: movements ?? [] });
+}
+
+async function stockMovementHistory(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
+  if (!canViewStockMovementHistory(user)) return json({ error: "Only the owner or admin can view stock movement history" }, 403);
+  const url = new URL(request.url);
+  const requestedType = String(url.searchParams.get("type") ?? "RECEIVED_AND_RETURNED").toUpperCase();
+  const types = requestedType === "ALL" ? ["IN", "OUT", "ADJUSTMENT", "RETURN"] : requestedType === "IN" || requestedType === "RETURN" ? [requestedType] : ["IN", "RETURN"];
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
+  const { data: products, error: productsError } = await client.from("products").select("id,name,unit").eq("shopId", shop.id);
+  if (productsError) throw productsError;
+  const productRows = products ?? [];
+  if (!productRows.length) return json({ movements: [] });
+  const productMap = new Map(productRows.map((product) => [product.id, product]));
+  const { data: movements, error: movementError } = await client.from("stock_movements").select("id,type,quantity,note,productId,createdAt,createdById,createdByStaffId").in("productId", productRows.map((product) => product.id)).in("type", types).order("createdAt", { ascending: false }).limit(limit);
+  if (movementError) throw movementError;
+  const actorIds = [...new Set((movements ?? []).map((movement) => movement.createdById).filter((id): id is string => Boolean(id)))];
+  const staffIds = [...new Set((movements ?? []).map((movement) => movement.createdByStaffId).filter((id): id is string => Boolean(id)))];
+  const [{ data: actors, error: actorsError }, { data: staffActors, error: staffActorsError }] = await Promise.all([
+    actorIds.length ? client.from("users").select("id,name,phone,role").in("id", actorIds) : Promise.resolve({ data: [], error: null }),
+    staffIds.length ? client.from("staff_members").select("id,name,phone,role").in("id", staffIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (actorsError) throw actorsError;
+  if (staffActorsError) throw staffActorsError;
+  const actorMap = new Map((actors ?? []).map((actor) => [actor.id, actor]));
+  const staffActorMap = new Map((staffActors ?? []).map((actor) => [actor.id, actor]));
+  return json({ movements: (movements ?? []).map((movement) => ({ ...movement, product: productMap.get(movement.productId) ?? null, actor: movement.createdByStaffId ? staffActorMap.get(movement.createdByStaffId) ?? null : movement.createdById ? actorMap.get(movement.createdById) ?? null : null })) });
 }
 
 const expenseCategories = new Set(["RENT", "SALARY", "UTILITIES", "TRANSPORT", "STOCK", "MARKETING", "TAX", "OTHER"]);
@@ -879,7 +909,7 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
         const { data: product } = await client.from("products").select("currentStock").eq("id", item.productId).single();
         if (product) {
           await client.from("products").update({ currentStock: product.currentStock + item.quantity, updatedAt: now }).eq("id", item.productId);
-          await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: item.quantity, note: `Order delivery #${orderId.slice(-6)}`, productId: item.productId });
+          await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: item.quantity, note: `Order delivery #${orderId.slice(-6)}`, productId: item.productId, createdById: user.userId, createdByStaffId: user.staffId ?? null });
         }
       }
       return json({ message: "Delivery confirmed and stock updated" });
@@ -1280,6 +1310,12 @@ async function handle(request: Request) {
       if (error) throw error;
       return json({ message: "Product deactivated" });
     }
+  }
+
+  if (path === "/stock/movements") {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    if (request.method === "GET") return stockMovementHistory(db, access.user!, access.shop!, request);
   }
 
   if (path === "/stock/adjust" || (path.startsWith("/stock/") && path.endsWith("/movements"))) {

@@ -17,6 +17,7 @@ import {
   Trash2,
   ScanLine,
   Printer,
+  History,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { BarcodeScanner } from "@/components/barcode/BarcodeScanner";
@@ -53,6 +54,16 @@ interface Supplier {
   id: string;
   name: string;
   phone: string;
+}
+
+interface StockMovementHistoryItem {
+  id: string;
+  type: "IN" | "RETURN" | "OUT" | "ADJUSTMENT";
+  quantity: number;
+  note?: string | null;
+  createdAt: string;
+  product?: { id: string; name: string; unit: string } | null;
+  actor?: { id: string; name: string; phone?: string | null; role?: string | null } | null;
 }
 
 interface OwnerSupplierUser {
@@ -115,6 +126,11 @@ export default function InventoryPage() {
   const [canAddInventory, setCanAddInventory] = useState(true);
   const [canManageExpiry, setCanManageExpiry] = useState(true);
   const [canRefundStock, setCanRefundStock] = useState(true);
+  const [canViewMovementHistory, setCanViewMovementHistory] = useState(false);
+  const [movementHistory, setMovementHistory] = useState<StockMovementHistoryItem[]>([]);
+  const [movementType, setMovementType] = useState<"ALL" | "IN" | "RETURN">("ALL");
+  const [movementSearch, setMovementSearch] = useState("");
+  const [movementLoading, setMovementLoading] = useState(false);
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const [labelProduct, setLabelProduct] = useState<Product | null>(null);
   const [stockCount, setStockCount] = useState<{ id: string; items: Array<{ id: string; expected: number; counted: number; product: { id: string; name: string; barcode?: string | null; unit: string } }> } | null>(null);
@@ -170,12 +186,25 @@ const [stockCountCode, setStockCountCode] = useState("");
         setCanAddInventory(fullAccess || Boolean(permissions?.canAddInventory || permissions?.canManageStock));
         setCanManageExpiry(fullAccess || Boolean(permissions?.canManageExpiry || permissions?.canManageStock));
         setCanRefundStock(fullAccess || Boolean(permissions?.canRefundStock || permissions?.canManageStock));
+        setCanViewMovementHistory(data.user.role === "ADMIN" || (data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER")));
         setCanManageOwnerSuppliers(Boolean(data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER") && data.user.shop?.ownerSupplierManagementEnabled));
       })
       .catch(() => setCanViewFinancials(false));
     api.get<{ suppliers: Supplier[] }>("/suppliers").then((d) => setSuppliers(d.suppliers));
     api.get<{ count: NonNullable<typeof stockCount> | null }>("/stock-counts").then((data) => { if (data.count) setStockCount(data.count); }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!canViewMovementHistory) return;
+    let active = true;
+    setMovementLoading(true);
+    const type = movementType === "ALL" ? "ALL" : movementType;
+    api.get<{ movements: StockMovementHistoryItem[] }>(`/stock/movements?type=${type}&limit=500`)
+      .then((data) => { if (active) setMovementHistory(data.movements ?? []); })
+      .catch((value: unknown) => { if (active) toast(value instanceof Error ? value.message : (lang === "sw" ? "Imeshindikana kupakia historia ya stock." : "Could not load stock movement history."), "error"); })
+      .finally(() => { if (active) setMovementLoading(false); });
+    return () => { active = false; };
+  }, [canViewMovementHistory, movementType, toast, lang]);
 
   function openAdd() {
     setEditProduct(null);
@@ -440,6 +469,12 @@ const [stockCountCode, setStockCountCode] = useState("");
     return true;
   });
 
+  const visibleMovementHistory = movementHistory.filter((movement) => {
+    const query = movementSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [movement.product?.name, movement.note, movement.actor?.name, movement.actor?.phone].some((value) => String(value ?? "").toLowerCase().includes(query));
+  });
+
   const stockAdjustOptions = [
     ...(canAddInventory ? [{ v: "IN", label: lang === "sw" ? "Ongeza stock" : "Add stock", icon: <ArrowUp className="w-4 h-4" />, color: "green" }] : []),
     ...(canManageStock ? [{ v: "OUT", label: lang === "sw" ? "Toa stock" : "Remove stock", icon: <ArrowDown className="w-4 h-4" />, color: "red" }, { v: "ADJUSTMENT", label: lang === "sw" ? "Weka kiwango" : "Set quantity", icon: <Edit2 className="w-4 h-4" />, color: "blue" }] : []),
@@ -470,6 +505,36 @@ const [stockCountCode, setStockCountCode] = useState("");
                 : (lang === "sw" ? "Hakiki bei, margin, na stock kabla ya kuiweka mbele kwa wateja." : "Check price, margin, and stock before featuring it for customers.")}
             </p>
           </div>
+        )}
+
+        {canViewMovementHistory && (
+          <section className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-brand-50 p-2 text-brand-700"><History className="h-5 w-5" /></div>
+                <div>
+                  <h2 className="font-semibold text-gray-900">{lang === "sw" ? "Historia ya stock iliyopokelewa" : "Received and returned stock history"}</h2>
+                  <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Tazama bidhaa zilizoingizwa na zilizorudishwa, pamoja na sababu na aliyeandika." : "Track stock received into the shop and stock returned by customers, including notes and who recorded it."}</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:min-w-64 sm:flex-row">
+                <input value={movementSearch} onChange={(event) => setMovementSearch(event.target.value)} placeholder={lang === "sw" ? "Tafuta bidhaa, note, au mtumiaji" : "Search product, note, or user"} className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <select value={movementType} onChange={(event) => setMovementType(event.target.value as typeof movementType)} aria-label={lang === "sw" ? "Aina ya historia" : "History type"} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="ALL">{lang === "sw" ? "Zote: zimepokelewa na zilirudi" : "All received and returned"}</option>
+                  <option value="IN">{lang === "sw" ? "Zilizoingia" : "Received stock"}</option>
+                  <option value="RETURN">{lang === "sw" ? "Zilirudishwa" : "Returned stock"}</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              {movementLoading ? <p className="py-6 text-center text-sm text-gray-400">{t("common.loading", lang)}</p> : visibleMovementHistory.length === 0 ? <p className="py-6 text-center text-sm text-gray-400">{lang === "sw" ? "Hakuna historia ya kupokea au kurudisha stock." : "No received or returned stock has been recorded yet."}</p> : (
+                <table className="w-full min-w-[650px] text-left text-xs">
+                  <thead><tr className="border-b border-gray-100 text-gray-500"><th className="px-2 py-2 font-medium">{lang === "sw" ? "Bidhaa" : "Product"}</th><th className="px-2 py-2 font-medium">{lang === "sw" ? "Aina" : "Type"}</th><th className="px-2 py-2 font-medium">{lang === "sw" ? "Kiasi" : "Quantity"}</th><th className="px-2 py-2 font-medium">{lang === "sw" ? "Maelezo" : "Note"}</th><th className="px-2 py-2 font-medium">{lang === "sw" ? "Aliyeandika" : "Recorded by"}</th><th className="px-2 py-2 font-medium">{lang === "sw" ? "Tarehe" : "Date"}</th></tr></thead>
+                  <tbody>{visibleMovementHistory.map((movement) => <tr key={movement.id} className="border-b border-gray-50 last:border-0"><td className="px-2 py-2 font-medium text-gray-800">{movement.product?.name ?? "Unknown product"}</td><td className="px-2 py-2"><span className={`rounded-full px-2 py-1 font-semibold ${movement.type === "RETURN" ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700"}`}>{movement.type === "RETURN" ? (lang === "sw" ? "Imerudi" : "Returned") : (lang === "sw" ? "Imeingia" : "Received")}</span></td><td className="px-2 py-2 font-semibold text-gray-800">+{movement.quantity} {movement.product?.unit ?? ""}</td><td className="max-w-56 truncate px-2 py-2 text-gray-600" title={movement.note ?? ""}>{movement.note || "—"}</td><td className="px-2 py-2 text-gray-600">{movement.actor?.name || movement.actor?.phone || (lang === "sw" ? "Historia ya zamani" : "Earlier record")}</td><td className="whitespace-nowrap px-2 py-2 text-gray-500">{new Date(movement.createdAt).toLocaleString(lang === "sw" ? "sw-TZ" : "en-US", { dateStyle: "medium", timeStyle: "short" })}</td></tr>)}</tbody>
+                </table>
+              )}
+            </div>
+          </section>
         )}
 
         {/* Filters */}

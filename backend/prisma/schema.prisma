@@ -457,6 +457,8 @@ model StockMovement {
   note      String?
   productId String
   product   Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdByStaffId String?
   createdAt DateTime          @default(now())
 
   @@map("stock_movements")
