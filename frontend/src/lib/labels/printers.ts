@@ -26,7 +26,7 @@ function customFontSize(template: LabelTemplate): number {
 }
 
 function textLines(product: LabelProduct, template: LabelTemplate): Array<{ value: string; size: number }> {
-  const lines = productLines(product, template).map((value) => ({ value, size: 22 }));
+  const lines = productLines(product, template).map((value) => ({ value: escapeText(value), size: 22 }));
   const custom = customText(template);
   if (!custom || template.customTextPosition === "BELOW_BARCODE") return lines;
   const customLine = { value: custom, size: customFontSize(template) };
