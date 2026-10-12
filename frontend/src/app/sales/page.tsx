@@ -181,6 +181,9 @@ export default function SalesPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [assistantIntent, setAssistantIntent] = useState("");
   const [canViewFinancials, setCanViewFinancials] = useState(true);
+  const [canSell, setCanSell] = useState(true);
+  const [readOnly, setReadOnly] = useState(false);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
   const scannerBuffer = useRef("");
@@ -195,14 +198,26 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => {
-    api.get<{ user: { role: string; staff?: { permissions?: { canViewReports?: boolean } } } }>("/auth/me")
-      .then((data) => setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(data.user.staff.permissions?.canViewReports)))
-      .catch(() => setCanViewFinancials(false));
+    api.get<{ user: { role: string; staff?: { permissions?: { canSell?: boolean; canViewInventoryAndPrices?: boolean; canViewReports?: boolean } } } }>("/auth/me")
+      .then((data) => {
+        const permissions = data.user.staff?.permissions;
+        const nextCanSell = data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canSell);
+        const nextCanViewPrices = data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewInventoryAndPrices);
+        setCanSell(nextCanSell);
+        setReadOnly(!nextCanSell && nextCanViewPrices);
+        setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewReports));
+      })
+      .catch(() => setCanViewFinancials(false))
+      .finally(() => setPermissionsLoaded(true));
     fetchAllProducts().then(setProducts).catch(() => {});
   }, [fetchAllProducts]);
 
+  useEffect(() => {
+    if (readOnly) setCart([]);
+  }, [readOnly]);
+
   const syncPendingSales = useCallback(async () => {
-    if (syncingRef.current) return;
+    if (!permissionsLoaded || readOnly || !canSell || syncingRef.current) return;
     syncingRef.current = true;
     setSyncing(true);
     const pending = readPendingSales();
@@ -262,13 +277,18 @@ export default function SalesPage() {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [fetchAllProducts, lang, toast]);
+  }, [canSell, fetchAllProducts, lang, permissionsLoaded, readOnly, toast]);
 
   useEffect(() => {
-    setPendingSales(readPendingSales());
-    setSyncHistory(readSyncHistory());
+    if (readOnly) {
+      setPendingSales([]);
+      setSyncHistory([]);
+    } else {
+      setPendingSales(readPendingSales());
+      setSyncHistory(readSyncHistory());
+    }
     setIsOnline(typeof navigator === "undefined" ? true : navigator.onLine);
-    syncPendingSales().catch(() => {});
+    if (permissionsLoaded && canSell && !readOnly) syncPendingSales().catch(() => {});
     const handleOnline = () => {
       setIsOnline(true);
       syncPendingSales().catch(() => {});
@@ -280,7 +300,7 @@ export default function SalesPage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [syncPendingSales]);
+  }, [canSell, permissionsLoaded, readOnly, syncPendingSales]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -379,6 +399,7 @@ export default function SalesPage() {
   }
 
   function addToCart(product: Product) {
+    if (readOnly) return;
     if (product.currentStock <= 0) {
       toast(lang === "sw" ? "Bidhaa hii haina stock." : "This product is out of stock.", "error");
       return;
@@ -407,6 +428,11 @@ export default function SalesPage() {
     if (!normalized) return;
     try {
       const data = await api.get<{ product: Product }>(`/barcodes/lookup/${encodeURIComponent(normalized)}?context=POS`, lang);
+      if (readOnly) {
+        setSearch(data.product.barcode || normalized);
+        toast(lang === "sw" ? `${data.product.name} imepatikana.` : `${data.product.name} found.`, "success");
+        return;
+      }
       addToCart(data.product);
       signalScanSuccess();
       toast(lang === "sw" ? `${data.product.name} imeongezwa.` : `${data.product.name} added.`, "success");
@@ -414,7 +440,7 @@ export default function SalesPage() {
       if (error instanceof Error && error.message === "This barcode was not found.") setUnknownBarcode(normalized);
       else toast(error instanceof Error ? error.message : "Unable to scan barcode", "error");
     }
-  }, [lang, toast]);
+  }, [lang, readOnly, toast]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -466,6 +492,7 @@ export default function SalesPage() {
   const profit = canViewFinancials ? cart.reduce((sum, i) => sum + i.quantity * (i.unitPrice - (i.product.buyingPrice || 0)), 0) : 0;
 
   async function completeSale() {
+    if (readOnly || !canSell) return;
     if (cart.length === 0) return;
     if (paymentMethod === "CREDIT" && !customerPhone.trim()) {
       toast(lang === "sw" ? "Weka namba ya simu ya mteja kwa mauzo ya deni." : "Enter the customer phone for credit sales.", "error");
@@ -537,7 +564,7 @@ export default function SalesPage() {
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("nav.sales", lang)}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {[{ v: "pos", label: t("sales.pos", lang) }, { v: "history", label: t("sales.history", lang) }].map(({ v, label }) => (
+            {[{ v: "pos", label: t("sales.pos", lang) }, ...(!readOnly ? [{ v: "history", label: t("sales.history", lang) }] : [])].map(({ v, label }) => (
               <button key={v} onClick={() => setView(v as "pos" | "history")}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors min-h-0 ${view === v ? "bg-white text-brand-700 shadow-sm" : "text-gray-500"}`}>
                 {label}
@@ -570,6 +597,11 @@ export default function SalesPage() {
               ))}
             </div>
             </div>
+            {readOnly && (
+              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800">
+                {lang === "sw" ? "Hii ni hali ya kuangalia tu: unaweza kuona bei na stock, lakini huwezi kurekodi mauzo." : "Read-only access: you can view prices and stock, but you cannot create sales."}
+              </p>
+            )}
             {pendingSales.length > 0 && (
               <button
                 onClick={() => syncPendingSales()}
@@ -760,15 +792,15 @@ export default function SalesPage() {
                   placeholder={t("inventory.search", lang)}
                   className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-3 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
                 </div>
-                <button onClick={() => setScannerOpen(true)} aria-label="Scan barcode" className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-white" title="Scan barcode"><ScanLine className="h-5 w-5" /></button>
+                <button onClick={() => setScannerOpen(true)} aria-label={readOnly ? "Scan barcode to view product" : "Scan barcode"} className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-white" title={readOnly ? "Scan barcode to view product" : "Scan barcode"}><ScanLine className="h-5 w-5" /></button>
               </div>
               <div className="grid grid-cols-2 gap-2 max-h-[50vh] overflow-y-auto pb-2 sm:grid-cols-3 lg:max-h-[60vh] lg:grid-cols-2">
                 {filtered.map((p) => {
                   const inCart = cart.find((i) => i.product.id === p.id);
                   const outOfStock = p.currentStock <= 0;
                   return (
-                    <button key={p.id} onClick={() => addToCart(p)} disabled={outOfStock}
-                      className={`min-h-28 text-left p-3 rounded-xl border transition-all ${outOfStock ? "cursor-not-allowed border-gray-200 bg-gray-50 opacity-65" : inCart ? "border-brand-400 bg-brand-50" : "border-gray-200 bg-white hover:border-brand-300"}`}>
+                    <button key={p.id} onClick={() => addToCart(p)} disabled={readOnly || outOfStock}
+                      className={`min-h-28 text-left p-3 rounded-xl border transition-all ${readOnly ? "cursor-default border-gray-200 bg-white" : outOfStock ? "cursor-not-allowed border-gray-200 bg-gray-50 opacity-65" : inCart ? "border-brand-400 bg-brand-50" : "border-gray-200 bg-white hover:border-brand-300"}`}>
                       {p.imageUrl ? (
                         <img src={p.imageUrl} alt="" className="mb-2 h-20 w-full rounded-lg border border-gray-100 object-cover" />
                       ) : (
@@ -795,8 +827,14 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Cart */}
+            {/* Cart or read-only guidance */}
             <div ref={cartPanelRef} className="mt-4 scroll-mt-20 lg:mt-0">
+              {readOnly ? (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-900">
+                  <h2 className="font-semibold">{lang === "sw" ? "Kuangalia bei na stock" : "Price and stock viewer"}</h2>
+                  <p className="mt-2 leading-6">{lang === "sw" ? "Chagua retail au wholesale kuona bei husika. Bidhaa hizi haziwezi kuongezwa kwenye cart na hakuna mauzo yatakayorekodiwa kwenye akaunti hii." : "Choose retail or wholesale above to compare prices. Products cannot be added to a cart and no sale can be recorded from this account."}</p>
+                </div>
+              ) : (
               <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <ShoppingCart className="w-4 h-4 text-gray-500" />
@@ -909,6 +947,7 @@ export default function SalesPage() {
                   </>
                 )}
               </div>
+              )}
             </div>
           </div>
         ) : (

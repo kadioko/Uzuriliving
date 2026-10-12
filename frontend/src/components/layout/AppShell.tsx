@@ -62,6 +62,7 @@ interface NavItem {
   label?: string;
   icon: typeof LayoutDashboard;
   permission?: "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canManageStaff" | "canViewReports" | "canRecordExpenses";
+  anyPermissions?: Array<"canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canManageStaff" | "canViewReports" | "canRecordExpenses">;
   feature?: "staff" | "assistant" | "exports";
   ownerOnly?: boolean;
 }
@@ -71,7 +72,7 @@ const merchantNav: NavItem[] = [
   { href: "/inventory", labelKey: "nav.inventory", icon: Package, permission: "canViewInventoryAndPrices" },
   { href: "/stock-history", labelKey: "nav.stockHistory", icon: History, ownerOnly: true },
   { href: "/barcodes", label: "Barcodes", icon: ScanLine, permission: "canManageStock" },
-  { href: "/sales", labelKey: "nav.sales", icon: ShoppingCart, permission: "canSell" },
+  { href: "/sales", labelKey: "nav.sales", icon: ShoppingCart, anyPermissions: ["canSell", "canViewInventoryAndPrices"] },
   { href: "/debts", labelKey: "nav.debts", icon: HandCoins, permission: "canSell" },
   { href: "/expenses", labelKey: "nav.expenses", icon: ReceiptText, permission: "canRecordExpenses" },
   { href: "/orders", labelKey: "nav.orders", icon: ClipboardList, permission: "canManageStock" },
@@ -166,7 +167,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     : user?.role === "SUPPLIER"
       ? supplierNav
       : merchantNav.filter((item) =>
-          (!user?.staff || !item.permission || user.staff.permissions[item.permission]) &&
+          (!user?.staff || (!item.permission && !item.anyPermissions) || (item.permission ? user.staff.permissions[item.permission] : item.anyPermissions?.some((permission) => user.staff?.permissions[permission]))) &&
           (!item.ownerOnly || !user?.staff || user.staff.role === "OWNER") &&
           (!item.feature || user?.features?.[item.feature] !== false)
         );

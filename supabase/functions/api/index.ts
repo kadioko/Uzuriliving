@@ -753,6 +753,9 @@ async function debts(client: SupabaseClient, user: Record<string, unknown>, shop
 
 const salePaymentMethods = new Set(["CASH", "MPESA", "TIGOPESA", "AIRTEL_MONEY", "HALOPESA", "BANK", "CREDIT"]);
 async function sales(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
+  const permissions = user.permissions as Record<string, unknown> | undefined;
+  const canSell = user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER" || permissions?.canSell === true));
+  if (!canSell) return json({ error: "You do not have permission to access sales" }, 403);
   if (method === "GET" && id === "summary") {
     const period = new URL(request.url).searchParams.get("period") ?? "today";
     const now = new Date();
