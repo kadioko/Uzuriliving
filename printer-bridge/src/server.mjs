@@ -47,13 +47,19 @@ function printerConfigured(printer) {
 function json(res, status, body) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
-    "Access-Control-Allow-Origin": "*",
+    ...(res.getHeader("Access-Control-Allow-Origin") ? { "Access-Control-Allow-Origin": res.getHeader("Access-Control-Allow-Origin") } : {}),
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Uzuri-Bridge-Token",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",
   });
   res.end(payload);
+}
+
+function originAllowed(origin) {
+  if (!origin) return true;
+  const origins = env("UZURI_BRIDGE_ALLOWED_ORIGINS", "https://uzuriliving.com,https://www.uzuriliving.com").split(",").map((value) => value.trim());
+  return origins.includes(origin);
 }
 
 function authorized(req) {
@@ -223,6 +229,9 @@ function testCommand(printer) {
 }
 
 async function handle(req, res) {
+  const origin = req.headers.origin;
+  if (!originAllowed(origin)) return json(res, 403, { error: "This website is not allowed to use the print bridge" });
+  if (origin) { res.setHeader("Access-Control-Allow-Origin", origin); res.setHeader("Vary", "Origin"); }
   if (req.method === "OPTIONS") return json(res, 204, {});
   if (!authorized(req)) return json(res, 401, { error: "Invalid bridge token" });
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
@@ -258,6 +267,7 @@ function start() {
     handle(req, res).catch((error) => json(res, 400, { error: error instanceof Error ? error.message : "Bridge request failed" }));
   });
   const host = env("UZURI_BRIDGE_HOST", "127.0.0.1");
+  if (!["127.0.0.1", "localhost", "::1"].includes(host) && !env("UZURI_BRIDGE_TOKEN")) throw new Error("Set UZURI_BRIDGE_TOKEN before allowing network access to the bridge.");
   const port = numberEnv("UZURI_BRIDGE_PORT", 38100);
   server.listen(port, host, () => {
     console.log(`Uzuri Living Print Bridge listening on http://${host}:${port}`);
@@ -268,4 +278,4 @@ function start() {
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) start();
 
-export { decodePayload, configuredPrinter, validatePrintRequest, start };
+export { decodePayload, configuredPrinter, validatePrintRequest, originAllowed, start };

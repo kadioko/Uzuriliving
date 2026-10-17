@@ -1,6 +1,6 @@
 const FRONTEND_URL = (process.env.MONITOR_FRONTEND_URL || "https://www.uzuriliving.com").replace(/\/$/, "");
 const API_URL = (process.env.MONITOR_API_URL || "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api").replace(/\/$/, "");
-const LOGIN_PHONE = process.env.MONITOR_LOGIN_PHONE || "+255700000002";
+const LOGIN_PHONE = process.env.MONITOR_LOGIN_PHONE || "+255789123456";
 const LOGIN_PIN = process.env.MONITOR_LOGIN_PIN || "1234";
 
 async function request(url, options = {}) {

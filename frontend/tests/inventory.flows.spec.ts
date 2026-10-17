@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("inventory supports add, edit, and stock adjustment flows", async ({ page }) => {
+  await page.route("**/api/stock-counts", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ count: null }) }));
   const suppliers = [{ id: "sup-1", name: "Jumla Traders", phone: "+255700000001" }];
   const products = [
     {

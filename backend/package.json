@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/app.js",
     "start:prod": "npx prisma migrate deploy && node src/app.js",
-    "dev": "nodemon src/app.js",
+    "dev": "node --watch src/app.js",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
@@ -15,7 +15,7 @@
     "db:push": "prisma db push",
     "smoke:prod": "node scripts/smoke-test.js",
     "monitor:prod": "node scripts/production-monitor.js",
-    "test": "node --test tests/order.unit.test.js tests/product.unit.test.js tests/sale.unit.test.js tests/stock.unit.test.js tests/hardening.unit.test.js tests/financialIntegrity.unit.test.js tests/profitAnalytics.unit.test.js tests/marketing.unit.test.js tests/pushAnalytics.unit.test.js tests/barcode.unit.test.js",
+    "test": "node --test tests/order.unit.test.js tests/product.unit.test.js tests/sale.unit.test.js tests/stock.unit.test.js tests/hardening.unit.test.js tests/financialIntegrity.unit.test.js tests/profitAnalytics.unit.test.js tests/marketing.unit.test.js tests/pushAnalytics.unit.test.js tests/barcode.unit.test.js tests/supabasePermissions.unit.test.js",
     "test:prod-api": "node --test tests/api.test.js",
     "db:backup": "node scripts/backup.js",
     "db:restore-drill": "node scripts/restore-drill.js",
@@ -41,7 +41,6 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
     "prisma": "^7.8.0"
   },
   "overrides": {

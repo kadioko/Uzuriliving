@@ -2,6 +2,7 @@ package com.uzuriliving.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -48,8 +49,11 @@ public class PrintActivity extends Activity {
             boolean granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false);
             if (granted && device != null && pendingUri != null) {
                 byte[] payload = decodePayload(pendingUri);
-                boolean sent = sendUsb(device, payload);
-                showResult(sent, sent ? "Label sent to USB printer." : "USB printer did not accept the full label payload.");
+                if (payload.length == 0) return;
+                executor.execute(() -> {
+                    boolean sent = sendUsb(device, payload);
+                    showResult(sent, sent ? "Label sent to USB printer." : "USB printer did not accept the full label payload.");
+                });
             } else {
                 showResult(false, "USB printer permission was not granted.");
             }
@@ -63,10 +67,25 @@ public class PrintActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(usbPermissionReceiver, filter);
         pendingUri = getIntent().getData();
-        if (pendingUri == null || !"print".equals(pendingUri.getHost())) {
+        if (pendingUri == null || !"uzuriliving".equals(pendingUri.getScheme()) || !"print".equals(pendingUri.getHost())) {
             showResult(false, "Invalid Uzuri Living print request.");
             return;
         }
+        new AlertDialog.Builder(this)
+            .setTitle("Uzuri Living labels")
+            .setMessage("Send labels using " + transport() + " to " + printerTarget() + "?")
+            .setPositiveButton("Print", (dialog, which) -> requestPrint())
+            .setNegativeButton("Cancel", (dialog, which) -> finish())
+            .setOnCancelListener(dialog -> finish())
+            .show();
+    }
+
+    private String printerTarget() {
+        String target = "LAN".equals(transport()) ? pendingUri.getQueryParameter("host") : "BLUETOOTH".equals(transport()) ? pendingUri.getQueryParameter("bluetoothAddress") : "the connected USB printer";
+        return target == null ? "the selected printer" : target;
+    }
+
+    private void requestPrint() {
         if ("BLUETOOTH".equals(transport())) {
             if (needsBluetoothPermission()) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH_CONNECT}, BLUETOOTH_PERMISSION_REQUEST);
@@ -96,7 +115,10 @@ public class PrintActivity extends Activity {
         try {
             String encoded = uri.getQueryParameter("data");
             if (encoded == null || encoded.isEmpty()) throw new IllegalArgumentException("Missing print data.");
-            return Base64.decode(encoded, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            if (encoded.length() > 2800000) throw new IllegalArgumentException("Print data is too large.");
+            byte[] payload = Base64.decode(encoded, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            if (payload.length > 2 * 1024 * 1024) throw new IllegalArgumentException("Print data is too large.");
+            return payload;
         } catch (IllegalArgumentException error) {
             showResult(false, error.getMessage() == null ? "Invalid print data." : error.getMessage());
             return new byte[0];
@@ -115,6 +137,7 @@ public class PrintActivity extends Activity {
                     case "USB": usbResult = sendUsbOrRequestPermission(payload); break;
                     default: throw new IOException("Unsupported Android printer transport.");
                 }
+                if ("USB".equals(transport()) && usbResult == null) return; // Wait for the USB permission callback.
                 if (usbResult == null) showResult(true, "Label sent to printer.");
                 else if (usbResult) showResult(true, "Label sent to USB printer.");
                 else showResult(false, "USB printer did not accept the full label payload.");
@@ -172,6 +195,7 @@ public class PrintActivity extends Activity {
             if (productId >= 0 && device.getProductId() != productId) continue;
             for (int i = 0; i < device.getInterfaceCount(); i++) {
                 UsbInterface usbInterface = device.getInterface(i);
+                if (usbInterface.getInterfaceClass() != UsbConstants.USB_CLASS_PRINTER && usbInterface.getInterfaceClass() != UsbConstants.USB_CLASS_VENDOR_SPEC) continue;
                 for (int j = 0; j < usbInterface.getEndpointCount(); j++) {
                     UsbEndpoint endpoint = usbInterface.getEndpoint(j);
                     if (endpoint.getType() == UsbConstants.USB_ENDPOINT_XFER_BULK && endpoint.getDirection() == UsbConstants.USB_DIR_OUT) return device;
@@ -189,13 +213,19 @@ public class PrintActivity extends Activity {
         try {
             for (int i = 0; i < device.getInterfaceCount() && !sent; i++) {
                 UsbInterface usbInterface = device.getInterface(i);
+                if (usbInterface.getInterfaceClass() != UsbConstants.USB_CLASS_PRINTER && usbInterface.getInterfaceClass() != UsbConstants.USB_CLASS_VENDOR_SPEC) continue;
                 UsbEndpoint output = null;
                 for (int j = 0; j < usbInterface.getEndpointCount(); j++) {
                     UsbEndpoint endpoint = usbInterface.getEndpoint(j);
                     if (endpoint.getType() == UsbConstants.USB_ENDPOINT_XFER_BULK && endpoint.getDirection() == UsbConstants.USB_DIR_OUT) { output = endpoint; break; }
                 }
                 if (output == null || !connection.claimInterface(usbInterface, true)) continue;
-                int written = connection.bulkTransfer(output, payload, payload.length, 10_000);
+                int written = 0;
+                while (written < payload.length) {
+                    int result = connection.bulkTransfer(output, payload, written, Math.min(16384, payload.length - written), 10_000);
+                    if (result <= 0) break;
+                    written += result;
+                }
                 connection.releaseInterface(usbInterface);
                 sent = written == payload.length;
             }

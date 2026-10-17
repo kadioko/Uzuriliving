@@ -3,6 +3,11 @@ const API_ORIGIN = "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api";
 export const dynamic = "force-dynamic";
 
 async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }) {
+  const origin = request.headers.get("origin");
+  const safeMethods = ["GET", "HEAD", "OPTIONS"];
+  if (!safeMethods.includes(request.method) && origin && ![new URL(request.url).origin, "https://uzuriliving.com", "https://www.uzuriliving.com"].includes(origin)) {
+    return Response.json({ error: "Request origin is not allowed" }, { status: 403 });
+  }
   const { path } = await context.params;
   const target = `${API_ORIGIN}/${path.map((part) => encodeURIComponent(part)).join("/")}${new URL(request.url).search}`;
   const headers = new Headers(request.headers);

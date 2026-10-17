@@ -1,176 +1,76 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-
-const PROD_BASE_URL = process.env.SMOKE_BASE_URL || "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api";
-const LOGIN_PHONE = process.env.SMOKE_TEST_PHONE || "+255700000003";
-const LOGIN_PIN = process.env.SMOKE_TEST_PIN || "1234";
-
-let cachedToken = null;
-let loginPromise = null;
-
+const BASE = (process.env.SMOKE_BASE_URL || "https://ryadgenkvhgxjdyhbyqc.supabase.co/functions/v1/api").replace(/\/$/, "");
+const phone = process.env.SMOKE_TEST_PHONE || "+255789123456";
+const pin = process.env.SMOKE_TEST_PIN || "1234";
+let ownerSession;
 async function request(path, options = {}) {
-  const response = await fetch(`${PROD_BASE_URL}${path}`, options);
-  const contentType = response.headers.get("content-type") || "";
-  const isJson = contentType.includes("application/json");
-  const payload = isJson ? await response.json() : await response.text();
+  const response = await fetch(BASE + path, options);
+  const payload = response.headers.get("content-type")?.includes("application/json") ? await response.json() : await response.text();
   return { response, payload };
 }
-
-async function login() {
-  if (cachedToken) {
-    return cachedToken;
-  }
-
-  if (!loginPromise) {
-    loginPromise = (async () => {
-      const result = await request("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: LOGIN_PHONE, pin: LOGIN_PIN }),
-      });
-
-      assert.equal(result.response.status, 200, `Login failed: ${result.response.status} ${JSON.stringify(result.payload)}`);
-      assert.ok(result.payload?.token, "Expected login token");
-      cachedToken = result.payload.token;
-      return cachedToken;
-    })();
-  }
-
-  return loginPromise;
+async function login(loginPhone = phone, loginPin = pin) {
+  const result = await request("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: loginPhone, pin: loginPin }) });
+  assert.equal(result.response.status, 200, "Demo login failed");
+  const cookies = result.response.headers.getSetCookie();
+  return { cookie: cookies.map((value) => value.split(";")[0]).join("; "), refresh: decodeURIComponent(cookies.find((value) => value.startsWith("uzuriliving_refresh=")).split(";")[0].split("=")[1]) };
 }
-
-test("health endpoint returns ok", async () => {
-  const result = await request("/health");
-  assert.equal(result.response.status, 200);
-  assert.equal(result.payload?.status, "ok");
-});
-
-test("register rejects missing required fields", async () => {
-  const result = await request("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: "", pin: "", name: "" }),
-  });
-
-  assert.equal(result.response.status, 400);
-  assert.equal(result.payload?.error, "Phone, PIN, and name are required");
-});
-
-test("register rejects invalid phone number", async () => {
-  const result = await request("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: "123", pin: "1234", name: "Invalid Phone User" }),
-  });
-
-  assert.ok([400, 409, 201].includes(result.response.status));
-  if (result.response.status === 400) {
-    assert.equal(result.payload?.error, "Enter a valid phone number");
-  } else if (result.response.status === 409) {
-    assert.equal(result.payload?.error, "Phone number already registered");
-  } else {
-    assert.ok(result.payload?.token, "Expected token when live register validation is permissive");
+function owner() { return ownerSession ??= login(); }
+test("health and database status are healthy", async () => {
+  for (const path of ["/health", "/status"]) {
+    const { response, payload } = await request(path);
+    assert.equal(response.status, 200);
+    assert.equal(payload.status, "ok");
   }
 });
-
-test("register rejects invalid pin", async () => {
-  const result = await request("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: "+255711111119", pin: "12", name: "Invalid Pin User" }),
-  });
-
-  assert.equal(result.response.status, 400);
-  assert.ok([
-    "PIN must be 4 to 8 digits",
-    "PIN must be at least 4 digits",
-  ].includes(result.payload?.error));
-});
-
-test("register rejects invalid role", async () => {
-  const result = await request("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: "+255711111118", pin: "1234", name: "Invalid Role User", role: "ADMIN" }),
-  });
-
-  assert.ok([400, 409, 201].includes(result.response.status));
-  if (result.response.status === 400) {
-    assert.equal(result.payload?.error, "Invalid role selected");
-  } else if (result.response.status === 409) {
-    assert.equal(result.payload?.error, "Phone number already registered");
-  } else {
-    assert.ok(result.payload?.user?.role, "Expected returned user when live register role validation is permissive");
+test("registration rejects invalid fields without creating an account", async () => {
+  for (const body of [{ phone: "", pin: "", name: "" }, { phone: "123", pin: "1234", name: "Invalid" }, { phone: "+255700000001", pin: "12", name: "Invalid" }, { phone: "+255700000001", pin: "1234", name: "Invalid", role: "ADMIN" }]) {
+    const result = await request("/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    assert.equal(result.response.status, 400);
   }
 });
-
-test("register rejects duplicate phone numbers", async () => {
-  const result = await request("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone: LOGIN_PHONE, pin: "1234", name: "Duplicate User", role: "MERCHANT" }),
-  });
-
-  assert.equal(result.response.status, 409);
-  assert.equal(result.payload?.error, "Phone number already registered");
+test("owner operational read endpoints return valid data", async () => {
+  const { cookie } = await owner();
+  const paths = ["/auth/me", "/products?limit=2", "/dashboard", "/dashboard/analytics", "/purchases/analytics", "/sales?limit=2", "/debts", "/expenses", "/orders", "/customer-orders", "/staff", "/stock-counts", "/stock/movements", "/settings", "/barcodes/report", "/notifications", "/assistant/actions"];
+  const productResult = await request("/products?limit=1", { headers: { cookie } });
+  assert.equal(productResult.response.status, 200);
+  if (productResult.payload.products?.[0]?.id) paths.push(`/products/${productResult.payload.products[0].id}/analytics?period=30`);
+  for (const path of paths) {
+    const { response, payload } = await request(path, { headers: { cookie } });
+    assert.equal(response.status, 200, path + ": " + JSON.stringify(payload));
+  }
 });
-
-test("authenticated me endpoint returns current user", async () => {
-  const token = await login();
-  const result = await request("/api/auth/me", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  assert.equal(result.response.status, 200);
-  assert.equal(result.payload?.user?.phone, LOGIN_PHONE);
+test("cashier reads POS products but cannot read restricted administrative data", async () => {
+  const { cookie } = await login("+255711234567", "1234");
+  assert.equal((await request("/products?limit=2", { headers: { cookie } })).response.status, 200);
+  for (const path of ["/staff", "/dashboard", "/expenses", "/stock-counts", "/orders", "/barcodes/settings"]) assert.equal((await request(path, { headers: { cookie } })).response.status, 403, path);
 });
-
-test("invalid token is rejected", async () => {
-  const result = await request("/api/auth/me", {
-    headers: { Authorization: "Bearer definitely-invalid-token" },
-  });
-
-  assert.equal(result.response.status, 401);
+test("stock clerk cannot submit sales or read staff and financial reports", async () => {
+  const { cookie } = await login("+255722345678", "1234");
+  for (const path of ["/staff", "/dashboard", "/expenses", "/sales"]) assert.equal((await request(path, { headers: { cookie } })).response.status, 403, path);
+  const result = await request("/sales", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: '{"items":[]}' });
+  assert.equal(result.response.status, 403);
 });
-
-test("invalid sales payload is rejected", async () => {
-  const token = await login();
-  const result = await request("/api/sales", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ items: [] }),
-  });
-
-  assert.equal(result.response.status, 400);
+test("refresh tokens and invalid tokens cannot authenticate API access", async () => {
+  const { refresh } = await owner();
+  for (const token of [refresh, "invalid"]) assert.equal((await request("/auth/me", { headers: { Authorization: "Bearer " + token } })).response.status, 401);
 });
-
-test("invalid stock payload is rejected", async () => {
-  const token = await login();
-  const result = await request("/api/stock/adjust", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ productId: "", type: "BAD", quantity: 0 }),
-  });
-
-  assert.equal(result.response.status, 400);
+test("invalid writes fail without changing demo stock or balances", async () => {
+  const { cookie } = await owner();
+  for (const [path, body] of [["/sales", { items: [] }], ["/stock/adjust", { productId: "", type: "BAD", quantity: 0 }], ["/public/orders", { shopId: "demo-shop-uzuri-0001", customerName: "Invalid", customerPhone: "+255700000000", items: [{ productId: "demo-product-0001", quantity: -1 }] }]]) {
+    const result = await request(path, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+    assert.equal(result.response.status, 400, path);
+  }
 });
-
-test("invalid supplier payload is rejected", async () => {
-  const token = await login();
-  const result = await request("/api/suppliers", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ name: "", phone: "" }),
-  });
-
-  assert.equal(result.response.status, 400);
+test("CSV downloads use the authenticated shop", async () => {
+  const { cookie } = await owner();
+  for (const path of ["/exports/sales.csv", "/exports/inventory.csv"]) {
+    const result = await request(path, { headers: { cookie } });
+    assert.equal(result.response.status, 200, path);
+    assert.match(result.response.headers.get("content-type"), /text\/csv/);
+    assert.ok(result.payload.split("\n").length > 1);
+  }
+});
+test("foreign browser origins cannot submit state changes", async () => {
+  assert.equal((await request("/auth/logout", { method: "POST", headers: { Origin: "https://invalid.example" } })).response.status, 403);
 });

@@ -7,6 +7,7 @@ import { t, useLang } from "@/lib/i18n";
 import { useToast } from "@/components/ui/Toast";
 import { BarcodeScanner } from "@/components/barcode/BarcodeScanner";
 import { formatAppDateTime, formatAppTime } from "@/lib/timezone";
+import IncomingStock from "@/components/inventory/IncomingStock";
 
 interface Product {
   id: string;
@@ -87,30 +88,30 @@ const SYNC_DEVICE_KEY = "uzuriliving_sync_device_id";
 const SYNC_DEVICE_LABEL_KEY = "uzuriliving_sync_device_label";
 const HISTORY_PAGE_SIZE = 30;
 
-function readPendingSales(): PendingSale[] {
+function readPendingSales(scope: string): PendingSale[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(window.localStorage.getItem(PENDING_SALES_KEY) || "[]");
+    return JSON.parse(window.localStorage.getItem(`${PENDING_SALES_KEY}:${scope}`) || "[]");
   } catch {
     return [];
   }
 }
 
-function writePendingSales(sales: PendingSale[]) {
-  window.localStorage.setItem(PENDING_SALES_KEY, JSON.stringify(sales));
+function writePendingSales(sales: PendingSale[], scope: string) {
+  window.localStorage.setItem(`${PENDING_SALES_KEY}:${scope}`, JSON.stringify(sales));
 }
 
-function readSyncHistory(): SyncEvent[] {
+function readSyncHistory(scope: string): SyncEvent[] {
   if (typeof window === "undefined") return [];
   try {
-    return JSON.parse(window.localStorage.getItem(SYNC_HISTORY_KEY) || "[]");
+    return JSON.parse(window.localStorage.getItem(`${SYNC_HISTORY_KEY}:${scope}`) || "[]");
   } catch {
     return [];
   }
 }
 
-function writeSyncHistory(events: SyncEvent[]) {
-  window.localStorage.setItem(SYNC_HISTORY_KEY, JSON.stringify(events.slice(0, 10)));
+function writeSyncHistory(events: SyncEvent[], scope: string) {
+  window.localStorage.setItem(`${SYNC_HISTORY_KEY}:${scope}`, JSON.stringify(events.slice(0, 10)));
 }
 
 function newLocalId() {
@@ -180,8 +181,13 @@ export default function SalesPage() {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [assistantIntent, setAssistantIntent] = useState("");
-  const [canViewFinancials, setCanViewFinancials] = useState(true);
-  const [canSell, setCanSell] = useState(true);
+  const [canViewFinancials, setCanViewFinancials] = useState(false);
+  const [canSell, setCanSell] = useState(false);
+  const [canAccessProducts, setCanAccessProducts] = useState(false);
+  const [canAddProducts, setCanAddProducts] = useState(false);
+  const [storageScope, setStorageScope] = useState("");
+  const [legacySales, setLegacySales] = useState<PendingSale[]>([]);
+  const [reviewLegacy, setReviewLegacy] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -198,12 +204,18 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => {
-    api.get<{ user: { role: string; staff?: { permissions?: { canSell?: boolean; canViewInventoryAndPrices?: boolean; canViewReports?: boolean } } } }>("/auth/me")
+    api.get<{ user: { id?: string; role: string; shop?: { id: string }; staff?: { permissions?: { canSell?: boolean; canViewInventoryAndPrices?: boolean; canManageStock?: boolean; canAddInventory?: boolean; canViewReports?: boolean } } } }>("/auth/me")
       .then((data) => {
         const permissions = data.user.staff?.permissions;
         const nextCanSell = data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canSell);
-        const nextCanViewPrices = data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewInventoryAndPrices);
+        const nextCanViewPrices = data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewInventoryAndPrices || permissions?.canManageStock);
         setCanSell(nextCanSell);
+        setStorageScope(data.user.shop?.id || data.user.id || "");
+        if (!data.user.staff) {
+          try { setLegacySales(JSON.parse(localStorage.getItem(PENDING_SALES_KEY) || "[]")); } catch { setLegacySales([]); }
+        }
+        setCanAccessProducts(nextCanSell || nextCanViewPrices);
+        setCanAddProducts(!data.user.staff || Boolean((permissions?.canAddInventory || permissions?.canManageStock) && permissions?.canViewReports));
         setReadOnly(!nextCanSell && nextCanViewPrices);
         setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewReports));
       })
@@ -217,10 +229,10 @@ export default function SalesPage() {
   }, [readOnly]);
 
   const syncPendingSales = useCallback(async () => {
-    if (!permissionsLoaded || readOnly || !canSell || syncingRef.current) return;
+    if (!permissionsLoaded || !storageScope || readOnly || !canSell || syncingRef.current) return;
     syncingRef.current = true;
     setSyncing(true);
-    const pending = readPendingSales();
+    const pending = readPendingSales(storageScope);
     if (pending.length === 0) {
       setPendingSales([]);
       setLastSyncAt(new Date().toISOString());
@@ -259,10 +271,10 @@ export default function SalesPage() {
           reportSyncEvent({ status: "FAILED", total: sale.total, message, attempts: nextSale.attempts, localId: sale.id });
         }
       }
-      writePendingSales(remaining);
+      writePendingSales(remaining, storageScope);
       if (events.length > 0) {
-        const nextHistory = [...events, ...readSyncHistory()];
-        writeSyncHistory(nextHistory);
+        const nextHistory = [...events, ...readSyncHistory(storageScope)];
+        writeSyncHistory(nextHistory, storageScope);
         setSyncHistory(nextHistory.slice(0, 10));
       }
       setPendingSales(remaining);
@@ -277,15 +289,15 @@ export default function SalesPage() {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [canSell, fetchAllProducts, lang, permissionsLoaded, readOnly, toast]);
+  }, [canSell, fetchAllProducts, lang, permissionsLoaded, readOnly, storageScope, toast]);
 
   useEffect(() => {
     if (readOnly) {
       setPendingSales([]);
       setSyncHistory([]);
     } else {
-      setPendingSales(readPendingSales());
-      setSyncHistory(readSyncHistory());
+      setPendingSales(readPendingSales(storageScope));
+      setSyncHistory(readSyncHistory(storageScope));
     }
     setIsOnline(typeof navigator === "undefined" ? true : navigator.onLine);
     if (permissionsLoaded && canSell && !readOnly) syncPendingSales().catch(() => {});
@@ -300,7 +312,7 @@ export default function SalesPage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [canSell, permissionsLoaded, readOnly, syncPendingSales]);
+  }, [canSell, permissionsLoaded, readOnly, storageScope, syncPendingSales]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -323,8 +335,19 @@ export default function SalesPage() {
   }, []);
 
   function clearSyncHistory() {
-    writeSyncHistory([]);
+    writeSyncHistory([], storageScope);
     setSyncHistory([]);
+  }
+
+  function importLegacySales() {
+    if (!storageScope || !legacySales.length || !window.confirm(lang === "sw" ? "Unathibitisha mauzo haya ni ya duka hili?" : "Confirm these older offline sales belong to this shop?")) return;
+    localStorage.setItem(`${PENDING_SALES_KEY}_legacy_backup`, JSON.stringify(legacySales));
+    const migrated = legacySales.map((sale) => ({ ...sale, payload: { ...sale.payload, clientReference: sale.id } }));
+    const pending = [...readPendingSales(storageScope), ...migrated];
+    writePendingSales(pending, storageScope);
+    localStorage.removeItem(PENDING_SALES_KEY);
+    setLegacySales([]);
+    setPendingSales(pending);
   }
 
   function removePendingSale(id: string) {
@@ -335,7 +358,7 @@ export default function SalesPage() {
       : "Remove this offline sale? Only do this if you recorded it manually.");
     if (!confirmed) return;
     const nextPending = pendingSales.filter((item) => item.id !== id);
-    writePendingSales(nextPending);
+    writePendingSales(nextPending, storageScope);
     setPendingSales(nextPending);
     reportSyncEvent({ status: "REMOVED", total: sale.total, message: sale.lastError, attempts: sale.attempts || 0, localId: sale.id });
     toast(lang === "sw" ? "Sale ya offline imeondolewa." : "Offline sale removed.", "success");
@@ -398,11 +421,11 @@ export default function SalesPage() {
     return product.sellingPrice;
   }
 
-  function addToCart(product: Product) {
-    if (readOnly) return;
+  const addToCart = useCallback((product: Product) => {
+    if (!permissionsLoaded || !canSell) return false;
     if (product.currentStock <= 0) {
       toast(lang === "sw" ? "Bidhaa hii haina stock." : "This product is out of stock.", "error");
-      return;
+      return false;
     }
     setCart((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
@@ -413,9 +436,10 @@ export default function SalesPage() {
             : i
         );
       }
-      return [...prev, { product, quantity: 1, unitPrice: defaultPriceFor(product) }];
+      return [...prev, { product, quantity: 1, unitPrice: saleMode === "WHOLESALE" && product.wholesalePrice != null ? product.wholesalePrice : product.sellingPrice }];
     });
-  }
+    return true;
+  }, [canSell, lang, permissionsLoaded, saleMode, toast]);
 
   function signalScanSuccess() {
     if (navigator.vibrate) navigator.vibrate(60);
@@ -433,14 +457,15 @@ export default function SalesPage() {
         toast(lang === "sw" ? `${data.product.name} imepatikana.` : `${data.product.name} found.`, "success");
         return;
       }
-      addToCart(data.product);
-      signalScanSuccess();
-      toast(lang === "sw" ? `${data.product.name} imeongezwa.` : `${data.product.name} added.`, "success");
+      if (addToCart(data.product)) {
+        signalScanSuccess();
+        toast(lang === "sw" ? `${data.product.name} imeongezwa.` : `${data.product.name} added.`, "success");
+      }
     } catch (error: unknown) {
       if (error instanceof Error && error.message === "This barcode was not found.") setUnknownBarcode(normalized);
       else toast(error instanceof Error ? error.message : "Unable to scan barcode", "error");
     }
-  }, [lang, readOnly, toast]);
+  }, [addToCart, lang, readOnly, toast]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -492,7 +517,7 @@ export default function SalesPage() {
   const profit = canViewFinancials ? cart.reduce((sum, i) => sum + i.quantity * (i.unitPrice - (i.product.buyingPrice || 0)), 0) : 0;
 
   async function completeSale() {
-    if (readOnly || !canSell) return;
+    if (!storageScope || readOnly || !canSell) return;
     if (cart.length === 0) return;
     if (paymentMethod === "CREDIT" && !customerPhone.trim()) {
       toast(lang === "sw" ? "Weka namba ya simu ya mteja kwa mauzo ya deni." : "Enter the customer phone for credit sales.", "error");
@@ -527,7 +552,7 @@ export default function SalesPage() {
       const canQueue = typeof navigator !== "undefined" && (!navigator.onLine || message.includes("Unable to reach"));
       if (canQueue) {
         const queued = [
-          ...readPendingSales(),
+          ...readPendingSales(storageScope),
           { id: clientReference, createdAt: new Date().toISOString(), total, attempts: 0, payload },
         ];
         const queuedEvent = {
@@ -537,9 +562,9 @@ export default function SalesPage() {
           total,
           message: lang === "sw" ? "Sale saved locally until internet returns." : "Sale saved locally until internet returns.",
         };
-        const nextHistory = [queuedEvent, ...readSyncHistory()];
-        writePendingSales(queued);
-        writeSyncHistory(nextHistory);
+        const nextHistory = [queuedEvent, ...readSyncHistory(storageScope)];
+        writePendingSales(queued, storageScope);
+        writeSyncHistory(nextHistory, storageScope);
         reportSyncEvent({ status: "QUEUED", total, message: queuedEvent.message, attempts: 0, localId: queued[queued.length - 1].id });
         setPendingSales(queued);
         setSyncHistory(nextHistory.slice(0, 10));
@@ -556,10 +581,19 @@ export default function SalesPage() {
     }
   }
 
+  if (!permissionsLoaded) return <AppShell><p className="p-6 text-sm text-gray-500">{t("common.loading", lang)}</p></AppShell>;
+  if (!canAccessProducts) return <AppShell><p role="alert" className="p-6 text-sm text-red-700">{lang === "sw" ? "Huna ruhusa ya kuona bidhaa au kuuza." : "You do not have permission to view products or sell."}</p></AppShell>;
+
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto pb-24 lg:pb-6">
         {/* Success toast */}
+
+        {legacySales.length > 0 && <section className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p>{lang === "sw" ? "Kifaa hiki kina mauzo ya zamani ya offline yasiyo na utambulisho wa duka. Yahakiki kabla ya kuyahamisha kwenye duka hili." : "This device has older offline sales without a shop ID. Review them before moving them into this shop's queue."}</p>
+          <button onClick={() => setReviewLegacy(!reviewLegacy)} className="mt-2 font-semibold underline">{lang === "sw" ? "Hakiki mauzo" : "Review older sales"} ({legacySales.length})</button>
+          {reviewLegacy && <div className="mt-3 space-y-2">{legacySales.map((sale) => <div key={sale.id} className="rounded-lg bg-white p-2"><p>{formatTZS(sale.total)} · {formatAppDateTime(sale.createdAt)}</p>{sale.payload.items.map((item) => <p key={item.productId} className="text-xs">{products.find((product) => product.id === item.productId)?.name || item.productId} × {item.quantity}</p>)}</div>)}<button onClick={importLegacySales} className="rounded-lg bg-amber-900 px-3 py-2 font-semibold text-white">{lang === "sw" ? "Haya ni ya duka hili — hamisha" : "These belong to this shop — move to queue"}</button></div>}
+        </section>}
 
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("nav.sales", lang)}</h1>
@@ -808,7 +842,7 @@ export default function SalesPage() {
                       )}
                       <p className="text-sm font-medium text-gray-800 leading-tight">{p.name}</p>
                       <p className={`text-xs mt-0.5 ${outOfStock ? "font-semibold text-red-600" : "text-gray-400"}`}>{outOfStock ? (lang === "sw" ? "Haipo stock" : "Out of stock") : `${p.currentStock} ${p.unit} ${t("dashboard.remaining", lang)}`}</p>
-                      {p.onOrderQuantity ? <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] font-semibold text-blue-700"><span className={`rounded-full px-1.5 py-0.5 text-[10px] ${p.onOrderStatus === "ON_THE_WAY" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{p.onOrderStatus === "ON_THE_WAY" ? (lang === "sw" ? "Iko njiani" : "On the way") : (lang === "sw" ? "Imeagizwa" : "Ordered")}</span><span>{p.onOrderQuantity} {p.unit} {lang === "sw" ? "zinakuja" : "incoming"}</span>{p.onOrderInTransitQuantity && p.onOrderOrderedQuantity ? <span className="font-normal text-gray-500">· {p.onOrderInTransitQuantity} {lang === "sw" ? "njiani" : "on the way"}</span> : null}</p> : null}
+                      <IncomingStock product={p} />
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(defaultPriceFor(p))}</p>
                       {saleMode === "WHOLESALE" && p.wholesalePrice == null && (
                         <p className="text-[10px] text-amber-600 mt-0.5">{t("sales.noWholesalePrice", lang)}</p>
@@ -1008,7 +1042,7 @@ export default function SalesPage() {
         )}
       </div>
       {scannerOpen && <BarcodeScanner onDetected={handleBarcode} onClose={() => setScannerOpen(false)} />}
-      {unknownBarcode && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl"><h2 className="font-bold text-gray-900">{lang === "sw" ? "Barcode haijapatikana" : "This barcode was not found."}</h2><p className="mt-2 text-sm text-gray-600">{unknownBarcode}</p><div className="mt-4 flex gap-2"><button onClick={() => { setSearch(unknownBarcode); setUnknownBarcode(null); }} className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold">{lang === "sw" ? "Tafuta" : "Search manually"}</button><button onClick={() => { window.location.href = `/inventory?barcode=${encodeURIComponent(unknownBarcode)}&action=add`; }} className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-semibold text-white">{lang === "sw" ? "Ongeza bidhaa" : "Add new product"}</button></div><button onClick={() => setUnknownBarcode(null)} className="mt-3 w-full text-sm text-gray-500">{t("common.cancel", lang)}</button></div></div>}
+      {unknownBarcode && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl"><h2 className="font-bold text-gray-900">{lang === "sw" ? "Barcode haijapatikana" : "This barcode was not found."}</h2><p className="mt-2 text-sm text-gray-600">{unknownBarcode}</p><div className="mt-4 flex gap-2"><button onClick={() => { setSearch(unknownBarcode); setUnknownBarcode(null); }} className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold">{lang === "sw" ? "Tafuta" : "Search manually"}</button>{canAddProducts && <button onClick={() => { window.location.href = `/inventory?barcode=${encodeURIComponent(unknownBarcode)}&action=add`; }} className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-semibold text-white">{lang === "sw" ? "Ongeza bidhaa" : "Add new product"}</button>}</div><button onClick={() => setUnknownBarcode(null)} className="mt-3 w-full text-sm text-gray-500">{t("common.cancel", lang)}</button></div></div>}
     </AppShell>
   );
 }

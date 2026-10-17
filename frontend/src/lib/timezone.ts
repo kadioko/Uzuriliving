@@ -33,7 +33,11 @@ export function setAppTimeZone(timeZone: string): void {
 }
 
 export function formatAppDateTime(value: string | number | Date, locale = "en-US", options: Intl.DateTimeFormatOptions = {}): string {
-  return new Intl.DateTimeFormat(locale, { ...options, timeZone: getAppTimeZone() }).format(new Date(value));
+  // PostgREST timestamps from TIMESTAMP columns omit Z, but our records are stored in UTC.
+  const timestamp = typeof value === "string" && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value) ? `${value.replace(" ", "T")}Z` : value;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: getAppTimeZone() }).format(date);
 }
 
 export function formatAppDate(value: string | number | Date, locale = "en-US", options: Intl.DateTimeFormatOptions = {}): string {

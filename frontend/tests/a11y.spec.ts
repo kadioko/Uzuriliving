@@ -52,6 +52,10 @@ test("inventory page has no critical accessibility violations with mocked auth",
     });
   });
 
+  await page.route("**/api/stock-counts", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ count: null }) });
+  });
+
   await page.route("**/api/products?*", async (route) => {
     await route.fulfill({
       status: 200,

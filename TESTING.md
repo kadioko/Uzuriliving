@@ -26,7 +26,7 @@ Admin credentials are kept in the private team credential record and are not pub
 1. Open the live frontend.
 2. Sign in with the demo merchant.
 3. Confirm the dashboard shows seeded sales, profit, expenses, debts, low-stock products, and a pending supplier order.
-4. Open Inventory and confirm the 10 demo products appear.
+4. Open Inventory and confirm the demo products appear and low/out of stock filters return the expected counts.
 5. Open Sales and confirm historical sales load.
 6. Open Debts and confirm one open and one partially paid debt.
 7. Open Expenses and confirm transport and utilities entries.
@@ -67,6 +67,21 @@ The API should also be checked after every Edge Function deployment:
 - Demo login returns a session and profile.
 - Authenticated dashboard and product requests return 200.
 - Invalid credentials return 401 without leaking account details.
+
+Run the role, transaction, browser and printer checks when their code changes:
+
+```bash
+cd backend
+npm test
+npm run test:prod-api
+cd ../printer-bridge
+npm test
+cd ../frontend
+npm run test:mocked
+npm run test:a11y
+```
+
+`backend/tests/api.test.js` uses the demo merchant and staff logins for read and invalid-write checks. The database integrity script at `supabase/tests/shop_integrity.sql` creates isolated fixtures inside `BEGIN` / `ROLLBACK`; execute it only in the intended Supabase project after reviewing it. Android native printer changes require `:app:assembleDebug` and installation of a new APK. The [system audit](./docs/SYSTEM_AUDIT_2026-10-17.md) records what was checked and what still needs physical or provider testing.
 
 ## Deployment order
 

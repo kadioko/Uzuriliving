@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import AppShell from "@/components/layout/AppShell";
+import IncomingStock from "@/components/inventory/IncomingStock";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
 import Link from "next/link";
@@ -37,6 +38,7 @@ interface Product {
   minimumStock: number;
   onOrderQuantity?: number;
   onOrderStatus?: "ORDERED" | "ON_THE_WAY" | null;
+  requiresRestock?: boolean;
   onOrderOrderedQuantity?: number;
   onOrderInTransitQuantity?: number;
   isReorderable: boolean;
@@ -90,7 +92,13 @@ export default function InventoryPage() {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("action") || "";
   });
-  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out" | "incoming">("all");
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out" | "incoming" | "restock">(() => {
+    if (typeof window === "undefined") return "all";
+    const params = new URLSearchParams(window.location.search);
+    const filter = params.get("stockFilter");
+    if (filter === "low" || filter === "out" || filter === "incoming" || filter === "restock") return filter;
+    return params.get("lowStock") === "true" ? "restock" : "all";
+  });
   const [supplierFilter, setSupplierFilter] = useState("all");
   const [reorderFilter, setReorderFilter] = useState<"all" | "reorderable" | "stopped">("all");
   const [loading, setLoading] = useState(true);
@@ -111,13 +119,13 @@ export default function InventoryPage() {
   const [error, setError] = useState("");
   const latestLoad = useRef(0);
   const mutationInFlight = useRef(false);
-  const [canViewFinancials, setCanViewFinancials] = useState(true);
-  const [canManageStock, setCanManageStock] = useState(true);
-  const [canViewInventoryAndPrices, setCanViewInventoryAndPrices] = useState(true);
-  const [canViewProductPerformance, setCanViewProductPerformance] = useState(true);
-  const [canAddInventory, setCanAddInventory] = useState(true);
-  const [canManageExpiry, setCanManageExpiry] = useState(true);
-  const [canRefundStock, setCanRefundStock] = useState(true);
+  const [canViewFinancials, setCanViewFinancials] = useState(false);
+  const [canManageStock, setCanManageStock] = useState(false);
+  const [canViewInventoryAndPrices, setCanViewInventoryAndPrices] = useState(false);
+  const [canViewProductPerformance, setCanViewProductPerformance] = useState(false);
+  const [canAddInventory, setCanAddInventory] = useState(false);
+  const [canManageExpiry, setCanManageExpiry] = useState(false);
+  const [canRefundStock, setCanRefundStock] = useState(false);
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const [labelProduct, setLabelProduct] = useState<Product | null>(null);
   const [stockCount, setStockCount] = useState<{ id: string; items: Array<{ id: string; expected: number; counted: number; product: { id: string; name: string; barcode?: string | null; unit: string } }> } | null>(null);
@@ -172,7 +180,7 @@ const [stockCountCode, setStockCountCode] = useState("");
   useEffect(() => {
     api.get<{ user: OwnerSupplierUser }>("/auth/me")
       .then((data) => {
-        const fullAccess = data.user.role === "ADMIN" || (data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER" || data.user.staff.role === "MANAGER"));
+        const fullAccess = data.user.role === "ADMIN" || (data.user.role === "MERCHANT" && (!data.user.staff || data.user.staff.role === "OWNER"));
         const permissions = data.user.staff?.permissions;
         setCanViewFinancials(data.user.role !== "MERCHANT" || !data.user.staff || Boolean(permissions?.canViewReports));
         setCanManageStock(fullAccess || Boolean(permissions?.canManageStock));
@@ -441,9 +449,10 @@ const [stockCountCode, setStockCountCode] = useState("");
     buyingPrice != null && price > 0 ? (((price - buyingPrice) / price) * 100).toFixed(0) : "0";
 
   const visibleProducts = products.filter((product) => {
+    if (stockFilter === "restock" && !(product.requiresRestock ?? (product.isReorderable !== false && product.currentStock <= product.minimumStock))) return false;
     if (stockFilter === "low" && !(product.currentStock > 0 && product.currentStock <= product.minimumStock)) return false;
     if (stockFilter === "out" && product.currentStock !== 0) return false;
-    if (stockFilter === "incoming" && !(product.onOrderQuantity && product.onOrderQuantity > 0)) return false;
+    if (stockFilter === "incoming" && !product.onOrderStatus) return false;
     if (supplierFilter === "unassigned" && product.supplier) return false;
     if (supplierFilter !== "all" && supplierFilter !== "unassigned" && product.supplier?.id !== supplierFilter) return false;
     if (reorderFilter === "reorderable" && product.isReorderable === false) return false;
@@ -463,7 +472,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("inventory.title", lang)}</h1>
-          <div className="flex gap-2">{canViewFinancials && <button onClick={startStockCount} aria-label="Start stock count" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 text-gray-600" title="Stock count"><ScanLine className="h-4 w-4" /></button>}{canAddInventory && canViewFinancials && <button onClick={openAdd} aria-label={t("inventory.addProduct", lang)} className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus className="w-4 h-4" /><span className="hidden sm:inline">{t("inventory.addProduct", lang)}</span></button>}</div>
+          <div className="flex gap-2">{canManageStock && <button onClick={startStockCount} aria-label="Start stock count" className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 text-gray-600" title="Stock count"><ScanLine className="h-4 w-4" /></button>}{canAddInventory && canViewFinancials && <button onClick={openAdd} aria-label={t("inventory.addProduct", lang)} className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"><Plus className="w-4 h-4" /><span className="hidden sm:inline">{t("inventory.addProduct", lang)}</span></button>}</div>
         </div>
 
         {stockCount && <div className="mb-4 rounded-lg border border-brand-200 bg-brand-50 p-3"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-brand-950">{lang === "sw" ? "Uhesabuji wa stock unaendelea" : "Stock count in progress"}</p><p className="text-xs text-brand-700">{stockCount.items.reduce((sum, item) => sum + item.counted, 0)} {lang === "sw" ? "zimescanwa" : "scanned"}</p></div><button onClick={() => setStockCountScannerOpen(true)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white">Scan</button></div><div className="mt-3 flex gap-2"><input value={stockCountCode} onChange={(event) => setStockCountCode(event.target.value)} onKeyDown={(event) => event.key === "Enter" && scanStockCount(stockCountCode)} placeholder="Barcode" className="min-w-0 flex-1 rounded-lg border border-brand-200 px-3 py-2 text-sm" /><button onClick={() => scanStockCount(stockCountCode)} className="rounded-lg border border-brand-300 px-3 text-sm font-semibold text-brand-800">Add</button></div><div className="mt-3 max-h-32 overflow-y-auto text-xs">{stockCount.items.filter((item) => item.counted > 0).map((item) => <div key={item.id} className="flex justify-between border-t border-brand-100 py-1"><span>{item.product.name}</span><span>{item.expected} / {item.counted} ({item.counted - item.expected >= 0 ? "+" : ""}{item.counted - item.expected})</span></div>)}</div><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => finishStockCount(false)} className="rounded-lg border border-brand-300 py-2 text-sm font-semibold text-brand-800">{lang === "sw" ? "Maliza bila kubadili" : "Finish only"}</button><button onClick={() => finishStockCount(true)} className="rounded-lg bg-brand-700 py-2 text-sm font-semibold text-white">{lang === "sw" ? "Tumia tofauti" : "Apply differences"}</button></div></div>}
@@ -507,6 +516,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                 className="w-full appearance-none rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
                 <option value="all">{t("inventory.filterAll", lang)}</option>
+                <option value="restock">{lang === "sw" ? "Zinahitaji kuongezwa stock" : "Needs restocking"}</option>
                 <option value="low">{t("inventory.filterLow", lang)}</option>
                 <option value="out">{t("inventory.filterOut", lang)}</option>
                 <option value="incoming">{t("inventory.filterIncoming", lang)}</option>
@@ -559,7 +569,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
             { label: t("inventory.allProducts", lang), value: products.length },
-            { label: t("inventory.lowStockCount", lang), value: products.filter((p) => p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1)).length, color: "text-amber-600" },
+            { label: t("inventory.lowStockCount", lang), value: products.filter((p) => p.requiresRestock ?? (p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1))).length, color: "text-amber-600" },
             { label: t("inventory.outOfStockCount", lang), value: products.filter((p) => p.currentStock === 0).length, color: "text-red-600" },
           ].map((stat) => (
             <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
@@ -581,7 +591,7 @@ const [stockCountCode, setStockCountCode] = useState("");
         ) : (
           <div className="space-y-2">
             {visibleProducts.map((p) => {
-              const isLow = p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1);
+              const isLow = p.requiresRestock ?? (p.isReorderable !== false && p.currentStock <= p.minimumStock && (p.onOrderQuantity ?? 0) < Math.max(p.minimumStock - p.currentStock, 1));
               const isOut = p.currentStock === 0;
               const expiry = expiryStatus(p, lang);
               const isExpired = expiry?.color === "bg-red-100 text-red-700";
@@ -624,7 +634,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                       {p.supplier && (
                         <p className="text-xs text-gray-400 mt-0.5">{p.supplier.name}</p>
                       )}
-                      {p.onOrderQuantity ? <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-medium text-blue-700"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${p.onOrderStatus === "ON_THE_WAY" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{p.onOrderStatus === "ON_THE_WAY" ? (lang === "sw" ? "Iko njiani" : "On the way") : (lang === "sw" ? "Imeagizwa" : "Ordered")}</span><span>{lang === "sw" ? `${p.onOrderQuantity} ${p.unit} zinakuja` : `${p.onOrderQuantity} ${p.unit} incoming`}</span>{p.onOrderInTransitQuantity && p.onOrderOrderedQuantity ? <span className="text-[11px] font-normal text-gray-500">({p.onOrderInTransitQuantity} {lang === "sw" ? "njiani" : "on the way"}, {p.onOrderOrderedQuantity} {lang === "sw" ? "imeagizwa" : "ordered"})</span> : null}</p> : null}
+                      <IncomingStock product={p} />
                       {p.note ? <p className="mt-1 text-xs text-gray-500">{p.note}</p> : null}
                       <div className="flex items-center gap-4 mt-2 flex-wrap">
                         <div>
@@ -662,7 +672,7 @@ const [stockCountCode, setStockCountCode] = useState("");
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       {canViewProductPerformance && <Link href={`/product-analytics/${p.id}`} aria-label={`${lang === "sw" ? "Angalia utendaji wa" : "View performance for"} ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-brand-50 hover:text-brand-700" title={lang === "sw" ? "Utendaji wa bidhaa" : "Product performance"}><BarChart3 className="h-4 w-4" /></Link>}
-                      {p.barcode && <button onClick={() => setLabelProduct(p)} aria-label={`Print label for ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" title="Print barcode"><Printer className="h-4 w-4" /></button>}
+                      {p.barcode && canManageStock && <button onClick={() => setLabelProduct(p)} aria-label={`Print label for ${p.name}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" title="Print barcode"><Printer className="h-4 w-4" /></button>}
                       {(canAddInventory || canManageStock || canRefundStock) && <button
                         onClick={() => {
                           setAdjustProduct(p);
@@ -759,8 +769,9 @@ const [stockCountCode, setStockCountCode] = useState("");
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("inventory.currentStockLabel", lang)}>
-                <input aria-label={t("inventory.currentStockLabel", lang)} type="number" min="0" step="1" value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: e.target.value })}
+                <input aria-label={t("inventory.currentStockLabel", lang)} type="number" min="0" step="1" disabled={Boolean(editProduct)} value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: e.target.value })}
                   className={INPUT} placeholder="0" />
+                {editProduct && <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Tumia Rekebisha hifadhi kubadilisha stock na kuhifadhi historia." : "Use Adjust Stock to change this quantity and keep its history."}</p>}
               </Field>
               <Field label={t("inventory.minimumStockLabel", lang)}>
                 <input aria-label={t("inventory.minimumStockLabel", lang)} type="number" min="0" step="1" value={form.minimumStock} onChange={(e) => setForm({ ...form, minimumStock: e.target.value })}

@@ -79,7 +79,7 @@ The bridge accepts TSPL, ZPL, EPL, and ESC/POS-oriented payloads. The printer mu
 
 ## Security
 
-The service is loopback-only by default. If it is ever bound to another interface, set `UZURI_BRIDGE_TOKEN` and use a firewall rule that only permits the shop network. The bridge does not accept arbitrary shell commands; it accepts only validated printer-language payloads and sends them to the configured printer.
+The service is loopback-only by default. Binding to another interface is rejected unless `UZURI_BRIDGE_TOKEN` is set; also use a firewall rule that only permits the shop network. Browser requests are restricted to `https://uzuriliving.com` and `https://www.uzuriliving.com`. Set `UZURI_BRIDGE_ALLOWED_ORIGINS` to an explicit comma-separated list if a development or alternate origin is needed. Untrusted origins are rejected even for preflight requests. The bridge does not accept arbitrary shell commands; it accepts only validated printer-language payloads and sends them to the configured printer.
 
 ## Endpoints
 
@@ -92,4 +92,4 @@ The web app should use `POST /print` for TSPL, ZPL, EPL, or ESC/POS output. For 
 
 ## Mobile boundary
 
-The Android Uzuri Living APK can send jobs directly through LAN, paired Bluetooth, or USB OTG without this desktop bridge. iPhone and iPad can use the web app for label preview, PDF, and browser printing, but Safari alone cannot reliably send raw TSPL/ZPL over USB or Bluetooth. Direct iOS printing needs a native companion or a tested network bridge.
+The Android Uzuri Living APK can send jobs directly through LAN, paired Bluetooth, or USB OTG without this desktop bridge. Update the APK to receive native fixes; deploying the website does not update installed Java code. The app asks for confirmation before sending a job and waits for Android's USB permission response before completing it. Test permissions, label alignment and scan quality with the actual printer before rollout. iPhone and iPad can use the web app for label preview, PDF, and browser printing, but Safari alone cannot reliably send raw TSPL/ZPL over USB or Bluetooth. Direct iOS printing needs a native companion or a tested network bridge.

@@ -2,6 +2,8 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs@3.0.2";
 import { jwtVerify, SignJWT } from "npm:jose@6.1.0";
+import { hasStaffPermission, canReadProducts, shopRouteAllowed, redactProduct } from "./permissions.ts";
+import { readAll, csvCell } from "./query.ts";
 
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -19,7 +21,7 @@ const allowedOrigins = new Set([
   "https://www.uzuriliving.com",
 ]);
 
-const json = (body: unknown, status = 200, headers: HeadersInit = {}) => {
+const json = (body: unknown, status = 200, headers: HeadersInit | Record<string, string[]> = {}) => {
   const responseHeaders = new Headers({
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "https://www.uzuriliving.com",
@@ -27,7 +29,7 @@ const json = (body: unknown, status = 200, headers: HeadersInit = {}) => {
     "access-control-allow-headers": "authorization, content-type, x-client-info, apikey",
     "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
     ...headers,
-  });
+  } as HeadersInit);
   const cookieValues = (headers as Record<string, unknown>)["set-cookie"];
   if (Array.isArray(cookieValues)) {
     responseHeaders.delete("set-cookie");
@@ -182,7 +184,7 @@ async function token(payload: Record<string, unknown>, expiry: string) {
   return await new SignJWT(payload).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(expiry).sign(jwtSecret());
 }
 
-async function authenticate(request: Request) {
+async function authenticate(request: Request): Promise<Record<string, any> | null> {
   const authorization = request.headers.get("authorization");
   const bearer = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
   const cookies = readCookies(request);
@@ -190,7 +192,11 @@ async function authenticate(request: Request) {
   if (!accessToken) return null;
   try {
     const { payload } = await jwtVerify(accessToken, jwtSecret());
-    return payload;
+    if (payload.type === "refresh" || typeof payload.userId !== "string") return null;
+    const { data: current, error } = await db.from("users").select("id,role,approvalStatus").eq("id", payload.userId).maybeSingle();
+    if (error) throw error;
+    if (!current || current.approvalStatus !== "APPROVED") return null;
+    return { ...payload, role: current.role };
   } catch {
     return null;
   }
@@ -239,27 +245,19 @@ async function authRegister(client: SupabaseClient, request: Request) {
   if (!validPhone(phone)) return json({ error: "Enter a valid phone number" }, 400);
   if (!validPin(pin)) return json({ error: "PIN must be 4 to 8 digits" }, 400);
   if (!["MERCHANT", "SUPPLIER"].includes(role)) return json({ error: "Invalid role selected" }, 400);
-
-  const { data: existing } = await client.from("users").select("id").eq("phone", phone).maybeSingle();
-  if (existing) return json({ error: "Phone number already registered" }, 409);
-  const userId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const { data: user, error } = await client.from("users").insert({ id: userId, phone, pin: await bcrypt.hash(pin, 10), name, role, approvalStatus: "PENDING", createdAt: now, updatedAt: now }).select("id,phone,name,role,language,approvalStatus,createdAt").single();
-  if (error) throw error;
-
-  if (role === "MERCHANT") {
-    const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
-    const { error: shopError } = await client.from("shops").insert({
-      id: crypto.randomUUID(), userId, name: String(body.shopName ?? `${name}'s Duka`).trim() || `${name}'s Duka`, location: String(body.shopLocation ?? "Dar es Salaam").trim() || "Dar es Salaam", district: String(body.shopDistrict ?? "").trim() || null, category: String(body.shopCategory ?? "general").trim() || "general", trialEndsAt: trialEndsAt.toISOString(), createdAt: now, updatedAt: now,
-    });
-    if (shopError) throw shopError;
-  } else {
-    const { error: supplierError } = await client.from("suppliers").insert({ id: crypto.randomUUID(), userId, name, phone, createdAt: now, updatedAt: now });
-    if (supplierError) throw supplierError;
+  if (!await authLimit(client, `register:${phone}`, 3, 3600)) return json({ error: "Too many registration attempts. Try again later." }, 429);
+  const { data: userId, error } = await client.rpc("register_shop_account", { p_body: { ...body, phone, name, role }, p_pin_hash: await bcrypt.hash(pin, 10) });
+  if (error) {
+    if (error.code === "23505") return json({ error: "This phone number already belongs to another Uzuri Living login" }, 409);
+    throw error;
   }
+  return json({ pendingApproval: true, message: "Registration received. An admin must approve your account before you can sign in.", user: await profile(client, userId) }, 202);
+}
 
-  return json({ pendingApproval: true, message: "Registration received. An admin must approve your account before you can sign in.", user: await profile(client, user.id) }, 202);
+async function authLimit(client: SupabaseClient, key: string, limit = 8, seconds = 900) {
+  const { data, error } = await client.rpc("check_auth_rate_limit", { p_key: key, p_limit: limit, p_window_seconds: seconds });
+  if (error) throw error;
+  return data === true;
 }
 
 async function authLogin(client: SupabaseClient, request: Request) {
@@ -268,6 +266,7 @@ async function authLogin(client: SupabaseClient, request: Request) {
   const pin = String(body.pin ?? "").trim();
   if (!phone || !pin) return json({ error: "Phone and PIN required" }, 400);
   if (!validPhone(phone) || !validPin(pin)) return json({ error: "Invalid phone or PIN" }, 401);
+  if (!await authLimit(client, `login:${phone}`)) return json({ error: "Too many authentication attempts. Try again in 15 minutes." }, 429);
   const { data: user, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,pin").eq("phone", phone).maybeSingle();
   if (error) throw error;
   if (user) {
@@ -276,16 +275,19 @@ async function authLogin(client: SupabaseClient, request: Request) {
     if (user.approvalStatus === "REJECTED") return json({ error: "Your registration was not approved. Contact Uzuri Living support" }, 403);
     const access = await token({ userId: user.id, phone: user.phone, role: user.role }, "1h");
     const refresh = await token({ userId: user.id, role: user.role, type: "refresh" }, "30d");
+    await client.from("auth_rate_limits").delete().eq("key", `login:${phone}`);
     return json({ user: await profile(client, user.id) }, 200, authHeaders(access, refresh));
   }
   const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,pin,role,language,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId,shop:shops!inner(id,userId,user:users!inner(id,phone,role,language,approvalStatus,createdAt))").eq("phone", phone).maybeSingle();
   if (staffError) throw staffError;
-  const accountUser = Array.isArray(staff?.shop?.user) ? staff.shop.user[0] : staff?.shop?.user;
+  const staffShop = Array.isArray(staff?.shop) ? staff.shop[0] : staff?.shop;
+  const accountUser = Array.isArray(staffShop?.user) ? staffShop.user[0] : staffShop?.user;
   if (!staff || !staff.isActive || !staff.pin || !accountUser || !(await bcrypt.compare(pin, staff.pin))) return json({ error: "Invalid phone or PIN" }, 401);
   if (accountUser.approvalStatus === "PENDING") return json({ error: "Your account is waiting for admin approval" }, 403);
   if (accountUser.approvalStatus === "REJECTED") return json({ error: "Your registration was not approved. Contact Uzuri Living support" }, 403);
   const access = await token({ userId: accountUser.id, phone: staff.phone || accountUser.phone, role: accountUser.role, staffId: staff.id, staffRole: staff.role, permissions: staffPermissions(String(staff.role), staff) }, "1h");
   const refresh = await token({ userId: accountUser.id, role: accountUser.role, staffId: staff.id, type: "refresh" }, "30d");
+  await client.from("auth_rate_limits").delete().eq("key", `login:${phone}`);
   return json({ user: await profile(client, accountUser.id, staff.id) }, 200, authHeaders(access, refresh));
 }
 
@@ -297,8 +299,8 @@ async function authRefresh(client: SupabaseClient, request: Request) {
   try {
     const { payload } = await jwtVerify(refreshToken, jwtSecret());
     if (payload.type !== "refresh" || typeof payload.userId !== "string") return json({ error: "Invalid token type" }, 401);
-    const { data: user } = await client.from("users").select("id,phone,role").eq("id", payload.userId).maybeSingle();
-    if (!user) return json({ error: "User not found" }, 401);
+    const { data: user } = await client.from("users").select("id,phone,role,approvalStatus").eq("id", payload.userId).maybeSingle();
+    if (!user || user.approvalStatus !== "APPROVED") return json({ error: "Account access expired" }, 401);
     let staff: Record<string, unknown> | null = null;
     if (typeof payload.staffId === "string") {
       const { data } = await client.from("staff_members").select("id,name,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId,shop:shops!inner(userId)").eq("id", payload.staffId).eq("isActive", true).maybeSingle();
@@ -315,8 +317,21 @@ async function authRefresh(client: SupabaseClient, request: Request) {
 }
 
 async function requestOtp(client: SupabaseClient, request: Request) {
-  const body = await request.json().catch(() => ({})); const phone = normalizePhone(body.phone); if (!validPhone(phone)) return json({ error: "Enter a valid phone number" }, 400); const { data: user } = await client.from("users").select("id").eq("phone", phone).maybeSingle(); if (!user) return json({ message: "If this number is registered, an OTP has been sent." }); const code = String(Math.floor(100000 + Math.random() * 900000)); const { error } = await client.from("otp_challenges").upsert({ id: crypto.randomUUID(), phone, code_hash: await bcrypt.hash(code, 10), expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(), attempts: 0, created_at: new Date().toISOString() }, { onConflict: "phone" }); if (error) throw error;
-  const apiKey = Deno.env.get("AT_API_KEY"); const username = Deno.env.get("AT_USERNAME"); if (apiKey && username) { await fetch("https://api.africastalking.com/version1/messaging", { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded", apiKey }, body: new URLSearchParams({ username, to: phone, message: `Uzuri Living PIN reset code: ${code}. It expires in 10 minutes.` }) }); } else console.log(`[OTP DEV] ${phone}: ${code}`); return json({ message: "If this number is registered, an OTP has been sent." });
+  const body = await request.json().catch(() => ({}));
+  const phone = normalizePhone(body.phone);
+  if (!validPhone(phone)) return json({ error: "Enter a valid phone number" }, 400);
+  const apiKey = Deno.env.get("AT_API_KEY"); const username = Deno.env.get("AT_USERNAME");
+  if (!apiKey || !username) return json({ error: "SMS PIN reset is not configured. Contact Uzuri Living support." }, 503);
+  if (!await authLimit(client, `otp:${phone}`, 3, 600)) return json({ error: "Too many authentication attempts. Try again in 10 minutes." }, 429);
+  const { data: user, error: userError } = await client.from("users").select("id").eq("phone", phone).maybeSingle();
+  if (userError) throw userError;
+  if (!user) return json({ message: "If this number is registered, an OTP has been sent." });
+  const code = String(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000);
+  const { error } = await client.from("otp_challenges").upsert({ id: crypto.randomUUID(), phone, code_hash: await bcrypt.hash(code, 10), expires_at: new Date(Date.now() + 600000).toISOString(), attempts: 0, created_at: new Date().toISOString() }, { onConflict: "phone" });
+  if (error) throw error;
+  const sent = await fetch("https://api.africastalking.com/version1/messaging", { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded", apiKey }, body: new URLSearchParams({ username, to: phone, message: `Uzuri Living PIN reset code: ${code}. It expires in 10 minutes.` }) });
+  if (!sent.ok) return json({ error: "SMS delivery is unavailable. Please try again later or contact support." }, 503);
+  return json({ message: "If this number is registered, an OTP has been sent." });
 }
 
 async function verifyOtpReset(client: SupabaseClient, request: Request) {
@@ -324,7 +339,7 @@ async function verifyOtpReset(client: SupabaseClient, request: Request) {
 }
 
 async function shopForUser(client: SupabaseClient, userId: string) {
-  const { data, error } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,barcodeGenerationEnabled,ownerSupplierManagementEnabled,timeZone").eq("userId", userId).maybeSingle();
+  const { data, error } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,barcodeGenerationEnabled,ownerSupplierManagementEnabled,timeZone").eq("userId", userId).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -334,6 +349,7 @@ async function requireUser(client: SupabaseClient, request: Request) {
   if (!user?.userId || typeof user.userId !== "string") return { response: json({ error: "Unauthorized" }, 401) };
   const shop = await shopForUser(client, user.userId);
   if (!shop) return { response: json({ error: "Shop not found" }, 404) };
+  if (!shop.isActive && !["/subscription/status", "/reports", "/reports/my", "/settings"].includes(routePath(request))) return { response: json({ error: "This shop is suspended. Contact Uzuri Living support." }, 403) };
   if (typeof user.staffId === "string") {
     const { data: staff, error: staffError } = await client.from("staff_members")
       .select("id,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId")
@@ -344,13 +360,8 @@ async function requireUser(client: SupabaseClient, request: Request) {
     user.phone = staff.phone || user.phone;
     user.permissions = staffPermissions(String(staff.role), staff);
   }
+  if (!shopRouteAllowed(user, routePath(request), request.method)) return { response: json({ error: "You do not have permission to access this feature" }, 403) };
   return { user, shop };
-}
-
-function redactProduct(product: Record<string, unknown>, user: Record<string, unknown>) {
-  const permissions = user.permissions as Record<string, unknown> | undefined;
-  const canViewFinancials = user.role === "ADMIN" || !user.staffId || permissions?.canViewReports === true;
-  return canViewFinancials ? product : { ...product, buyingPrice: null };
 }
 
 const BARCODE_TYPES = new Set(["EAN13", "UPC", "CODE128", "INTERNAL"]);
@@ -390,11 +401,11 @@ function validateBarcode(value: unknown, requested?: unknown) {
 }
 
 function canGenerateBarcode(user: Record<string, unknown>) {
-  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER"));
+  return hasStaffPermission(user, "canManageBarcodeSettings");
 }
 
 function canManageLabelProfiles(user: Record<string, unknown>) {
-  return user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER"));
+  return hasStaffPermission(user, "canManageBarcodeSettings");
 }
 
 async function nextInternalBarcode(client: SupabaseClient) {
@@ -414,7 +425,7 @@ function canViewStockMovementHistory(user: Record<string, unknown>) {
 }
 
 async function productList(client: SupabaseClient, request: Request, user: Record<string, unknown>, shop: Record<string, unknown>) {
-  if (!hasStaffPermission(user, "canViewInventoryAndPrices")) return json({ error: "You do not have permission to view inventory and prices" }, 403);
+  if (!canReadProducts(user)) return json({ error: "You do not have permission to view inventory and prices" }, 403);
   const url = new URL(request.url);
   const page = Math.max(Number(url.searchParams.get("page")) || 1, 1);
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 1000);
@@ -423,10 +434,12 @@ async function productList(client: SupabaseClient, request: Request, user: Recor
   let query = client.from("products").select("*,supplier:suppliers(id,name,phone)", { count: "exact" }).eq("shopId", shop.id).eq("isActive", true);
   if (search) {
     // A product name may contain extra spaces, while a customer types a single space.
-    const namePattern = search.split(/\s+/).join("%");
-    query = query.or(`name.ilike.%${namePattern}%,sku.ilike.%${search}%,barcode.ilike.%${search.toUpperCase()}%`);
+    const literal = (value: string) => value.replace(/[\\%_]/g, (character) => `\\${character}`);
+    const namePattern = `%${search.split(/\s+/).map(literal).join("%")}%`;
+    query = query.or(`name.ilike.${JSON.stringify(namePattern)},sku.ilike.${JSON.stringify(`%${literal(search)}%`)},barcode.ilike.${JSON.stringify(`%${literal(search.toUpperCase())}%`)}`);
   }
-  const { data, count, error } = await query.order("name").range((page - 1) * limit, page * limit - 1);
+  query = query.order("name").order("id");
+  const { data, count, error } = lowStock ? { data: await readAll(() => query), count: null, error: null } : await query.range((page - 1) * limit, page * limit - 1);
   if (error) throw error;
   const { data: openOrders, error: openOrdersError } = await client.from("orders").select("status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
   if (openOrdersError) throw openOrdersError;
@@ -439,7 +452,7 @@ async function productList(client: SupabaseClient, request: Request, user: Recor
     else current.ordered += quantity;
     onOrder.set(item.productId, current);
   }
-  const products = (data ?? []).map((product) => { const incoming = onOrder.get(product.id) ?? { total: 0, ordered: 0, onTheWay: 0 }; return { ...product, onOrderQuantity: incoming.total, onOrderStatus: incoming.onTheWay > 0 ? "ON_THE_WAY" : incoming.total > 0 ? "ORDERED" : null, onOrderOrderedQuantity: incoming.ordered, onOrderInTransitQuantity: incoming.onTheWay }; }).filter((product) => {
+  const products = (data ?? []).map((product) => { const incoming = onOrder.get(product.id) ?? { total: 0, ordered: 0, onTheWay: 0 }; const requiresRestock = product.isReorderable !== false && product.currentStock <= product.minimumStock && incoming.total < Math.max(product.minimumStock - product.currentStock, 1); return { ...product, requiresRestock, onOrderQuantity: incoming.total, onOrderStatus: incoming.onTheWay > 0 ? "ON_THE_WAY" : incoming.total > 0 ? "ORDERED" : null, onOrderOrderedQuantity: incoming.ordered, onOrderInTransitQuantity: incoming.onTheWay }; }).filter((product) => {
     if (!lowStock) return true;
     if (product.isReorderable === false || product.currentStock > product.minimumStock) return false;
     const openQuantity = Number(product.onOrderQuantity ?? 0);
@@ -447,12 +460,12 @@ async function productList(client: SupabaseClient, request: Request, user: Recor
     return openQuantity < quantityNeeded;
   }).map((product) => redactProduct(product, user));
   const total = lowStock ? products.length : count ?? 0;
-  return json({ products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  return json({ products: lowStock ? products.slice((page - 1) * limit, page * limit) : products, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
 }
 
 async function productGet(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, id: string) {
-  if (!hasStaffPermission(user, "canViewInventoryAndPrices")) return json({ error: "You do not have permission to view inventory and prices" }, 403);
-  const { data: product, error } = await client.from("products").select("*,supplier:suppliers(id,name,phone),stockMovements:stock_movements(*)").eq("id", id).eq("shopId", shop.id).maybeSingle();
+  if (!canReadProducts(user)) return json({ error: "You do not have permission to view inventory and prices" }, 403);
+  const { data: product, error } = await client.from("products").select("*,supplier:suppliers(id,name,phone)").eq("id", id).eq("shopId", shop.id).maybeSingle();
   if (error) throw error;
   return product ? json({ product: redactProduct(product, user) }) : json({ error: "Product not found" }, 404);
 }
@@ -465,25 +478,22 @@ async function productAnalytics(client: SupabaseClient, user: Record<string, unk
   const from = days == null ? null : new Date(Date.now() - days * 86400000);
   const compareIds = String(url.searchParams.get("compareIds") ?? "").split(",").map((id) => id.trim()).filter(Boolean);
   const productIds = [...new Set([productId, ...compareIds])].slice(0, 5);
-  const [{ data: products, error: productError }, { data: availableProducts, error: availableError }] = await Promise.all([
+  const [{ data: products, error: productError }, availableProducts] = await Promise.all([
     client.from("products").select("id,name,sku,barcode,unit,buyingPrice,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,minimumStock,isReorderable,imageUrl,supplier:suppliers(id,name)").in("id", productIds).eq("shopId", shop.id),
-    client.from("products").select("id,name,sku,barcode,unit,currentStock").eq("shopId", shop.id).eq("isActive", true).order("name").limit(1000),
+    readAll(() => client.from("products").select("id,name,sku,barcode,unit,currentStock").eq("shopId", shop.id).eq("isActive", true).order("name").order("id")),
   ]);
   if (productError) throw productError;
-  if (availableError) throw availableError;
+
   const productRows = products ?? [];
   const primary = productRows.find((product) => product.id === productId);
   if (!primary) return json({ error: "Product not found" }, 404);
+  if (productRows.length !== productIds.length) return json({ error: "One or more comparison products were not found in this shop" }, 400);
   const productMap = new Map(productRows.map((product) => [product.id, product]));
 
-  let salesQuery = client.from("sales").select("id,createdAt,pricingTier").eq("shopId", shop.id).order("createdAt", { ascending: true }).limit(5000);
-  if (from) salesQuery = salesQuery.gte("createdAt", from.toISOString());
-  const { data: sales, error: salesError } = await salesQuery;
-  if (salesError) throw salesError;
-  const saleRows = sales ?? [];
-  const saleIds = saleRows.map((sale) => sale.id);
-  const { data: saleItems, error: saleItemsError } = saleIds.length ? await client.from("sale_items").select("saleId,productId,quantity,unitPrice,buyingPrice,totalPrice").in("saleId", saleIds).in("productId", productIds).limit(10000) : { data: [], error: null };
-  if (saleItemsError) throw saleItemsError;
+  const [saleRows, saleItems] = await Promise.all([
+    readAll(() => { let q=client.from("sales").select("id,createdAt,pricingTier").eq("shopId",shop.id); if(from) q=q.gte("createdAt",from.toISOString()); return q.order("id"); }),
+    readAll(() => { let q=client.from("sale_items").select("id,saleId,productId,quantity,unitPrice,buyingPrice,totalPrice,sale:sales!inner(shopId,createdAt)").eq("sale.shopId",shop.id).in("productId",productIds); if(from) q=q.gte("sale.createdAt",from.toISOString()); return q.order("id"); }),
+  ]);
   const saleMap = new Map(saleRows.map((sale) => [sale.id, sale]));
   const summaries = new Map(productIds.map((id) => [id, { salesCount: 0, unitsSold: 0, revenue: 0, costOfGoods: 0, retailUnits: 0, wholesaleUnits: 0, lastSoldAt: null as string | null }]));
   const trends = new Map<string, Map<string, { date: string; unitsSold: number; revenue: number }>>();
@@ -494,32 +504,34 @@ async function productAnalytics(client: SupabaseClient, user: Record<string, unk
     summary.salesCount += 1; summary.unitsSold += quantity; summary.revenue += revenue; summary.costOfGoods += Number(item.buyingPrice ?? 0) * quantity;
     if (sale.pricingTier === "WHOLESALE") summary.wholesaleUnits += quantity; else summary.retailUnits += quantity;
     if (!summary.lastSoldAt || new Date(sale.createdAt).getTime() > new Date(summary.lastSoldAt).getTime()) summary.lastSoldAt = sale.createdAt;
-    const date = new Date(sale.createdAt).toISOString().slice(0, 10); const productTrend = trends.get(item.productId) ?? new Map(); const trend = productTrend.get(date) ?? { date, unitsSold: 0, revenue: 0 };
+    const date = dateKeyInTimeZone(new Date(sale.createdAt), shopTimeZone(shop)); const productTrend = trends.get(item.productId) ?? new Map(); const trend = productTrend.get(date) ?? { date, unitsSold: 0, revenue: 0 };
     trend.unitsSold += quantity; trend.revenue += revenue; productTrend.set(date, trend); trends.set(item.productId, productTrend);
   }
 
-  const { data: movements, error: movementsError } = await client.from("stock_movements").select("productId,type,quantity,createdAt,note").in("productId", productIds).order("createdAt", { ascending: false }).limit(5000);
-  if (movementsError) throw movementsError;
+  const movements = await readAll(() => client.from("stock_movements").select("id,productId,type,quantity,createdAt,note").in("productId", productIds).order("createdAt", { ascending: false }).order("id"));
   const stock = new Map(productIds.map((id) => [id, { receivedQuantity: 0, returnedQuantity: 0, removedQuantity: 0, adjustmentCount: 0, lastMovementAt: null as string | null }]));
   for (const movement of movements ?? []) { const row = stock.get(movement.productId); if (!row) continue; if (movement.type === "IN") row.receivedQuantity += Number(movement.quantity ?? 0); if (movement.type === "RETURN") row.returnedQuantity += Number(movement.quantity ?? 0); if (movement.type === "OUT") row.removedQuantity += Number(movement.quantity ?? 0); if (movement.type === "ADJUSTMENT") row.adjustmentCount += 1; if (!row.lastMovementAt) row.lastMovementAt = movement.createdAt; }
 
-  const { data: openOrders, error: openOrdersError } = await client.from("orders").select("id,status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
-  if (openOrdersError) throw openOrdersError;
+  const openOrders = await readAll(() => client.from("orders").select("id,status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]).order("id"));
   const orders = new Map(productIds.map((id) => [id, { orderedQuantity: 0, onTheWayQuantity: 0, openOrderCount: 0 }]));
   for (const order of openOrders ?? []) for (const item of order.items ?? []) { const row = orders.get(item.productId); if (!row) continue; row.orderedQuantity += Number(item.quantity ?? 0); if (order.status === "OUT_FOR_DELIVERY") row.onTheWayQuantity += Number(item.quantity ?? 0); row.openOrderCount += 1; }
 
-  const { data: customerItems, error: customerItemsError } = await client.from("customer_order_items").select("productId,quantity,orderId").in("productId", productIds).limit(5000);
-  if (customerItemsError) throw customerItemsError;
-  const customerOrderIds = [...new Set((customerItems ?? []).map((item) => item.orderId))];
-  const { data: customerOrders, error: customerOrdersError } = customerOrderIds.length ? await client.from("customer_orders").select("id,status").eq("shopId", shop.id).in("id", customerOrderIds) : { data: [], error: null };
-  if (customerOrdersError) throw customerOrdersError;
-  const customerOrderMap = new Map((customerOrders ?? []).map((order) => [order.id, order])); const customer = new Map(productIds.map((id) => [id, { orderCount: 0, requestedQuantity: 0, pendingQuantity: 0 }]));
-  for (const item of customerItems ?? []) { const order = customerOrderMap.get(item.orderId); const row = customer.get(item.productId); if (!order || !row) continue; const quantity = Number(item.quantity ?? 0); row.orderCount += 1; row.requestedQuantity += quantity; if (["PENDING", "CONFIRMED"].includes(order.status)) row.pendingQuantity += quantity; }
+  const customerItems = await readAll(() => client.from("customer_order_items").select("id,productId,quantity,orderId,order:customer_orders!inner(shopId,status)").eq("order.shopId", shop.id).in("productId", productIds).order("id"));
+  const customer = new Map(productIds.map((id) => [id, { orderCount: 0, requestedQuantity: 0, pendingQuantity: 0 }]));
+  for (const item of customerItems) { const order = Array.isArray(item.order) ? item.order[0] : item.order; const row = customer.get(item.productId); if (!order || !row) continue; const quantity = Number(item.quantity ?? 0); row.orderCount += 1; row.requestedQuantity += quantity; if (["PENDING", "CONFIRMED"].includes(order.status)) row.pendingQuantity += quantity; }
+
 
   const canViewFinancials = user.role === "ADMIN" || !user.staffId || (user.permissions as Record<string, unknown> | undefined)?.canViewReports === true;
-  const buildSummary = (id: string) => { const product = productMap.get(id)!; const sales = summaries.get(id)!; const stockData = stock.get(id)!; const orderData = orders.get(id)!; const customerData = customer.get(id)!; const grossProfit = sales.revenue - sales.costOfGoods; return { product: canViewFinancials ? product : { ...product, buyingPrice: null }, sales: { ...sales, averageSellingPrice: sales.unitsSold ? Math.round(sales.revenue / sales.unitsSold) : 0, grossProfit: canViewFinancials ? grossProfit : null, grossMargin: canViewFinancials && sales.revenue ? Number(((grossProfit / sales.revenue) * 100).toFixed(1)) : null }, stock: { ...stockData, currentStock: product.currentStock, minimumStock: product.minimumStock }, orders: orderData, customerOrders: customerData, trend: [...(trends.get(id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date)) }; };
+  const canViewOrderQuantities = hasStaffPermission(user, "canManageStock");
+  const buildSummary = (id: string) => { const product = productMap.get(id)!; const sales = summaries.get(id)!; const stockData = stock.get(id)!; const orderData = orders.get(id)!; const customerData = customer.get(id)!; const grossProfit = sales.revenue - sales.costOfGoods; const orderStatus = orderData.onTheWayQuantity > 0 ? "ON_THE_WAY" : orderData.orderedQuantity > 0 ? "ORDERED" : null; return { product: canViewFinancials ? product : { ...product, buyingPrice: null }, sales: { ...sales, costOfGoods: canViewFinancials ? sales.costOfGoods : null, averageSellingPrice: sales.unitsSold ? Math.round(sales.revenue / sales.unitsSold) : 0, grossProfit: canViewFinancials ? grossProfit : null, grossMargin: canViewFinancials && sales.revenue ? Number(((grossProfit / sales.revenue) * 100).toFixed(1)) : null }, stock: { ...stockData, currentStock: product.currentStock, minimumStock: product.minimumStock }, orders: { ...(canViewOrderQuantities ? orderData : { orderedQuantity: null, onTheWayQuantity: null, openOrderCount: null }), status: orderStatus }, customerOrders: customerData, trend: [...(trends.get(id)?.values() ?? [])].sort((a, b) => a.date.localeCompare(b.date)) }; };
   const result = productIds.map(buildSummary);
   return json({ period: days == null ? "all" : String(days), from: from?.toISOString() ?? null, primary: result[0], comparisons: result.slice(1), availableProducts: (availableProducts ?? []).map((product) => ({ id: product.id, name: product.name, sku: product.sku, barcode: product.barcode, unit: product.unit, currentStock: product.currentStock })), recentMovements: (movements ?? []).filter((movement) => movement.productId === productId).slice(0, 20) });
+}
+
+async function supplierBelongsToShop(client: SupabaseClient, supplierId: unknown, shopId: unknown): Promise<boolean> {
+  const { data, error } = await client.from("suppliers").select("id,createdByShopId").eq("id", String(supplierId)).maybeSingle();
+  if (error) throw error;
+  return Boolean(data && (data.createdByShopId == null || data.createdByShopId === shopId));
 }
 
 async function productCreate(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
@@ -531,10 +543,14 @@ async function productCreate(client: SupabaseClient, user: Record<string, unknow
   const buyingPrice = Number(body.buyingPrice);
   const sellingPrice = Number(body.sellingPrice);
   const currentStock = body.currentStock === undefined || body.currentStock === "" ? 0 : Number(body.currentStock);
-  const wholesalePrice = body.wholesalePrice === undefined || body.wholesalePrice === "" ? null : Number(body.wholesalePrice);
+  const wholesalePrice = body.wholesalePrice == null || body.wholesalePrice === "" ? null : Number(body.wholesalePrice);
   if (!name || !Number.isFinite(buyingPrice) || !Number.isFinite(sellingPrice)) return json({ error: "name, buyingPrice, and sellingPrice are required" }, 400);
+  if ([buyingPrice, sellingPrice, Number(body.minimumStock ?? 5), ...(wholesalePrice === null ? [] : [wholesalePrice])].some((value) => !Number.isInteger(value) || value < 0)) return json({ error: "Prices and minimum stock must be whole non-negative numbers" }, 400);
+  if (body.wholesaleMinQty != null && body.wholesaleMinQty !== "" && (!Number.isInteger(Number(body.wholesaleMinQty)) || Number(body.wholesaleMinQty) < 1)) return json({ error: "Wholesale minimum quantity must be a positive whole number" }, 400);
   if (!Number.isInteger(currentStock) || currentStock < 0) return json({ error: "Current stock must be a whole number 0 or greater" }, 400);
   if (wholesalePrice !== null && wholesalePrice > sellingPrice) return json({ error: "Wholesale price cannot be higher than the retail selling price" }, 400);
+  if (body.supplierId && !await supplierBelongsToShop(client, body.supplierId, shop.id)) return json({ error: "Supplier not found for this shop" }, 400);
+  if (body.expiryDate && Number.isNaN(Date.parse(String(body.expiryDate)))) return json({ error: "Enter a valid expiry date" }, 400);
   const requestedBarcodeType = String(body.barcodeType ?? "").toUpperCase();
   if ((body.expiryDate || body.doesNotExpire === true) && !hasStaffPermission(user, "canManageExpiry")) return json({ error: "You do not have permission to manage expiry dates" }, 403);
   if (requestedBarcodeType && !BARCODE_TYPES.has(requestedBarcodeType)) return json({ error: "Invalid barcode type" }, 400);
@@ -553,14 +569,13 @@ async function productCreate(client: SupabaseClient, user: Record<string, unknow
     barcode, barcodeType: barcode ? inferBarcodeType(barcode, body.generateBarcode ? "INTERNAL" : body.barcodeType) : null,
     barcodeGenerated: Boolean(body.generateBarcode), barcodeCreatedAt: barcode ? now : null, barcodeUpdatedAt: barcode ? now : null, createdAt: now, updatedAt: now,
   };
-  const { data, error } = await client.from("products").insert(product).select("*,supplier:suppliers(id,name,phone)").single();
+  const { data: savedId, error } = await client.rpc("create_shop_product", { p_product: product, p_user_id: user.userId, p_staff_id: user.staffId ?? null });
   if (error) {
     if (error.code === "23505" && String(error.message ?? "").toLowerCase().includes("barcode")) return json({ error: "This barcode is already used by another product." }, 409);
     throw error;
   }
-  if (currentStock > 0) {
-    await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: currentStock, note: "Initial stock", productId: data.id, createdById: user.userId, createdByStaffId: user.staffId ?? null });
-  }
+  const { data, error: readError } = await client.from("products").select("*,supplier:suppliers(id,name,phone)").eq("id", savedId).eq("shopId", shop.id).single();
+  if (readError) throw readError;
   return json({ product: redactProduct(data, user) }, 201);
 }
 
@@ -577,7 +592,12 @@ async function productUpdate(client: SupabaseClient, user: Record<string, unknow
   if (!existing) return json({ error: "Product not found" }, 404);
   const nextSellingPrice = body.sellingPrice === undefined ? existing.sellingPrice : Number(body.sellingPrice);
   const nextWholesalePrice = body.wholesalePrice === undefined ? existing.wholesalePrice : body.wholesalePrice === null || body.wholesalePrice === "" ? null : Number(body.wholesalePrice);
+  if ([nextSellingPrice, ...(nextWholesalePrice === null ? [] : [nextWholesalePrice]), ...["buyingPrice", "minimumStock"].filter((key) => body[key] !== undefined).map((key) => Number(body[key]))].some((value) => !Number.isInteger(value) || value < 0)) return json({ error: "Prices and minimum stock must be whole non-negative numbers" }, 400);
+  if (body.name !== undefined && !String(body.name).trim()) return json({ error: "Product name is required" }, 400);
+  if (body.wholesaleMinQty != null && (!Number.isInteger(Number(body.wholesaleMinQty)) || Number(body.wholesaleMinQty) < 1)) return json({ error: "Wholesale minimum quantity must be a positive whole number" }, 400);
   if (nextWholesalePrice !== null && nextWholesalePrice > nextSellingPrice) return json({ error: "Wholesale price cannot be higher than the retail selling price" }, 400);
+  if (body.supplierId && !await supplierBelongsToShop(client, body.supplierId, shop.id)) return json({ error: "Supplier not found for this shop" }, 400);
+  if (body.expiryDate && Number.isNaN(Date.parse(String(body.expiryDate)))) return json({ error: "Enter a valid expiry date" }, 400);
   const requestedBarcodeType = String(body.barcodeType ?? "").toUpperCase();
   if (requestedBarcodeType && !BARCODE_TYPES.has(requestedBarcodeType)) return json({ error: "Invalid barcode type" }, 400);
   if (body.generateBarcode && !canGenerateBarcode(user)) return json({ error: "Only an owner, manager, or admin can generate barcodes" }, 403);
@@ -625,17 +645,9 @@ async function stockAdjust(client: SupabaseClient, user: Record<string, unknown>
   if (["OUT", "ADJUSTMENT"].includes(type) && !hasStaffPermission(user, "canManageStock")) return json({ error: "You do not have permission to adjust stock" }, 403);
   if (type === "RETURN" && !hasStaffPermission(user, "canRefundStock")) return json({ error: "You do not have permission to receive returned stock" }, 403);
   if (type === "RETURN" && !String(body.note ?? "").trim()) return json({ error: "Add a note explaining the returned stock" }, 400);
-  const { data: product, error } = await client.from("products").select("*").eq("id", body.productId).eq("shopId", shop.id).eq("isActive", true).maybeSingle();
+  const { data, error } = await client.rpc("adjust_shop_stock", { p_shop_id: shop.id, p_user_id: user.userId, p_staff_id: user.staffId ?? null, p_body: { ...body, type, quantity } });
   if (error) throw error;
-  if (!product) return json({ error: "Product not found" }, 404);
-  const nextStock = ["IN", "RETURN"].includes(type) ? product.currentStock + quantity : type === "OUT" ? product.currentStock - quantity : quantity;
-  if (nextStock < 0) return json({ error: "Insufficient stock" }, 409);
-  const now = new Date().toISOString();
-  const { data: updated, error: updateError } = await client.from("products").update({ currentStock: nextStock, updatedAt: now }).eq("id", product.id).eq("currentStock", product.currentStock).select("*").single();
-  if (updateError) throw updateError;
-  const { data: movement, error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type, quantity, note: body.note || null, productId: product.id, createdById: user.userId, createdByStaffId: user.staffId ?? null }).select("*").single();
-  if (movementError) throw movementError;
-  return json({ product: updated, movement });
+  return json({ ...data, product: redactProduct(data.product, user) });
 }
 
 async function stockMovements(client: SupabaseClient, shop: Record<string, unknown>, id: string) {
@@ -693,7 +705,26 @@ async function expenses(client: SupabaseClient, shop: Record<string, unknown>, r
     const result = templateId ? await client.from("recurring_expense_templates").update(update).eq("id", templateId).eq("shopId", shop.id).select("*").single() : await client.from("recurring_expense_templates").insert({ id: crypto.randomUUID(), ...update, shopId: shop.id, createdAt: now }).select("*").single(); if (result.error) throw result.error; return json({ template: result.data }, templateId ? 200 : 201);
   }
   const url = new URL(request.url);
-  if (method === "GET") { const category = String(url.searchParams.get("category") ?? "").toUpperCase(); const search = url.searchParams.get("search")?.trim(); const vendor = url.searchParams.get("vendor")?.trim(); const timeZone = shopTimeZone(shop); const from = url.searchParams.get("from"); const to = url.searchParams.get("to"); let query = client.from("expenses").select("*").eq("shopId", shop.id).order("spentAt", { ascending: false }).limit(500); if (expenseCategories.has(category)) query = query.eq("category", category); if (search) query = query.or(`title.ilike.%${search}%,note.ilike.%${search}%`); if (vendor) query = query.ilike("vendor", `%${vendor}%`); if (from) { const parsedFrom = parseDateInTimeZone(from, timeZone); if (!parsedFrom) return json({ error: "The start date must use YYYY-MM-DD" }, 400); query = query.gte("spentAt", parsedFrom.toISOString()); } if (to) { const parsedTo = parseDateInTimeZone(to, timeZone, true); if (!parsedTo) return json({ error: "The end date must use YYYY-MM-DD" }, 400); query = query.lt("spentAt", parsedTo.toISOString()); } const { data, error } = await query; if (error) throw error; const rows = data ?? []; return json({ expenses: rows, summary: { total: rows.reduce((sum, row) => sum + Number(row.amount), 0), count: rows.length }, templates: [] }); }
+  if (method === "GET") {
+    const category = String(url.searchParams.get("category") ?? "").toUpperCase();
+    const search = url.searchParams.get("search")?.trim().replace(/[,%()]/g, " ");
+    const vendor = url.searchParams.get("vendor")?.trim();
+    const from = url.searchParams.get("from"); const to = url.searchParams.get("to"); const timeZone = shopTimeZone(shop);
+    const parsedFrom = from ? parseDateInTimeZone(from, timeZone) : null;
+    const parsedTo = to ? parseDateInTimeZone(to, timeZone, true) : null;
+    if ((from && !parsedFrom) || (to && !parsedTo)) return json({ error: "Dates must use YYYY-MM-DD" }, 400);
+    if (parsedFrom && parsedTo && parsedFrom > parsedTo) return json({ error: "The end date must follow the start date" }, 400);
+    const rows = await readAll(() => {
+      let query = client.from("expenses").select("*").eq("shopId", shop.id).order("spentAt", { ascending: false }).order("id");
+      if (expenseCategories.has(category)) query = query.eq("category", category);
+      if (search) query = query.or(`title.ilike.%${search}%,note.ilike.%${search}%`);
+      if (vendor) query = query.ilike("vendor", `%${vendor}%`);
+      if (parsedFrom) query = query.gte("spentAt", parsedFrom.toISOString());
+      if (parsedTo) query = query.lte("spentAt", parsedTo.toISOString());
+      return query;
+    });
+    return json({ expenses: rows, summary: { total: rows.reduce((sum, row) => sum + Number(row.amount), 0), count: rows.length }, templates: [] });
+  }
   if (method === "DELETE" && id) { const { error } = await client.from("expenses").delete().eq("id", id).eq("shopId", shop.id); if (error) throw error; return json({ message: "Expense deleted" }); }
   const body = await request.json().catch(() => ({})); const amount = Number(body.amount); const title = expenseTitle(body.title); if (!title || !Number.isInteger(amount) || amount <= 0) return json({ error: "Title and a whole positive TZS amount are required" }, 400); const category = expenseCategory(body.category); const paymentMethod = expensePaymentMethod(body.paymentMethod); const now = new Date().toISOString(); const spentAt = body.spentAt || now;
   if (method === "POST") { const duplicate = !body.allowDuplicate && await expenseDuplicate(client, String(shop.id), body, spentAt, shopTimeZone(shop)); if (duplicate) return json({ error: "A very similar expense already exists for this date. Add it anyway only if this is intentional.", duplicateWarning: true, duplicate }, 409); const { data, error } = await client.from("expenses").insert({ id: crypto.randomUUID(), title, amount, category, vendor: body.vendor || null, note: body.note || null, paymentMethod, spentAt, createdAt: now, updatedAt: now, shopId: shop.id }).select("*").single(); if (error) throw error; return json({ expense: data }, 201); }
@@ -704,12 +735,8 @@ const debtPaymentMethods = new Set(["CASH", "MPESA", "TIGOPESA", "AIRTEL_MONEY",
 function debtStatus(amount: number, paid: number) { return paid <= 0 ? "OPEN" : paid >= amount ? "PAID" : "PARTIAL"; }
 async function debts(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
   if (method === "GET") {
-    let query = client.from("debts").select("*,payments:debt_payments(*)").eq("shopId", shop.id).order("createdAt", { ascending: false });
     const status = String(new URL(request.url).searchParams.get("status") ?? "").toUpperCase();
-    if (["OPEN", "PARTIAL", "PAID", "CANCELLED"].includes(status)) query = query.eq("status", status);
-    const { data, error } = await query;
-    if (error) throw error;
-    const rows = data ?? [];
+    const rows = await readAll(() => { let query = client.from("debts").select("*,payments:debt_payments(*)").eq("shopId", shop.id).order("createdAt", { ascending: false }).order("id"); if (["OPEN", "PARTIAL", "PAID", "CANCELLED"].includes(status)) query = query.eq("status", status); return query; });
     const open = rows.filter((row) => ["OPEN", "PARTIAL"].includes(row.status));
     return json({ debts: rows, summary: { openCount: open.length, totalOwed: open.reduce((sum, row) => sum + row.amount - row.amountPaid, 0) } });
   }
@@ -719,30 +746,18 @@ async function debts(client: SupabaseClient, user: Record<string, unknown>, shop
     const amount = Number(body.amount);
     const paymentMethod = String(body.paymentMethod ?? "CASH").toUpperCase();
     if (!Number.isInteger(amount) || amount <= 0 || !debtPaymentMethods.has(paymentMethod)) return json({ error: "Invalid payment" }, 400);
-    const { data: debt, error } = await client.from("debts").select("*").eq("id", debtId).eq("shopId", shop.id).maybeSingle();
+    const { data, error } = await client.rpc("pay_shop_debt", { p_shop_id: shop.id, p_debt_id: debtId, p_user_id: user.userId, p_body: { ...body, amount, paymentMethod } });
     if (error) throw error;
-    if (!debt) return json({ error: "Debt not found" }, 404);
-    if (["PAID", "CANCELLED"].includes(debt.status)) return json({ error: "This debt can no longer receive payments" }, 400);
-    if (amount > debt.amount - debt.amountPaid) return json({ error: "Payment exceeds the remaining balance" }, 400);
-    const now = new Date().toISOString();
-    const nextPaid = debt.amountPaid + amount;
-    const { error: updateError } = await client.from("debts").update({ amountPaid: nextPaid, status: debtStatus(debt.amount, nextPaid), updatedAt: now }).eq("id", debt.id).eq("amountPaid", debt.amountPaid);
-    if (updateError) throw updateError;
-    const { error: paymentError } = await client.from("debt_payments").insert({ id: crypto.randomUUID(), debtId, amount, paymentMethod, paymentRef: body.paymentRef || null, note: body.note || null, recordedBy: user.userId, createdAt: now });
-    if (paymentError) throw paymentError;
-    const { data: updated } = await client.from("debts").select("*,payments:debt_payments(*)").eq("id", debt.id).single();
-    return json({ debt: updated });
+    return json(data);
   }
   const body = await request.json().catch(() => ({}));
   if (method === "POST") {
-    const amount = Number(body.amount); const paid = Number(body.amountPaid || 0);
-    if (!body.customerPhone || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(paid) || paid < 0) return json({ error: "Customer phone and a whole positive TZS amount are required" }, 400);
-    const now = new Date().toISOString();
-    const debtId = crypto.randomUUID();
-    const { data, error } = await client.from("debts").insert({ id: debtId, customerName: body.customerName || null, customerPhone: normalizePhone(body.customerPhone), amount, amountPaid: Math.min(amount, paid), status: debtStatus(amount, Math.min(amount, paid)), dueDate: body.dueDate || null, note: body.note || null, shopId: shop.id, createdAt: now, updatedAt: now }).select("*").single();
+    const amount = Number(body.amount); const paid = Number(body.amountPaid ?? 0);
+    const phone = normalizePhone(body.customerPhone);
+    if (!validPhone(phone) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(paid) || paid < 0 || paid > amount) return json({ error: "A valid customer phone and opening balance are required" }, 400);
+    const { data, error } = await client.rpc("create_shop_debt", { p_shop_id: shop.id, p_user_id: user.userId, p_body: { ...body, amount, amountPaid: paid, customerPhone: phone } });
     if (error) throw error;
-    if (paid > 0) await client.from("debt_payments").insert({ id: crypto.randomUUID(), debtId, amount: Math.min(amount, paid), note: "Opening payment", recordedBy: user.userId, createdAt: now });
-    return json({ debt: data }, 201);
+    return json(data, 201);
   }
   if (!id) return json({ error: "Debt not found" }, 404);
   const { data: existing, error: existingError } = await client.from("debts").select("*").eq("id", id).eq("shopId", shop.id).maybeSingle();
@@ -750,15 +765,18 @@ async function debts(client: SupabaseClient, user: Record<string, unknown>, shop
   if (!existing) return json({ error: "Debt not found" }, 404);
   const amount = body.amount == null ? existing.amount : Number(body.amount);
   if (!Number.isInteger(amount) || amount < existing.amountPaid || amount <= 0) return json({ error: "Invalid debt amount" }, 400);
-  const { data, error } = await client.from("debts").update({ customerName: body.customerName === undefined ? existing.customerName : body.customerName || null, customerPhone: body.customerPhone === undefined ? existing.customerPhone : normalizePhone(body.customerPhone), amount, status: body.status || debtStatus(amount, existing.amountPaid), dueDate: body.dueDate === undefined ? existing.dueDate : body.dueDate || null, note: body.note === undefined ? existing.note : body.note || null, updatedAt: new Date().toISOString() }).eq("id", id).eq("shopId", shop.id).select("*,payments:debt_payments(*)").single();
+  const { data, error } = await client.from("debts").update({ customerName: body.customerName === undefined ? existing.customerName : body.customerName || null, customerPhone: body.customerPhone === undefined ? existing.customerPhone : normalizePhone(body.customerPhone), amount, status: body.status === "CANCELLED" ? "CANCELLED" : debtStatus(amount, existing.amountPaid), dueDate: body.dueDate === undefined ? existing.dueDate : body.dueDate || null, note: body.note === undefined ? existing.note : body.note || null, updatedAt: new Date().toISOString() }).eq("id", id).eq("shopId", shop.id).select("*,payments:debt_payments(*)").single();
   if (error) throw error;
   return json({ debt: data });
 }
 
 const salePaymentMethods = new Set(["CASH", "MPESA", "TIGOPESA", "AIRTEL_MONEY", "HALOPESA", "BANK", "CREDIT"]);
+function redactSale(sale: Record<string, unknown>, user: Record<string, unknown>) {
+  if (hasStaffPermission(user, "canViewReports")) return sale;
+  return { ...sale, profit: undefined, items: (sale.items as Record<string, unknown>[] | undefined)?.map((item) => ({ ...item, buyingPrice: undefined })) };
+}
 async function sales(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
-  const permissions = user.permissions as Record<string, unknown> | undefined;
-  const canSell = user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER" || permissions?.canSell === true));
+  const canSell = hasStaffPermission(user, "canSell");
   if (!canSell) return json({ error: "You do not have permission to access sales" }, 403);
   if (method === "GET" && id === "summary") {
     const period = new URL(request.url).searchParams.get("period") ?? "today";
@@ -770,12 +788,12 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
     if (error) throw error;
     const rows = data ?? []; const byPayment: Record<string, number> = {};
     for (const row of rows) byPayment[row.paymentMethod] = (byPayment[row.paymentMethod] ?? 0) + row.totalAmount;
-    return json({ period, totalSales: rows.reduce((sum, row) => sum + row.totalAmount, 0), totalProfit: user.role === "ADMIN" ? rows.reduce((sum, row) => sum + row.profit, 0) : null, salesCount: rows.length, byPaymentMethod: byPayment, recentSales: rows.slice(0, 5) });
+    return json({ period, totalSales: rows.reduce((sum, row) => sum + row.totalAmount, 0), totalProfit: hasStaffPermission(user, "canViewReports") ? rows.reduce((sum, row) => sum + row.profit, 0) : null, salesCount: rows.length, byPaymentMethod: byPayment, recentSales: rows.slice(0, 5).map((sale) => redactSale(sale, user)) });
   }
   if (method === "GET" && id) {
     const { data, error } = await client.from("sales").select("*,items:sale_items(*,product:products(id,name,unit,sellingPrice))").eq("id", id).eq("shopId", shop.id).maybeSingle();
     if (error) throw error;
-    return data ? json({ sale: user.role === "ADMIN" ? data : { ...data, profit: undefined, items: data.items?.map((item: Record<string, unknown>) => ({ ...item, buyingPrice: undefined })) } }) : json({ error: "Sale not found" }, 404);
+    return data ? json({ sale: redactSale(data, user) }) : json({ error: "Sale not found" }, 404);
   }
   if (method === "GET") {
     const url = new URL(request.url); const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 100); const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
@@ -792,7 +810,7 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
     if (paymentMethod) query = query.eq("paymentMethod", paymentMethod);
     if (pricingTier) query = query.eq("pricingTier", pricingTier);
     if (channel) query = query.eq("channel", channel);
-    const parseLocalDate = (value: string | null, endOfDay = false) => {
+    const parseLocalDate = (value: string | null | undefined, endOfDay = false) => {
       if (!value) return null;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
       const parsed = parseDateInTimeZone(value, shopTimeZone(shop), endOfDay);
@@ -832,38 +850,19 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
     const { data, count, error } = await query.order("createdAt", { ascending: false }).range(offset, offset + limit - 1);
     if (error) throw error;
     const total = count ?? 0;
-    return json({ sales: (data ?? []).map((sale) => user.role === "ADMIN" ? sale : { ...sale, profit: undefined, items: sale.items?.map((item: Record<string, unknown>) => ({ ...item, buyingPrice: undefined })) }), total, pagination: { limit, offset, total, totalPages: Math.ceil(total / limit) } });
+    return json({ sales: (data ?? []).map((sale) => redactSale(sale, user)), total, pagination: { limit, offset, total, totalPages: Math.ceil(total / limit) } });
   }
   if (method !== "POST") return json({ error: "Method not allowed" }, 405);
-  const body = await request.json().catch(() => ({})); const items = Array.isArray(body.items) ? body.items : []; const paymentMethod = String(body.paymentMethod ?? "CASH").toUpperCase();
-  if (!items.length) return json({ error: "Sale must have at least one item" }, 400);
+  const body = await request.json().catch(() => ({}));
+  const paymentMethod = String(body.paymentMethod ?? "CASH").toUpperCase();
   if (!salePaymentMethods.has(paymentMethod)) return json({ error: "Invalid payment method" }, 400);
-  if (paymentMethod === "CREDIT" && !body.customerPhone) return json({ error: "Customer phone is required for credit sales" }, 400);
-  const productIds = items.map((item: Record<string, unknown>) => item.productId);
-  if (new Set(productIds).size !== productIds.length) return json({ error: "Each product can appear only once in a sale" }, 400);
-  const { data: products, error: productError } = await client.from("products").select("*").in("id", productIds).eq("shopId", shop.id).eq("isActive", true);
-  if (productError) throw productError;
-  if ((products ?? []).length !== productIds.length) return json({ error: "One or more products not found in this shop" }, 400);
-  const productMap = new Map((products ?? []).map((product) => [product.id, product])); const pricingTier = String(body.saleMode ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL";
-  let totalAmount = 0; let profit = 0; const rows = [];
-  for (const item of items) {
-    const product = productMap.get(item.productId); const quantity = Number(item.quantity);
-    if (!Number.isInteger(quantity) || quantity <= 0) return json({ error: "Sale quantities must be positive whole numbers" }, 400);
-    if (product.currentStock < quantity) return json({ error: `Insufficient stock for ${product.name}. Available: ${product.currentStock} ${product.unit}` }, 400);
-    const unitPrice = item.unitPrice == null || item.unitPrice === "" ? pricingTier === "WHOLESALE" && product.wholesalePrice != null ? product.wholesalePrice : product.sellingPrice : Number(item.unitPrice);
-    const totalPrice = unitPrice * quantity; totalAmount += totalPrice; profit += (unitPrice - product.buyingPrice) * quantity;
-    rows.push({ id: crypto.randomUUID(), quantity, unitPrice, buyingPrice: product.buyingPrice, totalPrice, productId: product.id });
-  }
-  const clientReference = String(body.clientReference ?? "").trim() || null;
-  if (clientReference) { const { data: reused } = await client.from("sales").select("*,items:sale_items(*,product:products(id,name,unit))").eq("shopId", shop.id).eq("clientReference", clientReference).maybeSingle(); if (reused) return json({ sale: reused, reused: true }); }
-  const saleId = crypto.randomUUID(); const now = new Date().toISOString();
-  const { data: sale, error: saleError } = await client.from("sales").insert({ id: saleId, totalAmount, profit, paymentMethod, paymentRef: body.paymentRef || null, channel: String(body.channel ?? "POS").toUpperCase() === "ONLINE" ? "ONLINE" : "POS", pricingTier, customerPhone: body.customerPhone || null, note: body.note || null, clientReference, shopId: shop.id, createdAt: now }).select("*").single();
-  if (saleError) throw saleError;
-  const { error: itemError } = await client.from("sale_items").insert(rows.map((row) => ({ ...row, saleId })));
-  if (itemError) throw itemError;
-  for (const item of items) { const product = productMap.get(item.productId); const quantity = Number(item.quantity); const { error } = await client.from("products").update({ currentStock: product.currentStock - quantity, updatedAt: now }).eq("id", product.id).eq("currentStock", product.currentStock); if (error) throw error; await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "OUT", quantity, note: `Sale #${saleId.slice(-6)}`, productId: product.id }); }
-  if (paymentMethod === "CREDIT") await client.from("debts").insert({ id: crypto.randomUUID(), customerName: body.customerName || null, customerPhone: normalizePhone(body.customerPhone), amount: totalAmount, amountPaid: 0, status: "OPEN", note: body.note || `Credit sale #${saleId.slice(-6)}`, saleId, shopId: shop.id, createdAt: now, updatedAt: now });
-  return json({ sale: { ...sale, items: rows } }, 201);
+  if (paymentMethod === "CREDIT" && !validPhone(normalizePhone(body.customerPhone))) return json({ error: "A valid customer phone is required for credit sales" }, 400);
+  const { data, error } = await client.rpc("record_shop_sale", {
+    p_shop_id: shop.id, p_user_id: user.userId, p_staff_id: user.staffId ?? null,
+    p_body: { ...body, paymentMethod, customerPhone: body.customerPhone ? normalizePhone(body.customerPhone) : null },
+  });
+  if (error) throw error;
+  return json({ ...data, sale: redactSale(data.sale, user) }, data.reused ? 200 : 201);
 }
 
 function staffPermissions(role: string, overrides?: Record<string, unknown>) {
@@ -876,12 +875,6 @@ function staffPermissions(role: string, overrides?: Record<string, unknown>) {
   return Object.fromEntries(permissionKeys.map((key) => [key, typeof overrides?.[key] === "boolean" ? overrides[key] : defaults[key]]));
 }
 
-function hasStaffPermission(user: Record<string, unknown>, permission: string) {
-  if (user.role === "ADMIN" || (user.role === "MERCHANT" && (!user.staffId || user.staffRole === "OWNER" || user.staffRole === "MANAGER"))) return true;
-  const permissions = user.permissions as Record<string, unknown> | undefined;
-  return permissions?.[permission] === true || (!["canManageStock", "canManageBarcodeSettings", "canViewProductPerformance"].includes(permission) && permissions?.canManageStock === true);
-}
-
 async function staff(client: SupabaseClient, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
   if (method === "GET") { const { data, error } = await client.from("staff_members").select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").eq("shopId", shop.id).order("isActive", { ascending: false }).order("name"); if (error) throw error; return json({ staff: data ?? [] }); }
   const body = await request.json().catch(() => ({})); const now = new Date().toISOString();
@@ -889,6 +882,8 @@ async function staff(client: SupabaseClient, shop: Record<string, unknown>, requ
   if (!id) return json({ error: "Staff member not found" }, 404);
   const { data: existingStaff } = await client.from("staff_members").select("phone").eq("id", id).eq("shopId", shop.id).maybeSingle();
   if (!existingStaff) return json({ error: "Staff member not found" }, 404);
+  if (body.phone !== undefined && !validPhone(normalizePhone(body.phone))) return json({ error: "Enter a valid staff phone number" }, 400);
+  if (body.role !== undefined && !["OWNER", "MANAGER", "CASHIER", "STOCK_CLERK"].includes(String(body.role))) return json({ error: "Invalid staff role" }, 400);
   const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "role", "phone", "canSell", "canManageStock", "canViewInventoryAndPrices", "canViewProductPerformance", "canManageBarcodeSettings", "canAddInventory", "canManageExpiry", "canRefundStock", "canManageStaff", "canViewReports", "canRecordExpenses", "isActive"]) if (body[key] !== undefined) update[key] = key === "phone" ? normalizePhone(body[key]) || null : body[key]; if (body.pin !== undefined) { const nextPhone = String(update.phone ?? existingStaff.phone ?? "").trim(); const nextPin = String(body.pin ?? "").trim(); if (!nextPhone || !validPhone(nextPhone) || !validPin(nextPin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); update.pin = await bcrypt.hash(nextPin, 10); }
   const { data, error } = await client.from("staff_members").update(update).eq("id", id).eq("shopId", shop.id).select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data });
 }
@@ -977,7 +972,13 @@ async function adminSubscription(client: SupabaseClient, user: Record<string, un
   if (request.method === "DELETE" && !action) { const { data, error } = await client.from("shops").update({ plan: "FREE_TRIAL", trialEndsAt: now.toISOString(), subscriptionEndsAt: null, isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data, message: "Paid subscription removed" }); }
   if (request.method === "POST" && action === "extend-trial") { const days = Math.max(1, Math.min(90, Number(body.days) || 7)); const base = current.trialEndsAt && new Date(current.trialEndsAt) > now ? new Date(current.trialEndsAt) : now; const { data, error } = await client.from("shops").update({ plan: "FREE_TRIAL", trialEndsAt: addDays(base, days).toISOString(), isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt").single(); if (error) throw error; return json({ shop: data, message: `Trial extended by ${days} days` }); }
   if (request.method === "POST" && action === "extend-subscription") { const days = Math.max(1, Math.min(730, Number(body.days) || 30)); const plan = body.plan ? String(body.plan).toUpperCase() : (current.plan === "PRO" ? "PRO" : "BASIC"); if (!["BASIC", "PRO"].includes(plan)) return json({ error: "Plan must be BASIC or PRO" }, 400); const base = current.subscriptionEndsAt && new Date(current.subscriptionEndsAt) > now ? new Date(current.subscriptionEndsAt) : now; const { data, error } = await client.from("shops").update({ plan, subscriptionEndsAt: addDays(base, days).toISOString(), isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (error) throw error; return json({ shop: data, message: `Subscription extended by ${days} days` }); }
-  if (request.method === "POST" && action === "payments") { const plan = String(body.plan ?? "BASIC").toUpperCase(); const months = Math.max(1, Math.min(24, Number(body.months) || 1)); const amount = Number(body.amount); const reference = String(body.reference ?? "").trim(); const normalizedReference = normalizePaymentReference(reference); if (!["BASIC", "PRO"].includes(plan)) return json({ error: "Plan must be BASIC or PRO" }, 400); if (!Number.isInteger(amount) || amount <= 0) return json({ error: "Payment amount must be a whole positive TZS amount" }, 400); if (!normalizedReference) return json({ error: "Payment reference is required" }, 400); const { data: duplicate } = await client.from("subscription_payments").select("*").eq("normalizedReference", normalizedReference).maybeSingle(); if (duplicate) { if (duplicate.shopId !== shopId) return json({ error: "This payment reference is already linked to another shop" }, 409); return json({ payment: duplicate, shop: current, reused: true }); } const base = current.subscriptionEndsAt && new Date(current.subscriptionEndsAt) > now ? new Date(current.subscriptionEndsAt) : now; const ends = addMonths(base, months).toISOString(); const payment = { id: crypto.randomUUID(), shopId, plan, amount, months, method: String(body.method ?? "MANUAL").toUpperCase(), reference, normalizedReference, status: "CONFIRMED", reviewedBy: user.userId, reviewedAt: now.toISOString(), note: String(body.note ?? "").trim() || null, sourceReportId: body.sourceReportId || null, paidAt: now.toISOString(), createdAt: now.toISOString() }; const { data: saved, error: paymentError } = await client.from("subscription_payments").insert(payment).select("*").single(); if (paymentError) throw paymentError; const { data: shop, error: shopError } = await client.from("shops").update({ plan, subscriptionEndsAt: ends, isActive: true, updatedAt: now.toISOString() }).eq("id", shopId).select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive").single(); if (shopError) throw shopError; return json({ payment: saved, shop, subscriptionEndsAt: ends }, 201); }
+  if (request.method === "POST" && action === "payments") {
+    const plan = String(body.plan ?? "BASIC").toUpperCase(); const months = Number(body.months ?? 1); const amount = Number(body.amount);
+    if (!["BASIC", "PRO"].includes(plan) || !Number.isInteger(months) || months < 1 || months > 24 || !Number.isInteger(amount) || amount <= 0 || !normalizePaymentReference(body.reference)) return json({ error: "Enter a valid plan, payment amount, reference, and 1 to 24 whole months" }, 400);
+    const { data, error } = await client.rpc("apply_subscription_payment", { p_shop_id: shopId, p_admin_id: user.userId, p_body: { ...body, plan, months, amount } });
+    if (error) throw error;
+    return json(data, data.reused ? 200 : 201);
+  }
   return json({ error: "Subscription admin route not found" }, 404);
 }
 
@@ -992,19 +993,24 @@ function tzDayStart(value = new Date(), timeZone = DEFAULT_TIME_ZONE) { return s
 
 async function dashboardAnalytics(client: SupabaseClient, shop: Record<string, unknown>, request: Request) {
   const period = new URL(request.url).searchParams.get("period") ?? "today"; const now = new Date(); const timeZone = shopTimeZone(shop); const today = tzDayStart(now, timeZone); const from = period === "all" ? null : period === "month" ? startOfMonthInTimeZone(now, timeZone) : period === "week" ? addCalendarDaysInTimeZone(today, -6, timeZone) : today;
-  const [{ data: sales }, { data: expenses }, { data: products }, { data: pendingOrders }] = await Promise.all([
-    (() => { let query = client.from("sales").select("id,totalAmount,profit,paymentMethod,createdAt").eq("shopId", shop.id); if (from) query = query.gte("createdAt", from.toISOString()); return query.order("createdAt", { ascending: false }); })(),
-    (() => { let query = client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id); if (from) query = query.gte("spentAt", from.toISOString()); return query.order("spentAt", { ascending: false }); })(),
-    client.from("products").select("id,name,currentStock,minimumStock,unit").eq("shopId", shop.id).eq("isActive", true).order("name"),
-    client.from("orders").select("id").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]),
+  const [saleRows, expenseRows, productRows, pendingOrders, allSales, allExpenses] = await Promise.all([
+    readAll(() => { let q = client.from("sales").select("id,totalAmount,profit,paymentMethod,createdAt").eq("shopId", shop.id); if (from) q = q.gte("createdAt", from.toISOString()); return q.order("createdAt", { ascending: false }).order("id"); }),
+    readAll(() => { let q = client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id); if (from) q = q.gte("spentAt", from.toISOString()); return q.order("spentAt", { ascending: false }).order("id"); }),
+    readAll(() => client.from("products").select("id,name,currentStock,minimumStock,unit,isReorderable").eq("shopId", shop.id).eq("isActive", true).order("id")),
+    readAll(() => client.from("orders").select("id").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]).order("id")),
+    readAll(() => client.from("sales").select("id,totalAmount,profit,createdAt").eq("shopId", shop.id).order("createdAt").order("id")),
+    readAll(() => client.from("expenses").select("id,amount").eq("shopId", shop.id).order("id")),
   ]);
-  const saleRows = sales ?? []; const expenseRows = expenses ?? []; const productRows = products ?? []; const low = productRows.filter((p) => p.currentStock <= p.minimumStock); const sum = (rows: Array<Record<string, number>>, key: string) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0); const totalSales = sum(saleRows, "totalAmount"); const totalProfit = sum(saleRows, "profit"); const totalExpenses = sum(expenseRows, "amount");
-  const allSalesQuery = await client.from("sales").select("id,totalAmount,profit,createdAt").eq("shopId", shop.id).order("createdAt", { ascending: true }); const allSales = allSalesQuery.data ?? []; const allExpensesQuery = await client.from("expenses").select("amount").eq("shopId", shop.id); const allExpenses = allExpensesQuery.data ?? [];
+  const alertsResponse = await productList(client, new Request(new URL("/products?lowStock=true&limit=1000", request.url)), { role: "MERCHANT" }, shop);
+  const lowStockData = await alertsResponse.json();
+  const low = lowStockData.products;
+  const sum = (rows: Array<Record<string, number>>, key: string) => rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
+  const totalSales = sum(saleRows, "totalAmount"); const totalProfit = sum(saleRows, "profit"); const totalExpenses = sum(expenseRows, "amount");
   const dailyMap = new Map<string, { date: string; sales: number; profit: number }>(); const todayKey = dateKeyInTimeZone(today, timeZone); for (let i = 6; i >= 0; i--) { const key = shiftDateKey(todayKey, -i); dailyMap.set(key, { date: key, sales: 0, profit: 0 }); } for (const sale of allSales) { const key = dateKeyInTimeZone(new Date(sale.createdAt), timeZone); const row = dailyMap.get(key); if (row) { row.sales += sale.totalAmount; row.profit += sale.profit; } }
   const paymentMap = new Map<string, { paymentMethod: string; totalAmount: number; salesCount: number }>(); for (const sale of saleRows) { const row = paymentMap.get(sale.paymentMethod) ?? { paymentMethod: sale.paymentMethod, totalAmount: 0, salesCount: 0 }; row.totalAmount += sale.totalAmount; row.salesCount += 1; paymentMap.set(sale.paymentMethod, row); }
   const historyMap = new Map<string, { period: string; sales: number; profit: number; salesCount: number }>(); for (const sale of allSales) { const parts = timeZoneParts(new Date(sale.createdAt), timeZone); const key = `${parts.year}-${parts.month}`; const row = historyMap.get(key) ?? { period: key, sales: 0, profit: 0, salesCount: 0 }; row.sales += sale.totalAmount; row.profit += sale.profit; row.salesCount += 1; historyMap.set(key, row); }
-  const saleIds = allSales.map((sale) => sale.id); const { data: itemRows } = saleIds.length ? await client.from("sale_items").select("quantity,totalPrice,productId").in("saleId", saleIds) : { data: [] }; const topMap = new Map<string, { totalQuantity: number; totalRevenue: number }>(); for (const item of itemRows ?? []) { const row = topMap.get(item.productId) ?? { totalQuantity: 0, totalRevenue: 0 }; row.totalQuantity += item.quantity; row.totalRevenue += item.totalPrice; topMap.set(item.productId, row); } const productMap = new Map(productRows.map((product) => [product.id, product])); const topProducts = [...topMap.entries()].sort((a, b) => b[1].totalRevenue - a[1].totalRevenue).slice(0, 5).map(([productId, values]) => ({ product: productMap.get(productId) ?? { id: productId, name: "Unknown product", unit: "pcs" }, ...values }));
-  return json({ period, features: {}, summary: { totalSales, totalProfit, totalExpenses, netProfit: totalProfit - totalExpenses, expenseCount: expenseRows.length, salesCount: saleRows.length, pendingOrders: pendingOrders?.length ?? 0, totalProducts: productRows.length, lowStockCount: low.length, outOfStockCount: productRows.filter((p) => p.currentStock === 0).length }, allTimeSummary: { totalSales: sum(allSales, "totalAmount"), totalProfit: sum(allSales, "profit"), totalExpenses: sum(allExpenses, "amount"), netProfit: sum(allSales, "profit") - sum(allExpenses, "amount"), expenseCount: allExpenses.length, salesCount: allSales.length, firstSaleAt: allSales[0]?.createdAt ?? null }, lowStockAlerts: low, recentSales: saleRows.slice(0, 10), dailyChart: [...dailyMap.values()], paymentBreakdown: [...paymentMap.values()].sort((a, b) => b.totalAmount - a.totalAmount), historyTimeline: [...historyMap.values()], topProducts });
+  const itemRows = await readAll(() => client.from("sale_items").select("id,quantity,totalPrice,productId,sale:sales!inner(shopId)").eq("sale.shopId", shop.id).order("id")); const topMap = new Map<string, { totalQuantity: number; totalRevenue: number }>(); for (const item of itemRows ?? []) { const row = topMap.get(item.productId) ?? { totalQuantity: 0, totalRevenue: 0 }; row.totalQuantity += item.quantity; row.totalRevenue += item.totalPrice; topMap.set(item.productId, row); } const productMap = new Map(productRows.map((product) => [product.id, product])); const topProducts = [...topMap.entries()].sort((a, b) => b[1].totalRevenue - a[1].totalRevenue).slice(0, 5).map(([productId, values]) => ({ product: productMap.get(productId) ?? { id: productId, name: "Unknown product", unit: "pcs" }, ...values }));
+  return json({ period, features: {}, summary: { totalSales, totalProfit, totalExpenses, netProfit: totalProfit - totalExpenses, expenseCount: expenseRows.length, salesCount: saleRows.length, pendingOrders: pendingOrders?.length ?? 0, totalProducts: productRows.length, lowStockCount: lowStockData.pagination.total, outOfStockCount: productRows.filter((p) => p.currentStock === 0).length }, allTimeSummary: { totalSales: sum(allSales, "totalAmount"), totalProfit: sum(allSales, "profit"), totalExpenses: sum(allExpenses, "amount"), netProfit: sum(allSales, "profit") - sum(allExpenses, "amount"), expenseCount: allExpenses.length, salesCount: allSales.length, firstSaleAt: allSales[0]?.createdAt ?? null }, lowStockAlerts: low, recentSales: saleRows.slice(0, 10), dailyChart: [...dailyMap.values()], paymentBreakdown: [...paymentMap.values()].sort((a, b) => b.totalAmount - a.totalAmount), historyTimeline: [...historyMap.values()], topProducts });
 }
 
 async function purchaseAnalytics(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
@@ -1032,7 +1038,7 @@ async function purchaseAnalytics(client: SupabaseClient, user: Record<string, un
     const customFrom = url.searchParams.get("from");
     const customTo = url.searchParams.get("to");
     if (!customFrom || !customTo) return json({ error: "from and to are required for a custom date range" }, 400);
-    from = parseDateInTimeZone(customFrom, timeZone);
+    from = parseDateInTimeZone(customFrom, timeZone) ?? null;
     const parsedTo = parseDateInTimeZone(customTo, timeZone);
     if (!from || !parsedTo) return json({ error: "Enter a valid purchase date range" }, 400);
     to = addCalendarDaysInTimeZone(parsedTo, 1, timeZone);
@@ -1041,7 +1047,7 @@ async function purchaseAnalytics(client: SupabaseClient, user: Record<string, un
 
   const supplierId = url.searchParams.get("supplierId")?.trim() || "";
   const search = url.searchParams.get("search")?.trim().toLowerCase() || "";
-  const deliveredOrders: Record<string, unknown>[] = [];
+  const deliveredOrders: any[] = [];
   const pageSize = 500;
   for (let offset = 0; ; offset += pageSize) {
     const { data: page, error } = await client.from("orders")
@@ -1150,26 +1156,12 @@ async function profitAnalytics(client: SupabaseClient, user: Record<string, unkn
     if (from >= to) return json({ error: "Enter a valid date range" }, 400);
   }
 
-  const { data: sales, error: salesError } = await client.from("sales")
-    .select("id,createdAt")
-    .eq("shopId", shop.id)
-    .gte("createdAt", from.toISOString())
-    .lt("createdAt", to.toISOString());
-  if (salesError) throw salesError;
-  const saleRows = sales ?? [];
-  const saleIds = saleRows.map((sale) => sale.id);
-  const { data: items, error: itemsError } = saleIds.length
-    ? await client.from("sale_items").select("quantity,totalPrice,buyingPrice,saleId,productId").in("saleId", saleIds)
-    : { data: [], error: null };
-  if (itemsError) throw itemsError;
-
-  const itemRows = items ?? [];
-  const productIds = [...new Set(itemRows.map((item) => item.productId).filter(Boolean))];
-  const { data: products, error: productsError } = productIds.length
-    ? await client.from("products").select("id,name,unit,imageUrl,supplier:suppliers(id,name)").eq("shopId", shop.id).in("id", productIds)
-    : { data: [], error: null };
-  if (productsError) throw productsError;
-
+  const [saleRows, itemRows, productRows] = await Promise.all([
+    readAll(() => client.from("sales").select("id,createdAt").eq("shopId", shop.id).gte("createdAt", from.toISOString()).lt("createdAt", to.toISOString()).order("id")),
+    readAll(() => client.from("sale_items").select("id,quantity,totalPrice,buyingPrice,saleId,productId,sale:sales!inner(shopId,createdAt)").eq("sale.shopId", shop.id).gte("sale.createdAt", from.toISOString()).lt("sale.createdAt", to.toISOString()).order("id")),
+    readAll(() => client.from("products").select("id,name,unit,imageUrl,supplier:suppliers(id,name)").eq("shopId", shop.id).order("id")),
+  ]);
+  const products = productRows;
   const saleMap = new Map(saleRows.map((sale) => [sale.id, sale.createdAt]));
   const productMap = new Map((products ?? []).map((product) => [product.id, product]));
   const group = period === "today" ? "hour" : period === "year" ? "month" : "day";
@@ -1260,73 +1252,70 @@ async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, 
 }
 
 async function orders(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
-  if (method === "GET") { let query = client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }); const status = new URL(request.url).searchParams.get("status"); if (status) query = query.eq("status", status.toUpperCase()); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; const visible = canViewOrderQuantities(user) ? (data ?? []) : (data ?? []).map((order) => ({ ...order, totalAmount: null, items: (order.items ?? []).map((item) => ({ ...item, quantity: null, unitPrice: null, note: null, product: item.product ? { ...item.product, currentStock: null } : item.product })) })); if (id) return visible[0] ? json({ order: visible[0] }) : json({ error: "Order not found" }, 404); return json({ orders: visible }); }
+  const orderId = id?.replace(/\/(confirm-delivery|cancel|reorder)$/, "");
+  const readOrder = async (savedId: string) => {
+    const { data, error } = await client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("id", savedId).eq("shopId", shop.id).maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+  const reply = (order: any, status = 200) => {
+    const message = `Habari ${order.supplier?.name ?? ""}, naomba order kutoka ${shop.name ?? "duka"}:\n${order.items.map((item: any) => `- ${item.product?.name ?? "Product"}: ${item.quantity} ${item.product?.unit ?? "pcs"}`).join("\n")}`;
+    const phone = String(order.supplier?.phone ?? "").replace(/\D/g, "");
+    return json({ order, whatsappMessage: { message, whatsappUrl: phone.length >= 7 ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null } }, status);
+  };
+  if (method === "GET") {
+    if (orderId) { const order = await readOrder(orderId); return order ? reply(order) : json({ error: "Order not found" }, 404); }
+    const status = new URL(request.url).searchParams.get("status")?.toUpperCase();
+    const rows = await readAll(() => {
+      let query = client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }).order("id");
+      if (status) query = query.eq("status", status);
+      return query;
+    });
+    return json({ orders: rows });
+  }
   if (!canViewOrderQuantities(user)) return json({ error: "Only the owner or stock staff can manage supplier orders" }, 403);
-  if (method === "PATCH" && id) {
-    const body = await request.json().catch(() => ({}));
-    const orderId = id.replace(/\/(confirm-delivery|cancel)$/, "");
-    const { data: existing } = await client.from("orders").select("*,items:order_items(*)").eq("id", orderId).eq("shopId", shop.id).maybeSingle();
-    if (!existing) return json({ error: "Order not found" }, 404);
-    if (pathStatus(id, "confirm-delivery")) {
-      if (!["CONFIRMED", "OUT_FOR_DELIVERY"].includes(existing.status)) return json({ error: `Cannot confirm delivery from ${existing.status}` }, 400);
-      const now = new Date().toISOString();
-      const requestedReceivedTotal = body.actualTotalAmount == null ? Number(existing.totalAmount ?? 0) : Number(body.actualTotalAmount);
-      if (!Number.isInteger(requestedReceivedTotal) || requestedReceivedTotal < 0) return json({ error: "The received purchase amount must be a whole number that is zero or greater" }, 400);
-      const { error: updateError } = await client.from("orders").update({ status: "DELIVERED", receivedAt: now, receivedTotalAmount: requestedReceivedTotal, updatedAt: now }).eq("id", orderId).eq("shopId", shop.id);
-      if (updateError) throw updateError;
-      for (const item of existing.items ?? []) {
-        const { data: product, error: productError } = await client.from("products").select("currentStock").eq("id", item.productId).eq("shopId", shop.id).single();
-        if (productError) throw productError;
-        if (product) {
-          // A received item must be visible in inventory even if it was archived after ordering.
-          const { error: stockError } = await client.from("products").update({ currentStock: product.currentStock + item.quantity, isActive: true, updatedAt: now }).eq("id", item.productId).eq("shopId", shop.id);
-          if (stockError) throw stockError;
-          const { error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: item.quantity, note: `Order delivery #${orderId.slice(-6)}`, productId: item.productId, createdById: user.userId, createdByStaffId: user.staffId ?? null });
-          if (movementError) throw movementError;
-        }
-      }
-      return json({ message: "Delivery confirmed and stock updated" });
+  const body = await request.json().catch(() => ({}));
+  if (method === "POST" && (!id || id.endsWith("/reorder"))) {
+    let source = body;
+    if (orderId) {
+      const order = await readOrder(orderId);
+      if (!order) return json({ error: "Order not found" }, 404);
+      source = { supplierId: order.supplierId, items: order.items.map((item: any) => ({ productId: item.productId, quantity: item.quantity, unitPrice: item.unitPrice, note: item.note })), note: order.note };
     }
-    if (Array.isArray(body.items)) {
-      if (!["PENDING", "OUT_FOR_DELIVERY"].includes(existing.status)) return json({ error: "Only pending or out-for-delivery orders can be edited" }, 400);
-      const items = body.items;
-      if (!items.length) return json({ error: "An order must contain at least one product" }, 400);
-      const ids = items.map((item: Record<string, unknown>) => item.productId);
-      if (new Set(ids).size !== ids.length) return json({ error: "Each product can only appear once in an order" }, 400);
-      const { data: products } = await client.from("products").select("id,name,unit,buyingPrice,note,isReorderable,imageUrl,currentStock").in("id", ids).eq("shopId", shop.id).eq("isActive", true);
-      if ((products ?? []).length !== ids.length) return json({ error: "One or more products not found in this shop" }, 400);
-      const map = new Map((products ?? []).map((product) => [product.id, product]));
-      const normalized = items.map((item: Record<string, unknown>) => ({ id: crypto.randomUUID(), quantity: Number(item.quantity), unitPrice: item.unitPrice == null ? map.get(item.productId)!.buyingPrice : Number(item.unitPrice), note: item.note ? String(item.note).trim() : null, productId: item.productId }));
-      if (normalized.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || !Number.isFinite(item.unitPrice) || item.unitPrice < 0)) return json({ error: "Order quantities must be whole numbers greater than zero and prices cannot be negative" }, 400);
-      const totalAmount = normalized.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-      const now = new Date().toISOString();
-      const { error: updateError } = await client.from("orders").update({ totalAmount, note: body.note ? String(body.note).trim() : null, updatedAt: now }).eq("id", orderId).eq("shopId", shop.id);
-      if (updateError) throw updateError;
-      const { error: deleteItemsError } = await client.from("order_items").delete().eq("orderId", orderId);
-      if (deleteItemsError) throw deleteItemsError;
-      const { error: insertItemsError } = await client.from("order_items").insert(normalized.map((item) => ({ ...item, orderId })));
-      if (insertItemsError) throw insertItemsError;
-      return json({ message: "Order updated", order: { ...existing, totalAmount, note: body.note ? String(body.note).trim() : null, items: normalized.map((item) => ({ ...item, product: map.get(item.productId) })) } });
-    }
-    const nextStatus = String(pathStatus(id, "cancel") ? "CANCELLED" : body.status ?? "").toUpperCase();
-    const transitions: Record<string, string[]> = { PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"], OUT_FOR_DELIVERY: [] };
-    if (!transitions[existing.status]?.includes(nextStatus)) return json({ error: `Cannot move order from ${existing.status} to ${nextStatus || "an empty status"}` }, 400);
-    const update: Record<string, unknown> = { status: nextStatus, updatedAt: new Date().toISOString() };
-    if (body.note !== undefined) update.note = body.note ? String(body.note).trim() : null;
-    const { data, error } = await client.from("orders").update(update).eq("id", orderId).eq("shopId", shop.id).select("*").single();
+    const { data: savedId, error } = await client.rpc("save_supplier_order", { p_shop_id: shop.id, p_order_id: null, p_body: source });
     if (error) throw error;
-    return json({ order: data });
+    return reply(await readOrder(savedId), 201);
   }
-  if (method === "DELETE" && id) {
-    const orderId = id.replace(/\/cancel$/, "");
-    const { data: existing } = await client.from("orders").select("id,status").eq("id", orderId).eq("shopId", shop.id).maybeSingle();
-    if (!existing) return json({ error: "Order not found" }, 404);
+  if (!orderId) return json({ error: "Order not found" }, 404);
+  if (method === "PATCH" && id?.endsWith("/confirm-delivery")) {
+    const amount = body.actualTotalAmount == null ? null : Number(body.actualTotalAmount);
+    if (amount !== null && (!Number.isInteger(amount) || amount < 0)) return json({ error: "The received purchase amount must be a whole number that is zero or greater" }, 400);
+    const { data, error } = await client.rpc("receive_supplier_order", { p_shop_id: shop.id, p_order_id: orderId, p_user_id: user.userId, p_staff_id: user.staffId ?? null, p_amount: amount });
+    if (error) throw error;
+    return json(data);
+  }
+  if (method === "PATCH" && Array.isArray(body.items)) {
+    const { data: savedId, error } = await client.rpc("save_supplier_order", { p_shop_id: shop.id, p_order_id: orderId, p_body: body });
+    if (error) throw error;
+    return reply(await readOrder(savedId));
+  }
+  const existing = await readOrder(orderId);
+  if (!existing) return json({ error: "Order not found" }, 404);
+  if (method === "DELETE") {
     if (!["PENDING", "CANCELLED"].includes(existing.status)) return json({ error: "Only pending or cancelled orders can be deleted" }, 400);
-    const { error } = await client.from("orders").delete().eq("id", orderId).eq("shopId", shop.id);
+    const { data, error } = await client.from("orders").delete().eq("id", orderId).eq("shopId", shop.id).eq("status", existing.status).select("id").maybeSingle();
     if (error) throw error;
-    return json({ message: "Order deleted" });
+    return data ? json({ message: "Order deleted" }) : json({ error: "Order changed. Refresh and try again." }, 409);
   }
-  const body = await request.json().catch(() => ({})); const items = Array.isArray(body.items) ? body.items : []; if (!body.supplierId || !items.length) return json({ error: "supplierId and items are required" }, 400); const { data: supplier } = await client.from("suppliers").select("id,name,phone").eq("id", body.supplierId).maybeSingle(); if (!supplier) return json({ error: "Supplier not found" }, 404); const ids = items.map((item: Record<string, unknown>) => item.productId); if (new Set(ids).size !== ids.length) return json({ error: "Each product can only appear once in an order" }, 400); const { data: products } = await client.from("products").select("id,name,unit,buyingPrice,note,isReorderable,imageUrl,currentStock").in("id", ids).eq("shopId", shop.id).eq("isActive", true); if ((products ?? []).length !== ids.length) return json({ error: "One or more products not found in this shop" }, 400); const map = new Map((products ?? []).map((p) => [p.id, p])); const normalized = items.map((item: Record<string, unknown>) => ({ id: crypto.randomUUID(), quantity: Number(item.quantity), unitPrice: item.unitPrice == null ? map.get(item.productId)!.buyingPrice : Number(item.unitPrice), note: item.note ? String(item.note).trim() : null, productId: item.productId })); if (normalized.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || !Number.isFinite(item.unitPrice) || item.unitPrice < 0)) return json({ error: "Order quantities must be whole numbers greater than zero and prices cannot be negative" }, 400); const totalAmount = normalized.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0); const now = new Date().toISOString(); const orderId = crypto.randomUUID(); const { data: order, error } = await client.from("orders").insert({ id: orderId, orderGroupId: body.orderGroupId ? String(body.orderGroupId) : null, status: "PENDING", totalAmount, note: body.note || null, shopId: shop.id, supplierId: body.supplierId, createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; const { error: itemError } = await client.from("order_items").insert(normalized.map((item) => ({ ...item, orderId }))); if (itemError) { await client.from("orders").delete().eq("id", orderId); throw itemError; } return json({ order: { ...order, supplier, items: normalized.map((item) => ({ ...item, product: map.get(item.productId) })) }, whatsappMessage: { message: `Habari ${supplier.name}, naomba order ya bidhaa kutoka ${shop.name}.`, whatsappUrl: supplier.phone ? `https://wa.me/${supplier.phone}` : null } }, 201);
+  if (method === "PATCH") {
+    const nextStatus = id?.endsWith("/cancel") ? "CANCELLED" : String(body.status ?? "").toUpperCase();
+    const transitions: Record<string, string[]> = { PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"] };
+    if (!transitions[existing.status]?.includes(nextStatus)) return json({ error: `Cannot move order from ${existing.status} to ${nextStatus || "an empty status"}` }, 400);
+    const { data, error } = await client.from("orders").update({ status: nextStatus, ...(body.note !== undefined ? { note: body.note || null } : {}), updatedAt: new Date().toISOString() }).eq("id", orderId).eq("shopId", shop.id).eq("status", existing.status).select("id").maybeSingle();
+    if (error) throw error;
+    return data ? reply(await readOrder(orderId)) : json({ error: "Order changed. Refresh and try again." }, 409);
+  }
+  return json({ error: "Method not allowed" }, 405);
 }
 
 function pathStatus(value: string, suffix: string) { return value.endsWith(`/${suffix}`); }
@@ -1391,7 +1380,7 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
       ? await client.from("staff_members").select("pin").eq("id", staffId).eq("shopId", shop.id).maybeSingle()
       : await client.from("users").select("pin").eq("id", user.userId).maybeSingle();
     if (accountError) throw accountError;
-    if (!account || !(await bcrypt.compare(currentPin, account.pin))) return json({ error: "Current PIN is incorrect" }, 401);
+    if (!account || !(await bcrypt.compare(currentPin, account.pin))) return json({ error: "Current PIN is incorrect" }, 400);
     if (!/^\d{4,8}$/.test(newPin)) return json({ error: "New PIN must be 4 to 8 digits" }, 400);
     const { error } = staffId
       ? await client.from("staff_members").update({ pin: await bcrypt.hash(newPin, 10), updatedAt: now }).eq("id", staffId).eq("shopId", shop.id)
@@ -1460,13 +1449,29 @@ async function barcodes(client: SupabaseClient, user: Record<string, unknown>, s
   if (path === "/barcodes/settings" && !hasStaffPermission(user, "canManageBarcodeSettings")) return json({ error: "Only the owner, manager, or an explicitly authorized staff member can manage barcode settings" }, 403);
   if (path === "/barcodes/settings" && request.method === "GET") { const { data, error } = await client.from("shops").select("barcodeScanningEnabled,bluetoothScannerEnabled,barcodeGenerationEnabled,barcodeAutoFocus,barcodeSuccessSound,barcodeVibrate,barcodeAutoAddToCart").eq("id", shop.id).single(); if (error) throw error; return json({ settings: data }); }
   if (path === "/barcodes/settings" && request.method === "PATCH") { const body = await request.json().catch(() => ({})); const keys = ["barcodeScanningEnabled", "bluetoothScannerEnabled", "barcodeGenerationEnabled", "barcodeAutoFocus", "barcodeSuccessSound", "barcodeVibrate", "barcodeAutoAddToCart"]; const update = Object.fromEntries(keys.filter((key) => typeof body[key] === "boolean").map((key) => [key, body[key]])); const { data, error } = await client.from("shops").update({ ...update, updatedAt: new Date().toISOString() }).eq("id", shop.id).select("barcodeScanningEnabled,bluetoothScannerEnabled,barcodeGenerationEnabled,barcodeAutoFocus,barcodeSuccessSound,barcodeVibrate,barcodeAutoAddToCart").single(); if (error) throw error; return json({ settings: data }); }
-  if (path.startsWith("/barcodes/lookup/")) { const barcode = normalizeBarcode(decodeURIComponent(path.slice("/barcodes/lookup/".length))); const { data: product, error } = await client.from("products").select("*").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); await client.from("barcode_scans").insert({ id: crypto.randomUUID(), shopId: shop.id, barcode, productId: product?.id ?? null, found: Boolean(product), context: new URL(request.url).searchParams.get("context") ?? "POS" }); if (error) throw error; return product ? json({ product }) : json({ error: "This barcode was not found." }, 404); }
+  if (path.startsWith("/barcodes/lookup/")) { const barcode = normalizeBarcode(decodeURIComponent(path.slice("/barcodes/lookup/".length))); const { data: product, error } = await client.from("products").select("*").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); await client.from("barcode_scans").insert({ id: crypto.randomUUID(), shopId: shop.id, barcode, productId: product?.id ?? null, found: Boolean(product), context: new URL(request.url).searchParams.get("context") ?? "POS" }); if (error) throw error; return product ? json({ product: redactProduct(product, user) }) : json({ error: "This barcode was not found." }, 404); }
   if (path === "/barcodes/history") { const { data, error } = await client.from("barcode_scans").select("*,product:products(id,name,barcode)").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(200); if (error) throw error; return json({ scans: data ?? [] }); }
   if (path === "/barcodes/report") { const [{ data: withoutBarcodes }, { data: scans }] = await Promise.all([client.from("products").select("id,name,currentStock").eq("shopId", shop.id).eq("isActive", true).is("barcode", null), client.from("barcode_scans").select("barcode,product:products(id,name,sellingPrice)").eq("shopId", shop.id).eq("found", true).limit(500)]); const groups = new Map<string, { barcode: string; scans: number; product: unknown }>(); for (const scan of scans ?? []) { const current = groups.get(scan.barcode) ?? { barcode: scan.barcode, scans: 0, product: scan.product }; current.scans++; groups.set(scan.barcode, current); } return json({ withoutBarcodes: withoutBarcodes ?? [], mostScanned: [...groups.values()].sort((a, b) => b.scans - a.scans).slice(0, 20), duplicateAttempts: 0 }); }
   return json({ error: "Barcode route not found" }, 404);
 }
 
-async function notifications(client: SupabaseClient, shop: Record<string, unknown>) { const [{ data: products }, { data: debts }, { data: orders }] = await Promise.all([client.from("products").select("id,name,currentStock,minimumStock").eq("shopId", shop.id).eq("isActive", true), client.from("debts").select("amount,amountPaid").eq("shopId", shop.id).in("status", ["OPEN", "PARTIAL"]), client.from("customer_orders").select("id").eq("shopId", shop.id).eq("status", "PENDING")]); const low = (products ?? []).filter((p) => p.currentStock <= p.minimumStock); const items = []; if (low.length) items.push({ id: "low-stock", type: "LOW_STOCK", severity: low.some((p) => p.currentStock === 0) ? "URGENT" : "WARNING", title: `${low.length} low-stock item${low.length === 1 ? "" : "s"}`, href: "/inventory?lowStock=true", count: low.length }); if ((debts ?? []).length) items.push({ id: "open-debts", type: "DEBT", severity: "WARNING", title: `Collect TZS ${(debts ?? []).reduce((s, d) => s + d.amount - d.amountPaid, 0).toLocaleString("en-TZ")}`, href: "/debts?status=open", count: debts?.length }); if ((orders ?? []).length) items.push({ id: "customer-orders", type: "CUSTOMER_ORDER", severity: "ACTION", title: `${orders.length} catalog orders waiting`, href: "/orders/customers?filter=pending", count: orders.length }); return json({ items, unreadCount: items.length, generatedAt: new Date().toISOString() }); }
+async function notifications(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>) {
+  const alertsResponse = await productList(client, new Request("https://api.local/products?lowStock=true&limit=1000"), user, shop);
+  const alerts = alertsResponse.ok ? await alertsResponse.json() : { products: [], pagination: { total: 0 } };
+  const items = [];
+  const lowCount = alerts.pagination?.total ?? alerts.products.length;
+  if (lowCount) items.push({ id: "low-stock", type: "LOW_STOCK", severity: alerts.products.some((p: any) => p.currentStock === 0) ? "URGENT" : "WARNING", title: `${lowCount} low-stock items`, href: "/inventory?stockFilter=restock", count: lowCount });
+  if (hasStaffPermission(user, "canSell") || hasStaffPermission(user, "canViewReports")) {
+    const debts = await readAll(() => client.from("debts").select("id,amount,amountPaid").eq("shopId", shop.id).in("status", ["OPEN", "PARTIAL"]).order("id"));
+    if (debts.length) items.push({ id: "open-debts", type: "DEBT", severity: "WARNING", title: `Collect TZS ${debts.reduce((sum, debt) => sum + debt.amount - debt.amountPaid, 0).toLocaleString("en-TZ")}`, href: "/debts?status=open", count: debts.length });
+  }
+  if (hasStaffPermission(user, "canSell")) {
+    const { count, error } = await client.from("customer_orders").select("id", { count: "exact", head: true }).eq("shopId", shop.id).eq("status", "PENDING");
+    if (error) throw error;
+    if (count) items.push({ id: "customer-orders", type: "CUSTOMER_ORDER", severity: "ACTION", title: `${count} catalog orders waiting`, href: "/orders/customers?filter=pending", count });
+  }
+  return json({ items, unreadCount: items.length, generatedAt: new Date().toISOString() });
+}
 
 async function syncEvents(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) { if (request.method === "POST" && path === "/sync/events") { const body = await request.json().catch(() => ({})); const now = new Date().toISOString(); const { data, error } = await client.from("offline_sync_events").insert({ id: crypto.randomUUID(), shopId: shop.id, deviceId: body.deviceId || null, deviceLabel: body.deviceLabel || null, status: ["QUEUED", "SYNCED", "FAILED", "REMOVED"].includes(String(body.status).toUpperCase()) ? String(body.status).toUpperCase() : "FAILED", total: body.total == null ? null : Number(body.total), message: body.message || null, attempts: Math.max(0, Number(body.attempts) || 0), localId: body.localId || null, createdAt: now }).select("*").single(); if (error) throw error; return json({ event: data }, 201); } const { data, error } = await client.from("offline_sync_events").select("*").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ events: data ?? [] }); }
 
@@ -1476,15 +1481,33 @@ function canManageOwnerSuppliers(user: Record<string, unknown>, shop: Record<str
 }
 
 async function suppliers(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
-  if (request.method === "GET") { const id = path === "/suppliers" ? null : path.slice("/suppliers/".length); let query = client.from("suppliers").select("*,catalogProducts:supplier_catalog_products(*)").order("name"); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; return id ? data?.[0] ? json({ supplier: data[0] }) : json({ error: "Supplier not found" }, 404) : json({ suppliers: data ?? [] }); }
+  if (request.method === "GET") { const id = path === "/suppliers" ? null : path.slice("/suppliers/".length); let query = client.from("suppliers").select("*,catalogProducts:supplier_catalog_products(*)").or(`createdByShopId.eq.${shop.id},createdByShopId.is.null`).order("name"); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; return id ? data?.[0] ? json({ supplier: data[0] }) : json({ error: "Supplier not found" }, 404) : json({ suppliers: data ?? [] }); }
   const id = path === "/suppliers" ? null : path.slice("/suppliers/".length); const body = await request.json().catch(() => ({})); const now = new Date().toISOString();
   if ((request.method === "POST" || request.method === "PATCH") && !canManageOwnerSuppliers(user, shop)) return json({ error: "Owner Supplier Management is disabled for this shop or this account is not the owner" }, 403);
-  if (request.method === "POST" && !id) { const name = String(body.name ?? "").trim(); if (!name) return json({ error: "Supplier name is required" }, 400); const { data, error } = await client.from("suppliers").insert({ id: crypto.randomUUID(), name, phone: body.phone || null, address: body.address || null, verificationStatus: "NEEDS_REVIEW", createdByShopId: shop.id, createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; return json({ supplier: data }, 201); }
+  if (request.method === "POST" && !id) { const name = String(body.name ?? "").trim(); if (!name || !String(body.phone ?? "").trim()) return json({ error: "Supplier name and phone are required" }, 400); const { data, error } = await client.from("suppliers").insert({ id: crypto.randomUUID(), name, phone: body.phone || null, address: body.address || null, verificationStatus: "NEEDS_REVIEW", createdByShopId: shop.id, createdAt: now, updatedAt: now }).select("*").single(); if (error) throw error; return json({ supplier: data }, 201); }
   if (request.method === "PATCH" && id) { const { data: existing } = await client.from("suppliers").select("id,createdByShopId").eq("id", id).maybeSingle(); if (!existing || existing.createdByShopId !== shop.id) return json({ error: "Only suppliers added by this shop owner can be changed" }, 403); const update = { ...(body.name !== undefined ? { name: String(body.name).trim() } : {}), ...(body.phone !== undefined ? { phone: body.phone || null } : {}), ...(body.address !== undefined ? { address: body.address || null } : {}), ...(body.verificationStatus !== undefined ? { verificationStatus: String(body.verificationStatus).toUpperCase(), verifiedAt: String(body.verificationStatus).toUpperCase() === "VERIFIED" ? now : null } : {}), ...(body.adminNotes !== undefined ? { adminNotes: body.adminNotes || null } : {}), updatedAt: now }; const { data, error } = await client.from("suppliers").update(update).eq("id", id).select("*").single(); if (error) throw error; return json({ supplier: data }); }
   return json({ error: "Supplier route not found" }, 404);
 }
 
-async function customerOrders(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) { const id = path === "/customer-orders" ? null : path.slice("/customer-orders/".length).replace(/\/status$/, ""); if (request.method === "GET") { let query = client.from("customer_orders").select("*,items:customer_order_items(*,product:products(id,name,unit,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(200); const status = new URL(request.url).searchParams.get("status"); if (status) query = query.eq("status", status.toUpperCase()); if (id) query = query.eq("id", id); const { data, error } = await query; if (error) throw error; return id ? data?.[0] ? json({ order: data[0] }) : json({ error: "Customer order not found" }, 404) : json({ orders: data ?? [] }); } if (request.method === "PATCH" && id) { const body = await request.json().catch(() => ({})); const next = String(body.status ?? "").toUpperCase(); if (!["CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].includes(next)) return json({ error: "Invalid customer order status" }, 400); const { data, error } = await client.from("customer_orders").update({ status: next, updatedAt: new Date().toISOString() }).eq("id", id).eq("shopId", shop.id).select("*,items:customer_order_items(*,product:products(id,name,unit))").single(); if (error) throw error; return json({ order: data }); } return json({ error: "Customer order route not found" }, 404); }
+async function customerOrders(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
+  const id = path === "/customer-orders" ? null : path.slice("/customer-orders/".length).replace(/\/status$/, "");
+  if (request.method === "GET") {
+    let query = client.from("customer_orders").select("*,items:customer_order_items(*,product:products(id,name,unit,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(200);
+    const status = new URL(request.url).searchParams.get("status");
+    if (status) query = query.eq("status", status.toUpperCase());
+    if (id) query = query.eq("id", id);
+    const { data, error } = await query;
+    if (error) throw error;
+    return id ? data?.[0] ? json({ order: data[0] }) : json({ error: "Customer order not found" }, 404) : json({ orders: data ?? [] });
+  }
+  if (request.method === "PATCH" && id) {
+    const body = await request.json().catch(() => ({}));
+    const { data, error } = await client.rpc("change_customer_order_status", { p_shop_id: shop.id, p_order_id: id, p_status: String(body.status ?? "").toUpperCase(), p_user_id: user.userId, p_staff_id: user.staffId ?? null });
+    if (error) throw error;
+    return json(data);
+  }
+  return json({ error: "Customer order route not found" }, 404);
+}
 
 async function syncAdmin(client: SupabaseClient, request: Request, path: string) {
   const url = new URL(request.url); const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500); const statuses = ["QUEUED", "SYNCED", "FAILED", "REMOVED"];
@@ -1502,8 +1525,30 @@ async function syncAdmin(client: SupabaseClient, request: Request, path: string)
   return json({ error: "Sync admin route not found" }, 404);
 }
 
-async function stockCounts(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) { const parts = path.split("/").filter(Boolean); if (request.method === "POST" && parts.length === 1) { const { data: products } = await client.from("products").select("id,currentStock").eq("shopId", shop.id).eq("isActive", true); const now = new Date().toISOString(); const countId = crypto.randomUUID(); const { error } = await client.from("stock_counts").insert({ id: countId, shopId: shop.id, createdById: user.userId, status: "OPEN", createdAt: now, updatedAt: now }); if (error) throw error; const { error: itemError } = await client.from("stock_count_items").insert((products ?? []).map((p) => ({ id: crypto.randomUUID(), stockCountId: countId, productId: p.id, expected: p.currentStock, counted: 0, createdAt: now, updatedAt: now }))); if (itemError) { await client.from("stock_counts").delete().eq("id", countId); throw itemError; } return stockCountRead(client, shop.id, countId, 201); } const id = parts[1]; if (request.method === "GET") return stockCountRead(client, shop.id, id); if (request.method === "POST" && parts[2] === "scan") { const body = await request.json().catch(() => ({})); const barcode = normalizeBarcode(body.barcode); const { data: count } = await client.from("stock_counts").select("id,status").eq("id", id).eq("shopId", shop.id).maybeSingle(); if (!count || count.status !== "OPEN") return json({ error: "Open stock count not found" }, 404); const { data: product } = await client.from("products").select("id,name,barcode,unit").eq("shopId", shop.id).eq("barcode", barcode).eq("isActive", true).maybeSingle(); if (!product) return json({ error: "This barcode was not found." }, 404); const { data: existing } = await client.from("stock_count_items").select("counted").eq("stockCountId", id).eq("productId", product.id).maybeSingle(); if (!existing) return json({ error: "This product is not part of the stock count." }, 404); const { data: item, error } = await client.from("stock_count_items").update({ counted: Number(existing.counted ?? 0) + 1, updatedAt: new Date().toISOString() }).eq("stockCountId", id).eq("productId", product.id).eq("counted", existing.counted).select("*,product:products(id,name,barcode,unit)").single(); if (error) throw error; return json({ item }); } if (request.method === "POST" && parts[2] === "finish") { const body = await request.json().catch(() => ({})); const { data: items } = await client.from("stock_count_items").select("*").eq("stockCountId", id); if (body.applyAdjustments) for (const item of items ?? []) if (item.counted !== item.expected) { const { error: productError } = await client.from("products").update({ currentStock: item.counted, updatedAt: new Date().toISOString() }).eq("id", item.productId).eq("shopId", shop.id); if (productError) throw productError; const { error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "ADJUSTMENT", quantity: item.counted, note: `Stock count ${id}`, productId: item.productId }); if (movementError) throw movementError; } const { error } = await client.from("stock_counts").update({ status: "COMPLETED", completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).eq("id", id).eq("shopId", shop.id); if (error) throw error; return stockCountRead(client, shop.id, id); } return json({ error: "Stock count route not found" }, 404); }
-async function stockCountRead(client: SupabaseClient, shopId: string, id: string, status = 200) { const { data, error } = await client.from("stock_counts").select("*,items:stock_count_items(*,product:products(id,name,barcode,unit,currentStock))").eq("id", id).eq("shopId", shopId).maybeSingle(); if (error) throw error; return data ? json({ count: data }, status) : json({ error: "Stock count not found" }, 404); }
+async function stockCounts(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
+  const parts = path.split("/").filter(Boolean);
+  if (request.method === "GET" && parts[1]) return stockCountRead(client, shop.id as string, parts[1]);
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const action = parts.length === 1 ? "start" : parts[2];
+  if (!["start", "scan", "finish"].includes(action)) return json({ error: "Stock count route not found" }, 404);
+  const body = await request.json().catch(() => ({}));
+  const { data: countId, error } = await client.rpc("shop_stock_count", { p_shop_id: shop.id, p_user_id: user.userId, p_staff_id: user.staffId ?? null, p_id: parts[1] ?? null, p_action: action, p_body: { ...body, barcode: normalizeBarcode(body.barcode) } });
+  if (error) throw error;
+  if (action === "scan") {
+    const { data: product } = await client.from("products").select("id").eq("shopId", shop.id).eq("barcode", normalizeBarcode(body.barcode)).single();
+    const { data: item, error: itemError } = await client.from("stock_count_items").select("*,product:products(id,name,barcode,unit)").eq("stockCountId", countId).eq("productId", product!.id).single();
+    if (itemError) throw itemError;
+    return json({ item });
+  }
+  return stockCountRead(client, shop.id as string, countId, action === "start" ? 201 : 200);
+}
+async function stockCountRead(client: SupabaseClient, shopId: string, id: string, status = 200) {
+  const { data: count, error } = await client.from("stock_counts").select("*").eq("id",id).eq("shopId",shopId).maybeSingle();
+  if(error) throw error;
+  if(!count) return json({ error: "Stock count not found" },404);
+  const items = await readAll(() => client.from("stock_count_items").select("*,product:products(id,name,barcode,unit,currentStock)").eq("stockCountId",id).order("id"));
+  return json({ count: { ...count, items } },status);
+}
 
 async function assistant(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) { if (request.method === "GET") { const { data, error } = await client.from("assistant_actions").select("*").eq("shopId", shop.id).order("updatedAt", { ascending: false }).limit(200); if (error) throw error; return json({ actions: data ?? [] }); } const body = await request.json().catch(() => ({})); if (!body.actionKey || !body.title || !body.href) return json({ error: "actionKey, title, and href are required" }, 400); const now = new Date().toISOString(); const { data, error } = await client.from("assistant_actions").upsert({ id: crypto.randomUUID(), shopId: shop.id, actionKey: String(body.actionKey), title: String(body.title), href: String(body.href), status: String(body.status ?? "OPEN").toUpperCase(), updatedAt: now, createdAt: now }, { onConflict: "shopId,actionKey" }).select("*").single(); if (error) throw error; return json({ action: data }, 201); }
 
@@ -1518,13 +1563,48 @@ async function adminSuppliers(client: SupabaseClient, request: Request, path: st
   return json({ error: "Supplier route not found" }, 404);
 }
 
-async function publicOrder(client: SupabaseClient, request: Request) { const body = await request.json().catch(() => ({})); if (!body.shopId || !body.customerName || !body.customerPhone || !Array.isArray(body.items) || !body.items.length) return json({ error: "shopId, customerName, customerPhone, and items are required" }, 400); const { data: shop } = await client.from("shops").select("id,name,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", body.shopId).maybeSingle(); if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "This shop is not currently accepting catalog orders" }, 402); const normalized = body.items.map((item: Record<string, unknown>) => ({ productId: String(item.productId ?? "").trim(), quantity: Number(item.quantity), pricingTier: String(item.pricingTier ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL" })); if (normalized.some((item) => !item.productId || !Number.isInteger(item.quantity) || item.quantity <= 0)) return json({ error: "Each item must include a productId and a whole-number quantity greater than 0" }, 400); const quantities = new Map<string, number>(); for (const item of normalized) quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity); const ids = [...quantities.keys()]; const { data: products } = await client.from("products").select("id,name,unit,sellingPrice,wholesalePrice,currentStock").in("id", ids).eq("shopId", shop.id).eq("isActive", true); if ((products ?? []).length !== ids.length) return json({ error: "One or more products not available" }, 400); const map = new Map((products ?? []).map((p) => [p.id, p])); for (const [id, quantity] of quantities) { const product = map.get(id)!; if (product.currentStock < quantity) return json({ error: `Insufficient stock for ${product.name}: have ${product.currentStock}, need ${quantity}` }, 400); } const rows = normalized.map((item: { productId: string; quantity: number; pricingTier: string }) => { const product = map.get(item.productId)!; const unitPrice = item.pricingTier === "WHOLESALE" && product.wholesalePrice != null ? product.wholesalePrice : product.sellingPrice; return { id: crypto.randomUUID(), quantity: item.quantity, unitPrice, pricingTier: item.pricingTier, productId: item.productId }; }); const totalAmount = rows.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0); const now = new Date().toISOString(); const orderId = crypto.randomUUID(); const { error } = await client.from("customer_orders").insert({ id: orderId, customerName: String(body.customerName).trim(), customerPhone: normalizePhone(body.customerPhone), note: body.note || null, status: "PENDING", totalAmount, shopId: shop.id, createdAt: now, updatedAt: now }); if (error) throw error; const { error: itemError } = await client.from("customer_order_items").insert(rows.map((r) => ({ ...r, orderId }))); if (itemError) { await client.from("customer_orders").delete().eq("id", orderId); throw itemError; } return json({ order: { id: orderId, totalAmount }, shopWhatsAppUrl: null }, 201); }
 
-async function publicOrderAtomic(client: SupabaseClient, request: Request) { const body = await request.json().catch(() => ({})); if (!body.shopId || !body.customerName || !body.customerPhone || !Array.isArray(body.items) || !body.items.length) return json({ error: "shopId, customerName, customerPhone, and items are required" }, 400); const { data: shop } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", body.shopId).maybeSingle(); if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "This shop is not currently accepting catalog orders" }, 402); const items = body.items.map((item: Record<string, unknown>) => ({ productId: String(item.productId ?? "").trim(), quantity: Number(item.quantity), pricingTier: String(item.pricingTier ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL" })); if (items.some((item) => !item.productId || !Number.isInteger(item.quantity) || item.quantity <= 0)) return json({ error: "Each item must include a productId and a whole-number quantity greater than 0" }, 400); const { data, error } = await client.rpc("create_public_customer_order", { p_shop_id: shop.id, p_customer_name: String(body.customerName).trim(), p_customer_phone: normalizePhone(body.customerPhone), p_note: body.note ? String(body.note).trim() : null, p_items: items }); if (error) { if (error.code === "22023") return json({ error: error.message }, 400); throw error; } return json({ order: data, shopWhatsAppUrl: null }, 201); }
+
+async function publicOrderAtomic(client: SupabaseClient, request: Request) { const body = await request.json().catch(() => ({})); if (!body.shopId || !body.customerName || !body.customerPhone || !Array.isArray(body.items) || !body.items.length) return json({ error: "shopId, customerName, customerPhone, and items are required" }, 400); const { data: shop } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", body.shopId).maybeSingle(); if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "This shop is not currently accepting catalog orders" }, 402); const items: Array<{ productId: string; quantity: number; pricingTier: string }> = body.items.map((item: Record<string, unknown>) => ({ productId: String(item.productId ?? "").trim(), quantity: Number(item.quantity), pricingTier: String(item.pricingTier ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL" })); if (items.some((item) => !item.productId || !Number.isInteger(item.quantity) || item.quantity <= 0)) return json({ error: "Each item must include a productId and a whole-number quantity greater than 0" }, 400); const { data, error } = await client.rpc("create_public_customer_order", { p_shop_id: shop.id, p_customer_name: String(body.customerName).trim(), p_customer_phone: normalizePhone(body.customerPhone), p_note: body.note ? String(body.note).trim() : null, p_items: items }); if (error) { if (error.code === "22023") return json({ error: error.message }, 400); throw error; } return json({ order: data, shopWhatsAppUrl: null }, 201); }
 
 async function push(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) { if (path === "/push/config") return json({ enabled: Boolean(Deno.env.get("VAPID_PUBLIC_KEY")), publicKey: Deno.env.get("VAPID_PUBLIC_KEY") || null }); if (path === "/push/preferences" && request.method === "GET") { const { data: preferences } = await client.from("notification_preferences").upsert({ id: crypto.randomUUID(), shopId: shop.id, createdAt: new Date().toISOString() }, { onConflict: "shopId" }).select("*").single(); const { data: subscriptions } = await client.from("push_subscriptions").select("id,deviceId,deviceLabel,isActive,lastSeenAt").eq("shopId", shop.id); return json({ preferences, subscriptions: subscriptions ?? [], pushConfigured: Boolean(Deno.env.get("VAPID_PUBLIC_KEY")) }); } if (path === "/push/preferences" && request.method === "PATCH") { const body = await request.json().catch(() => ({})); const fields = ["lowStock", "debtDue", "subscriptionExpiry", "dailyAssistant"]; const update = Object.fromEntries(fields.filter((key) => typeof body[key] === "boolean").map((key) => [key, body[key]])); const { data, error } = await client.from("notification_preferences").upsert({ id: crypto.randomUUID(), shopId: shop.id, ...update, updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() }, { onConflict: "shopId" }).select("*").single(); if (error) throw error; return json({ preferences: data }); } if (path === "/push/subscribe" && request.method === "POST") { const body = await request.json().catch(() => ({})); if (!String(body.endpoint ?? "").startsWith("https://") || !body.keys?.p256dh || !body.keys?.auth || !body.deviceId) return json({ error: "A valid device subscription is required" }, 400); const now = new Date().toISOString(); const { error } = await client.from("push_subscriptions").upsert({ id: crypto.randomUUID(), shopId: shop.id, endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth, deviceId: body.deviceId, deviceLabel: body.deviceLabel || null, userId: user.userId, isActive: true, failureCount: 0, lastSeenAt: now, createdAt: now, updatedAt: now }, { onConflict: "shopId,deviceId" }); if (error) throw error; return json({ message: "Device alerts enabled" }, 201); } if (path === "/push/unsubscribe" && request.method === "POST") { const body = await request.json().catch(() => ({})); const { error } = await client.from("push_subscriptions").update({ isActive: false, updatedAt: new Date().toISOString() }).eq("shopId", shop.id).eq("deviceId", body.deviceId); if (error) throw error; return json({ message: "Device alerts disabled" }); } if (path === "/push/deliveries") { const { data, error } = await client.from("push_deliveries").select("*").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ deliveries: data ?? [] }); } return json({ error: "Push route not found" }, 404); }
 
-async function supplierPortal(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { const { data: supplier } = await client.from("suppliers").select("*").eq("userId", user.userId).maybeSingle(); if (!supplier) return json({ error: "Supplier profile not found" }, 404); if (path === "/suppliers/portal/dashboard") { const { data: orders } = await client.from("orders").select("status").eq("supplierId", supplier.id); const ordersByStatus: Record<string, number> = {}; for (const order of orders ?? []) ordersByStatus[order.status] = (ordersByStatus[order.status] ?? 0) + 1; return json({ ordersByStatus, pendingOrders: [], topMerchantIds: [] }); } if (path === "/suppliers/portal/orders" || path.startsWith("/suppliers/portal/orders/")) { const orderId = path === "/suppliers/portal/orders" ? null : path.split("/").pop(); if (request.method === "GET") { let query = client.from("orders").select("*,shop:shops(id,name,location,district),items:order_items(*,product:products(id,name,unit))").eq("supplierId", supplier.id).order("createdAt", { ascending: false }); if (orderId) query = query.eq("id", orderId); const { data, error } = await query; if (error) throw error; return orderId ? data?.[0] ? json({ order: data[0] }) : json({ error: "Order not found" }, 404) : json({ orders: data ?? [], total: data?.length ?? 0, limit: 100, offset: 0 }); } const body = await request.json().catch(() => ({})); const { data, error } = await client.from("orders").update({ status: String(body.status ?? "").toUpperCase(), updatedAt: new Date().toISOString() }).eq("id", orderId).eq("supplierId", supplier.id).select("*").single(); if (error) throw error; return json({ order: data }); } if (path === "/suppliers/portal/products" || path.startsWith("/suppliers/portal/products/")) { const productId = path === "/suppliers/portal/products" ? null : path.split("/").pop(); if (request.method === "GET") { const { data, error } = await client.from("supplier_catalog_products").select("*").eq("supplierId", supplier.id).order("name"); if (error) throw error; return json({ products: data ?? [] }); } const body = await request.json().catch(() => ({})); if (request.method === "DELETE" && productId) { const { data, error } = await client.from("supplier_catalog_products").update({ isAvailable: false, updatedAt: new Date().toISOString() }).eq("id", productId).eq("supplierId", supplier.id).select("*").single(); if (error) throw error; return json({ product: data, message: "Supplier product marked unavailable" }); } const update = { ...(body.name !== undefined ? { name: body.name } : {}), ...(body.sku !== undefined ? { sku: body.sku || null } : {}), ...(body.unit !== undefined ? { unit: body.unit || "pcs" } : {}), ...(body.price !== undefined ? { price: Number(body.price) } : {}), ...(body.minOrderQty !== undefined ? { minOrderQty: Math.max(1, Number(body.minOrderQty)) } : {}), ...(body.note !== undefined ? { note: body.note || null } : {}), ...(body.isAvailable !== undefined ? { isAvailable: Boolean(body.isAvailable) } : {}), updatedAt: new Date().toISOString() }; const { data, error } = productId ? await client.from("supplier_catalog_products").update(update).eq("id", productId).eq("supplierId", supplier.id).select("*").single() : await client.from("supplier_catalog_products").insert({ id: crypto.randomUUID(), supplierId: supplier.id, name: body.name, sku: body.sku || null, unit: body.unit || "pcs", price: Number(body.price), minOrderQty: Math.max(1, Number(body.minOrderQty) || 1), note: body.note || null, isAvailable: body.isAvailable !== false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).select("*").single(); if (error) throw error; return json({ product: data }, productId ? 200 : 201); } return json({ error: "Supplier portal route not found" }, 404); }
+async function supplierPortal(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) {
+  const { data: supplier, error: supplierError } = await client.from("suppliers").select("id").eq("userId", user.userId).maybeSingle();
+  if (supplierError) throw supplierError;
+  if (!supplier) return json({ error: "Supplier profile not found" }, 404);
+  if (path === "/suppliers/portal/dashboard") return supplierDashboard(client, user);
+  if (path === "/suppliers/portal/orders" || path.startsWith("/suppliers/portal/orders/")) {
+    if (request.method !== "GET") return json({ error: "Use the order status endpoint" }, 405);
+    const orderId = path === "/suppliers/portal/orders" ? null : path.split("/").pop();
+    const rows = await readAll(() => {
+      let query = client.from("orders").select("*,shop:shops(id,name,location,district),items:order_items(*,product:products(id,name,unit))").eq("supplierId", supplier.id).order("createdAt", { ascending: false }).order("id");
+      if (orderId) query = query.eq("id", orderId);
+      return query;
+    });
+    return orderId ? rows[0] ? json({ order: rows[0] }) : json({ error: "Order not found" }, 404) : json({ orders: rows, total: rows.length });
+  }
+  if (path === "/suppliers/portal/products" || path.startsWith("/suppliers/portal/products/")) {
+    const productId = path === "/suppliers/portal/products" ? null : path.split("/").pop();
+    if (request.method === "GET") return json({ products: await readAll(() => client.from("supplier_catalog_products").select("*").eq("supplierId", supplier.id).order("name").order("id")) });
+    if (!["POST", "PATCH", "DELETE"].includes(request.method)) return json({ error: "Method not allowed" }, 405);
+    if (request.method === "DELETE" && productId) {
+      const { data, error } = await client.from("supplier_catalog_products").update({ isAvailable: false, updatedAt: new Date().toISOString() }).eq("id", productId).eq("supplierId", supplier.id).select("*").single();
+      if (error) throw error;
+      return json({ product: data });
+    }
+    const body = await request.json().catch(() => ({}));
+    if ((!productId || body.name !== undefined) && !String(body.name ?? "").trim()) return json({ error: "Product name is required" }, 400);
+    if ((!productId || body.price !== undefined) && (!Number.isInteger(Number(body.price)) || Number(body.price) < 0)) return json({ error: "Enter a whole non-negative price" }, 400);
+    if (body.minOrderQty !== undefined && (!Number.isInteger(Number(body.minOrderQty)) || Number(body.minOrderQty) < 1)) return json({ error: "Minimum order quantity must be a positive whole number" }, 400);
+    const now = new Date().toISOString();
+    const update = { ...Object.fromEntries(["name", "sku", "unit", "note", "isAvailable"].filter((key) => body[key] !== undefined).map((key) => [key, body[key]])), ...(body.price !== undefined ? { price: Number(body.price) } : {}), ...(body.minOrderQty !== undefined ? { minOrderQty: Number(body.minOrderQty) } : {}), updatedAt: now };
+    const result = productId ? await client.from("supplier_catalog_products").update(update).eq("id", productId).eq("supplierId", supplier.id).select("*").single() : await client.from("supplier_catalog_products").insert({ id: crypto.randomUUID(), supplierId: supplier.id, name: String(body.name).trim(), unit: body.unit || "pcs", minOrderQty: 1, ...update, createdAt: now }).select("*").single();
+    if (result.error) throw result.error;
+    return json({ product: result.data }, productId ? 200 : 201);
+  }
+  return json({ error: "Supplier portal route not found" }, 404);
+}
 
 async function admin(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { if (user.role !== "ADMIN") return json({ error: "Forbidden" }, 403); const normalizeUsers = (rows: Record<string, unknown>[] | null) => (rows ?? []).map((row) => ({ ...row, shop: Array.isArray(row.shop) ? row.shop[0] ?? null : row.shop, supplier: Array.isArray(row.supplier) ? row.supplier[0] ?? null : row.supplier })); if (path === "/admin/users") { const { data, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,shop:shops(id,name),supplier:suppliers(id,name)").order("createdAt", { ascending: false }).limit(200); if (error) throw error; return json({ users: normalizeUsers(data as Record<string, unknown>[] | null) }); } if (path === "/admin/users/search") { const phone = new URL(request.url).searchParams.get("phone") ?? ""; const { data, error } = await client.from("users").select("id,phone,name,role,language,approvalStatus,createdAt,shop:shops(id,name),supplier:suppliers(id,name)").ilike("phone", `%${phone}%`).limit(10); if (error) throw error; const users = normalizeUsers(data as Record<string, unknown>[] | null); return json({ user: users[0] ?? null, users }); } if (path === "/admin/staff/search") { const phone = new URL(request.url).searchParams.get("phone") ?? ""; const { data, error } = await client.from("staff_members").select("id,name,phone,role,isActive,shopId").ilike("phone", `%${phone}%`).limit(10); if (error) throw error; return json({ staff: data?.[0] ?? null }); } if (path === "/admin/audit-logs") { const { data, error } = await client.from("audit_logs").select("*").order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ logs: data ?? [] }); } if (path === "/admin/overview") { const tables = ["users", "shops", "products", "sales", "orders", "debts", "expenses"]; const counts: Record<string, number> = {}; for (const table of tables) { const { count } = await client.from(table).select("id", { count: "exact", head: true }); counts[table] = count ?? 0; } const [{ count: merchants }, { count: suppliers }, { count: admins }, { count: auditLogs }] = await Promise.all([client.from("users").select("id", { count: "exact", head: true }).eq("role", "MERCHANT"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "SUPPLIER"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "ADMIN"), client.from("audit_logs").select("id", { count: "exact", head: true })]); return json({ summary: { users: counts.users, merchants: merchants ?? 0, suppliers: suppliers ?? 0, admins: admins ?? 0, shops: counts.shops, products: counts.products, sales: counts.sales, orders: counts.orders, debts: counts.debts, expenses: counts.expenses, paidShops: 0, auditLogs: auditLogs ?? 0 } }); } if (request.method === "PATCH" && path.startsWith("/admin/users/") && path.endsWith("/approval")) { const id = path.split("/")[3]; const body = await request.json().catch(() => ({})); const approvalStatus = String(body.approvalStatus ?? "").toUpperCase(); if (!["PENDING", "APPROVED", "REJECTED"].includes(approvalStatus)) return json({ error: "Invalid approval status" }, 400); const { data, error } = await client.from("users").update({ approvalStatus, updatedAt: new Date().toISOString() }).eq("id", id).select("id,phone,name,role,approvalStatus").single(); if (error) throw error; return json({ user: data, message: `User ${approvalStatus.toLowerCase()}` }); } if (request.method === "POST" && path.startsWith("/admin/users/") && path.endsWith("/reset-pin")) { const id = path.split("/")[3]; const body = await request.json().catch(() => ({})); if (!validPin(String(body.newPin ?? ""))) return json({ error: "New PIN must be 4 to 8 digits" }, 400); const { error } = await client.from("users").update({ pin: await bcrypt.hash(String(body.newPin), 10), updatedAt: new Date().toISOString() }).eq("id", id); if (error) throw error; return json({ message: "PIN reset successfully" }); } return json({ error: "Admin route not found" }, 404); }
 
@@ -1541,13 +1621,7 @@ async function publicShops(client: SupabaseClient) {
     .order("name", { ascending: true });
 
   if (error) throw error;
-  const { data: products, error: productError } = await client
-    .from("products")
-    .select("shopId")
-    .eq("isActive", true)
-    .gt("currentStock", 0);
-
-  if (productError) throw productError;
+  const products = await readAll(() => client.from("products").select("id,shopId").eq("isActive", true).gt("currentStock", 0).order("id"));
   const counts = new Map<string, number>();
   for (const product of products ?? []) counts.set(product.shopId, (counts.get(product.shopId) ?? 0) + 1);
 
@@ -1612,8 +1686,19 @@ async function publicShopDetail(client: SupabaseClient, shopId: string) {
   return json({ shop: { ...shop, phone: owner?.phone ?? null, owner: undefined }, products: products ?? [] });
 }
 
+async function exportShopCsv(client: SupabaseClient, shop: Record<string, unknown>, path: string) {
+  const inventory = ["/exports/inventory.csv", "/exports/products.csv"].includes(path);
+  if (!inventory && path !== "/exports/sales.csv") return json({ error: "Export not found" }, 404);
+  const columns = inventory ? ["name", "sku", "barcode", "unit", "buyingPrice", "sellingPrice", "wholesalePrice", "currentStock", "minimumStock", "isActive"] : ["id", "createdAt", "totalAmount", "profit", "paymentMethod", "pricingTier", "channel", "customerPhone", "paymentRef"];
+  const rows = await readAll(() => client.from(inventory ? "products" : "sales").select(columns.join(",")).eq("shopId", shop.id).order("id"));
+  const csv = "\uFEFF" + [columns.map(csvCell).join(","), ...rows.map((row) => columns.map((key) => csvCell(row[key])).join(","))].join("\r\n");
+  return new Response(csv, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="uzuriliving-${inventory ? "inventory" : "sales"}.csv"`, "cache-control": "no-store" } });
+}
+
 async function handle(request: Request) {
   const path = routePath(request);
+  const origin = request.headers.get("origin");
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && origin && !allowedOrigins.has(origin)) return json({ error: "Request origin is not allowed" }, 403);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "access-control-allow-origin": "https://www.uzuriliving.com", "access-control-allow-credentials": "true", "access-control-allow-headers": "authorization, content-type, x-client-info, apikey", "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS" } });
 
   if (request.method === "GET" && path === "/health") {
@@ -1645,6 +1730,11 @@ async function handle(request: Request) {
   if (request.method === "POST" && path === "/auth/otp/verify-reset") return await verifyOtpReset(db, request);
 
   const user = await authenticate(request);
+  if (request.method === "GET" && path.startsWith("/exports/")) {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    return exportShopCsv(db, access.shop!, path);
+  }
   if (path === "/usage-events") { const access = await requireUser(db, request); if (access.response) return access.response; return usageEvents(db, access.user!, access.shop!, request); }
   if (request.method === "GET" && path === "/auth/me") {
     if (!user?.userId || typeof user.userId !== "string") return json({ error: "Unauthorized" }, 401);
@@ -1698,7 +1788,10 @@ async function handle(request: Request) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     if (request.method === "POST" && path === "/stock/adjust") return stockAdjust(db, access.user!, access.shop!, request);
-    if (request.method === "GET" && path.endsWith("/movements")) return stockMovements(db, access.shop!, path.slice("/stock/".length, -"/movements".length));
+    if (request.method === "GET" && path.endsWith("/movements")) {
+      if (!hasStaffPermission(access.user!, "canManageStock") && !hasStaffPermission(access.user!, "canViewProductPerformance")) return json({ error: "You do not have permission to view stock movements" }, 403);
+      return stockMovements(db, access.shop!, path.slice("/stock/".length, -"/movements".length));
+    }
   }
 
   if (path === "/expenses" || path.startsWith("/expenses/")) {
@@ -1744,6 +1837,7 @@ async function handle(request: Request) {
     return user.role === "ADMIN" ? adminReports(db, request, path) : json({ error: "Forbidden" }, 403);
   }
   if (path === "/reports" || path === "/reports/my") {
+    if (user?.role === "SUPPLIER" && typeof user.userId === "string") return reports(db, user, request, path);
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     return reports(db, access.user!, request, path);
@@ -1773,6 +1867,10 @@ async function handle(request: Request) {
   }
 
   if (path === "/settings" || path.startsWith("/settings/")) {
+    if (user?.role === "SUPPLIER" && typeof user.userId === "string") {
+      if (path === "/settings/shop") return json({ error: "Only shop owners can edit shop settings" }, 403);
+      return settings(db, user, { id: "" }, request, path);
+    }
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     return settings(db, access.user!, access.shop!, request, path);
@@ -1787,7 +1885,7 @@ async function handle(request: Request) {
   if (path === "/notifications") {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    return notifications(db, access.shop!);
+    return notifications(db, access.user!, access.shop!);
   }
 
   if (path.startsWith("/sync/admin/")) {
@@ -1801,19 +1899,23 @@ async function handle(request: Request) {
   }
 
   if (path === "/suppliers" || path.startsWith("/suppliers/")) {
+    if (path.startsWith("/suppliers/portal/") && (!user?.userId || user.staffId || !["SUPPLIER", "ADMIN"].includes(String(user.role)))) return json({ error: "Supplier access required" }, 403);
     if (user?.role === "ADMIN" && !path.startsWith("/suppliers/portal/")) return adminSuppliers(db, request, path);
     if (path === "/suppliers/portal/dashboard") { if (!user?.userId || typeof user.userId !== "string") return json({ error: "Unauthorized" }, 401); return supplierDashboard(db, user); }
     if (request.method === "PATCH" && path.startsWith("/suppliers/portal/orders/") && path.endsWith("/status")) { if (!user?.userId || typeof user.userId !== "string") return json({ error: "Unauthorized" }, 401); return supplierOrderStatus(db, user, request, path); }
+    if (path.startsWith("/suppliers/portal/")) {
+      if (!user?.userId || user.staffId || !["SUPPLIER", "ADMIN"].includes(String(user.role))) return json({ error: "Supplier access required" }, 403);
+      return supplierPortal(db, user, request, path);
+    }
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    if (path.startsWith("/suppliers/portal/")) return supplierPortal(db, access.user!, request, path);
     return suppliers(db, access.user!, access.shop!, request, path);
   }
 
   if (path === "/customer-orders" || path.startsWith("/customer-orders/")) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    return customerOrders(db, access.shop!, request, path);
+    return customerOrders(db, access.user!, access.shop!, request, path);
   }
 
   if (path === "/public/orders" && request.method === "POST") return publicOrderAtomic(db, request);
@@ -1853,11 +1955,15 @@ async function handle(request: Request) {
     return push(db, access.user!, access.shop!, request, path);
   }
 
-  return json({ error: "Route not migrated to Supabase Edge Functions yet", path }, 501);
+  return json({ error: "Route not found", path }, 404);
 }
 
-async function stockCountList(client: SupabaseClient, shop: Record<string, unknown>) { const { data, error } = await client.from("stock_counts").select("*,items:stock_count_items(*,product:products(id,name,barcode,unit,currentStock))").eq("shopId", shop.id).eq("status", "OPEN").order("createdAt", { ascending: false }).limit(1); if (error) throw error; return json({ count: data?.[0] ?? null }); }
-async function supplierOrderStatus(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { const parts = path.split("/").filter(Boolean); const orderId = parts[parts.length - 2]; const body = await request.json().catch(() => ({})); const next = String(body.status ?? "").toUpperCase(); const { data: supplier } = await client.from("suppliers").select("id").eq("userId", user.userId).maybeSingle(); if (!supplier) return json({ error: "Supplier profile not found" }, 404); const { data: order } = await client.from("orders").select("*").eq("id", orderId).eq("supplierId", supplier.id).maybeSingle(); if (!order) return json({ error: "Order not found" }, 404); const transitions: Record<string, string[]> = { PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"] }; if (!transitions[order.status]?.includes(next)) return json({ error: `Cannot move order from ${order.status} to ${next || "an empty status"}` }, 400); const { data: updated, error } = await client.from("orders").update({ status: next, updatedAt: new Date().toISOString() }).eq("id", orderId).eq("supplierId", supplier.id).select("*,shop:shops(id,name,location,district),items:order_items(*,product:products(id,name,unit))").single(); if (error) throw error; return json({ order: updated }); }
+async function stockCountList(client: SupabaseClient, shop: Record<string, unknown>) {
+  const { data, error }=await client.from("stock_counts").select("id").eq("shopId",shop.id).eq("status","OPEN").order("createdAt",{ascending:false}).limit(1);
+  if(error) throw error;
+  return data?.[0] ? stockCountRead(client,shop.id as string,data[0].id) : json({count:null});
+}
+async function supplierOrderStatus(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) { const parts = path.split("/").filter(Boolean); const orderId = parts[parts.length - 2]; const body = await request.json().catch(() => ({})); const next = String(body.status ?? "").toUpperCase(); const { data: supplier } = await client.from("suppliers").select("id").eq("userId", user.userId).maybeSingle(); if (!supplier) return json({ error: "Supplier profile not found" }, 404); const { data: order } = await client.from("orders").select("*").eq("id", orderId).eq("supplierId", supplier.id).maybeSingle(); if (!order) return json({ error: "Order not found" }, 404); const transitions: Record<string, string[]> = { PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"] }; if (!transitions[order.status]?.includes(next)) return json({ error: `Cannot move order from ${order.status} to ${next || "an empty status"}` }, 400); const { data: updated, error } = await client.from("orders").update({ status: next, updatedAt: new Date().toISOString() }).eq("id", orderId).eq("supplierId", supplier.id).eq("status", order.status).select("*,shop:shops(id,name,location,district),items:order_items(*,product:products(id,name,unit))").maybeSingle(); if (error) throw error; if (!updated) return json({ error: "The order status changed. Refresh before trying again." }, 409); return json({ order: updated }); }
 async function adminOverviewAnalytics(client: SupabaseClient) { const since30 = new Date(Date.now() - 30 * 86400000).toISOString(); const since7 = new Date(Date.now() - 7 * 86400000).toISOString(); const tables = ["users", "shops", "products", "sales", "orders", "debts", "expenses", "audit_logs"]; const counts = await Promise.all(tables.map(async (table) => [table, (await client.from(table).select("id", { count: "exact", head: true })).count ?? 0] as const)); const countMap = Object.fromEntries(counts); const [{ count: merchants }, { count: suppliers }, { count: admins }, { count: paidShops }, { count: paymentsConfirmed7d }, { data: shopRows }, { data: marketingRows }, { data: deliveries }, { count: activeDevices }, { data: shortcutRows }] = await Promise.all([client.from("users").select("id", { count: "exact", head: true }).eq("role", "MERCHANT"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "SUPPLIER"), client.from("users").select("id", { count: "exact", head: true }).eq("role", "ADMIN"), client.from("shops").select("id", { count: "exact", head: true }).in("plan", ["BASIC", "PRO", "LIFETIME"]).eq("isActive", true), client.from("subscription_payments").select("id", { count: "exact", head: true }).gte("paidAt", since7), client.from("shops").select("id,onboardingStatus,lastContactedAt,followUpNotes,acquisitionSource,products:products(id),sales:sales(id)"), client.from("marketing_events").select("eventName,source").gte("createdAt", since30), client.from("push_deliveries").select("status").gte("createdAt", since30), client.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("isActive", true), client.from("app_usage_events").select("action").eq("eventName", "android_shortcut_opened").gte("createdAt", since30)]); const onboarding: Record<string, number> = {}; for (const row of shopRows ?? []) onboarding[row.onboardingStatus ?? "NEW"] = (onboarding[row.onboardingStatus ?? "NEW"] ?? 0) + 1; const eventCounts: Record<string, number> = {}; const sourceCounts = new Map<string, { source: string; registrations: number; activated: number }>(); for (const row of marketingRows ?? []) eventCounts[row.eventName] = (eventCounts[row.eventName] ?? 0) + 1; for (const shop of shopRows ?? []) { const source = shop.acquisitionSource || "direct"; const current = sourceCounts.get(source) ?? { source, registrations: 0, activated: 0 }; current.registrations += 1; if ((shop.products?.length ?? 0) >= 10 && (shop.sales?.length ?? 0) >= 10) current.activated += 1; sourceCounts.set(source, current); } const deliveryCounts: Record<string, number> = {}; for (const row of deliveries ?? []) deliveryCounts[row.status] = (deliveryCounts[row.status] ?? 0) + 1; const shortcutCounts = new Map<string, number>(); for (const row of shortcutRows ?? []) shortcutCounts.set(row.action || "unknown", (shortcutCounts.get(row.action || "unknown") ?? 0) + 1); const shopCount = countMap.shops ?? 0; return json({ summary: { users: countMap.users ?? 0, merchants: merchants ?? 0, suppliers: suppliers ?? 0, admins: admins ?? 0, shops: shopCount, products: countMap.products ?? 0, sales: countMap.sales ?? 0, orders: countMap.orders ?? 0, debts: countMap.debts ?? 0, expenses: countMap.expenses ?? 0, paidShops: paidShops ?? 0, auditLogs: countMap.audit_logs ?? 0 }, launchAnalytics: { registrations: countMap.users ?? 0, merchantShops: shopCount, firstProductProgress: countMap.products ?? 0, firstSaleProgress: countMap.sales ?? 0, firstDebtProgress: countMap.debts ?? 0, expenseTrackingProgress: countMap.expenses ?? 0, paidShops: paidShops ?? 0, paymentsConfirmed7d: paymentsConfirmed7d ?? 0 }, onboardingAnalytics: { totalShops: shopCount, new: onboarding.NEW ?? 0, contacted: onboarding.CONTACTED ?? 0, needsHelp: onboarding.NEEDS_HELP ?? 0, setupDone: onboarding.SETUP_DONE ?? 0, activated: onboarding.ACTIVATED ?? 0, paid: onboarding.PAID ?? 0, converted: onboarding.CONVERTED ?? 0, churnRisk: onboarding.CHURN_RISK ?? 0, contactedShops: (shopRows ?? []).filter((row) => row.lastContactedAt).length, shopsWithNotes: (shopRows ?? []).filter((row) => row.followUpNotes).length, recentlyContactedShops: (shopRows ?? []).filter((row) => row.lastContactedAt && new Date(row.lastContactedAt) >= new Date(since7)).length, followUpCoverage: shopCount ? Math.round(((shopRows ?? []).filter((row) => row.lastContactedAt).length / shopCount) * 100) : 0, noteCoverage: shopCount ? Math.round(((shopRows ?? []).filter((row) => row.followUpNotes).length / shopCount) * 100) : 0 }, marketingAnalytics: { pageViews30d: eventCounts.page_view ?? 0, whatsappClicks30d: eventCounts.whatsapp_click ?? 0, registrationStarts30d: eventCounts.registration_started ?? 0, topSources: [...sourceCounts.values()].sort((a, b) => b.registrations - a.registrations).slice(0, 6) }, pushAnalytics: { activeDevices: activeDevices ?? 0, queued: deliveryCounts.QUEUED ?? 0, retrying: deliveryCounts.RETRYING ?? 0, sent30d: deliveryCounts.SENT ?? 0, failed30d: deliveryCounts.FAILED ?? 0, shortcuts30d: [...shortcutCounts.entries()].map(([action, count]) => ({ action, count })) } }); }
 
 Deno.serve(async (request) => {
@@ -1865,6 +1971,11 @@ Deno.serve(async (request) => {
     return applyCors(await handle(request), request);
   } catch (error) {
     console.error(error);
+    const detail = error as { code?: string; message?: string };
+    if (["22023", "22P02", "22003"].includes(detail.code ?? "")) return applyCors(json({ error: detail.code === "22023" ? detail.message : "Enter valid whole numbers within the supported range" }, 400), request);
+    if (detail.code === "P0002") return applyCors(json({ error: detail.message ?? "Record not found" }, 404), request);
+    if (detail.code === "40001") return applyCors(json({ error: detail.message ?? "The record changed. Refresh and try again." }, 409), request);
+    if (detail.code === "23505") return applyCors(json({ error: "This record already exists. Refresh and try again." }, 409), request);
     return applyCors(json({ error: "Internal server error" }, 500), request);
   }
 });
