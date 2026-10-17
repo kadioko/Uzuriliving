@@ -33,7 +33,7 @@ interface Product {
   id: string;
   name: string;
   unit: string;
-  buyingPrice: number;
+  buyingPrice: number | null;
   currentStock: number;
   minimumStock: number;
   onOrderQuantity?: number;
@@ -63,6 +63,14 @@ interface Order {
   items: OrderItem[];
 }
 
+interface OrderDraftItem {
+  productId: string;
+  quantity: number | "";
+  note?: string | null;
+  supplierId?: string;
+  unitPrice?: number;
+}
+
 const STATUS_COLOR: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
   CONFIRMED: "bg-blue-100 text-blue-700",
@@ -86,7 +94,7 @@ export default function OrdersPage() {
   const [catalogImport, setCatalogImport] = useState<SupplierCatalogProduct | null>(null);
   const [retailPriceDraft, setRetailPriceDraft] = useState("");
   const [minimumStockDraft, setMinimumStockDraft] = useState("5");
-  const [orderItems, setOrderItems] = useState<{ productId: string; quantity: number; note?: string | null; supplierId?: string }[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderDraftItem[]>([]);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -106,13 +114,16 @@ export default function OrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
-    const params = statusFilter !== "all" ? `?status=${statusFilter}` : "";
-    const data = await api.get<{ orders: Order[] }>(`/orders${params}`);
-    setOrders(data.orders);
-    setLoading(false);
+    try {
+      const params = statusFilter !== "all" ? `?status=${statusFilter}` : "";
+      const data = await api.get<{ orders: Order[] }>(`/orders${params}`);
+      setOrders(data.orders);
+    } finally {
+      setLoading(false);
+    }
   }, [statusFilter]);
 
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { void fetchOrders().catch((error) => toast(error instanceof Error ? error.message : t("common.error", lang), "error")); }, [fetchOrders, lang, toast]);
 
   async function fetchAllProducts() {
     const first = await api.get<{ products: Product[]; pagination?: { totalPages?: number } }>("/products?limit=1000&page=1");
@@ -134,21 +145,20 @@ export default function OrdersPage() {
 
   const supplierProducts = products;
   const visibleSupplierProducts = supplierProducts.filter((product) => {
-    if (editingOrder && product.supplier?.id && product.supplier.id !== editingOrder.supplier.id) return false;
     const query = productSearch.trim().toLowerCase();
     if (!query) return true;
     return `${product.name} ${product.supplier?.name || ""}`.toLowerCase().includes(query);
   });
   const selectedSupplierCount = new Set(orderItems.map((item) => {
-    const product = products.find((entry) => entry.id === item.productId);
-    return product ? supplierForItem(item) : "";
+    return supplierForItem(item);
   }).filter(Boolean)).size;
   const estimatedTotal = orderItems.reduce((sum, item) => {
     const product = products.find((entry) => entry.id === item.productId);
-    return sum + (product?.buyingPrice || 0) * item.quantity;
+    return sum + (item.unitPrice ?? product?.buyingPrice ?? 0) * (Number(item.quantity) || 0);
   }, 0);
 
   function supplierForItem(item: { productId: string; supplierId?: string }) {
+    if (editingOrder) return editingOrder.supplier.id;
     const product = products.find((entry) => entry.id === item.productId);
     return product?.supplier?.id || item.supplierId || selectedSupplier;
   }
@@ -157,7 +167,7 @@ export default function OrdersPage() {
     setOrderItems((prev) => {
       if (prev.find((i) => i.productId === productId)) return prev;
       const product = products.find((item) => item.id === productId);
-      return [...prev, { productId, quantity: 1, note: product?.note || "", supplierId: product?.supplier?.id || "" }];
+      return [...prev, { productId, quantity: 1, note: product?.note || "", supplierId: editingOrder?.supplier.id || product?.supplier?.id || "", ...(product?.buyingPrice != null ? { unitPrice: product.buyingPrice } : {}) }];
     });
   }
 
@@ -204,14 +214,18 @@ export default function OrdersPage() {
     }
   }
 
-  function updateItemQty(productId: string, qty: number) {
+  function updateItemQty(productId: string, value: string) {
     setOrderItems((prev) =>
-      prev.map((i) => i.productId === productId ? { ...i, quantity: Math.max(1, qty) } : i)
+      prev.map((i) => i.productId === productId ? { ...i, quantity: value === "" ? "" : Number(value) } : i)
     );
   }
 
   function updateItemNote(productId: string, note: string) {
     setOrderItems((prev) => prev.map((item) => item.productId === productId ? { ...item, note } : item));
+  }
+
+  function updateItemPrice(productId: string, value: string) {
+    setOrderItems((prev) => prev.map((item) => item.productId === productId ? { ...item, unitPrice: value === "" ? undefined : Number(value) } : item));
   }
 
   function updateItemSupplier(productId: string, supplierId: string) {
@@ -226,7 +240,7 @@ export default function OrdersPage() {
     setEditingOrder(order);
     setShowForm(true);
     setSelectedSupplier(order.supplier.id);
-    setOrderItems(order.items.map((item) => ({ productId: item.productId, quantity: item.quantity, note: item.note || "", supplierId: order.supplier.id })));
+    setOrderItems(order.items.map((item) => ({ productId: item.productId, quantity: item.quantity, note: item.note || "", supplierId: order.supplier.id, unitPrice: item.unitPrice })));
     setNote(order.note || "");
     setProductSearch("");
     setSupplierCatalog([]);
@@ -250,22 +264,34 @@ export default function OrdersPage() {
         productId: p.id,
         quantity: Math.max(p.minimumStock - p.currentStock + 5, 5),
         note: p.note || "",
+        supplierId: editingOrder?.supplier.id || p.supplier?.id || selectedSupplier,
+        ...(p.buyingPrice != null ? { unitPrice: p.buyingPrice } : {}),
       }));
-    setOrderItems(lowItems);
+    setOrderItems((current) => editingOrder ? [...current, ...lowItems.filter((item) => !current.some((existing) => existing.productId === item.productId))] : lowItems);
   }
 
   async function handleCreate() {
     if (orderItems.length === 0) return;
+    if (orderItems.some((item) => typeof item.quantity !== "number" || !Number.isInteger(item.quantity) || item.quantity < 1 || (item.unitPrice !== undefined && (!Number.isInteger(item.unitPrice) || item.unitPrice < 0)))) {
+      toast(lang === "sw" ? "Weka idadi na bei halali kwa bidhaa zote." : "Enter valid whole-number quantities and unit prices for every product.", "error");
+      return;
+    }
+    if (editingOrder && orderItems.some((item) => editingOrder.items.some((original) => original.productId === item.productId) && item.unitPrice === undefined)) {
+      toast(lang === "sw" ? "Weka bei ya kila bidhaa iliyopo kwenye order." : "Enter a unit price for each existing order item.", "error");
+      return;
+    }
+    const validItems = orderItems.map((item) => ({ ...item, quantity: Number(item.quantity) }));
     if (editingOrder) {
       setSaving(true);
       try {
-        await api.patch(`/orders/${editingOrder.id}`, { items: orderItems, note: note || null }, lang);
+        const { order: updated } = await api.patch<{ order: Order }>(`/orders/${editingOrder.id}`, { items: validItems, note: note || null }, lang);
+        setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
         setShowForm(false);
         setEditingOrder(null);
         setOrderItems([]);
         setNote("");
         toast(lang === "sw" ? "Order imebadilishwa." : "Order updated.", "success");
-        await fetchOrders();
+        void fetchOrders().catch(() => toast(lang === "sw" ? "Order imehifadhiwa, lakini orodha imeshindwa kujisasisha." : "Order saved, but the list could not refresh.", "error"));
       } catch (error) {
         toast(error instanceof Error ? error.message : t("common.error", lang), "error");
       } finally {
@@ -273,8 +299,8 @@ export default function OrdersPage() {
       }
       return;
     }
-    const groups = new Map<string, typeof orderItems>();
-    for (const item of orderItems) {
+    const groups = new Map<string, typeof validItems>();
+    for (const item of validItems) {
       const product = products.find((p) => p.id === item.productId);
       const supplierId = product ? supplierForItem(item) : "";
       if (!supplierId) {
@@ -542,6 +568,7 @@ export default function OrdersPage() {
                     )}
                   </div>
                   <button onClick={() => setExpandedOrder(expandedOrder === batchKey ? null : batchKey)}
+                    aria-label={`${expandedOrder === batchKey ? "Collapse" : "Expand"} order ${batch.map((item) => item.supplier.name).join(", ")}`}
                     className="text-gray-400 min-h-0">
                     {expandedOrder === batchKey ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
@@ -596,7 +623,7 @@ export default function OrdersPage() {
               <div>
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-brand-700">{lang === "sw" ? "Ununuzi wa supplier" : "Supplier purchasing"}</p>
                 <h3 className="text-lg font-bold text-gray-950">{editingOrder ? (lang === "sw" ? "Hariri order" : "Edit supplier order") : t("orders.newOrderTitle", lang)}</h3>
-                <p className="mt-1 text-xs text-gray-500">{editingOrder ? (lang === "sw" ? "Sasisha bidhaa, kiasi, au maelezo kabla order haijafikishwa." : "Update products, quantities, or notes while this order is not yet delivered.") : (lang === "sw" ? "Changanya bidhaa kutoka suppliers tofauti kwenye order moja." : "Combine products from different suppliers in one order batch.")}</p>
+                <p className="mt-1 text-xs text-gray-500">{editingOrder ? (lang === "sw" ? "Sasisha bidhaa, idadi, bei, au maelezo kabla order haijafikishwa." : "Update products, quantities, unit prices, or notes before delivery is received.") : (lang === "sw" ? "Changanya bidhaa kutoka suppliers tofauti kwenye order moja." : "Combine products from different suppliers in one order batch.")}</p>
               </div>
               <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80 text-gray-500 shadow-sm transition hover:bg-white hover:text-gray-900 min-h-0"><X className="w-5 h-5" /></button>
             </div>
@@ -604,7 +631,7 @@ export default function OrdersPage() {
               <div className="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-4 shadow-sm">
                 <div className="mb-3 flex items-start gap-3">
                   <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700"><Truck className="h-5 w-5" /></div>
-                  <div><label className="block text-sm font-bold text-gray-900">{lang === "sw" ? "Supplier wa default" : "Default supplier"}</label><p className="mt-0.5 text-xs leading-5 text-gray-500">{lang === "sw" ? "Inatumika kwa bidhaa ambazo bado hazijaunganishwa na supplier." : "Used only for products that are not linked to a supplier yet."}</p></div>
+                  <div><label className="block text-sm font-bold text-gray-900">{editingOrder ? (lang === "sw" ? "Supplier wa order hii" : "Supplier for this order") : (lang === "sw" ? "Supplier wa default" : "Default supplier")}</label><p className="mt-0.5 text-xs leading-5 text-gray-500">{editingOrder ? (lang === "sw" ? "Bidhaa zote unazoongeza hapa zitakuwa kwenye order ya supplier huyu." : "All products added here stay on this supplier's order.") : (lang === "sw" ? "Inatumika kwa bidhaa ambazo bado hazijaunganishwa na supplier." : "Used only for products that are not linked to a supplier yet.")}</p></div>
                 </div>
                 <select value={selectedSupplier} onChange={(e) => selectSupplier(e.target.value)} disabled={Boolean(editingOrder)}
                   className="w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500">
@@ -633,7 +660,7 @@ export default function OrdersPage() {
                       <button key={p.id} onClick={() => addItem(p.id)}
                         className={`group flex w-full items-center gap-3 rounded-xl border p-2.5 text-left text-xs transition-all ${inOrder ? "border-brand-400 bg-brand-50 shadow-sm" : "border-gray-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm"}`}>
                         {p.imageUrl ? <img src={p.imageUrl} alt="" className="h-12 w-12 flex-shrink-0 rounded-xl border border-gray-200 object-cover" /> : <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-300"><PackagePlus className="h-5 w-5" /></div>}
-                        <span className="w-28 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p.supplier?.name || (selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : (lang === "sw" ? "Chagua supplier" : "Choose supplier"))}</span>
+                        <span className="w-28 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{editingOrder?.supplier.name || p.supplier?.name || (selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : (lang === "sw" ? "Chagua supplier" : "Choose supplier"))}</span>
                         <span className="min-w-0 flex-1"><span className="block truncate font-semibold text-gray-800">{p.name}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${p.currentStock <= p.minimumStock ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>Available: {p.currentStock} {p.unit}</span></span>
                         <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${inOrder ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-400 group-hover:bg-brand-100 group-hover:text-brand-700"}`}>{inOrder ? "✓" : "+"}</span>
                       </button>
@@ -646,20 +673,26 @@ export default function OrdersPage() {
                   <div className="space-y-2">
                     {orderItems.map((item) => {
                       const p = products.find((pr) => pr.id === item.productId);
+                      const original = editingOrder?.items.find((entry) => entry.productId === item.productId);
+                      const displayProduct = p || original?.product;
                       return (
                         <div key={item.productId} className="rounded-xl border border-brand-100 bg-white p-2.5 shadow-sm">
                           <div className="flex items-center gap-2">
-                            {p?.imageUrl ? <img src={p.imageUrl} alt="" className="h-9 w-9 rounded-md border border-gray-200 object-cover" /> : <div className="h-9 w-9 rounded-md bg-gray-200" />}
-                            {p?.supplier?.name ? <span className="w-24 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p.supplier.name}</span> : <select aria-label={`Supplier for ${p?.name || "product"}`} value={item.supplierId || ""} onChange={(event) => updateItemSupplier(item.productId, event.target.value)} className="w-28 flex-shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-1.5 py-1.5 text-[10px] font-bold text-brand-800 outline-none focus:ring-2 focus:ring-brand-200"><option value="">{selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : "Assign supplier"}</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select>}
-                            <span className="flex-1 text-xs font-semibold text-gray-700">{p?.name}<span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-normal text-gray-500">Available: {p?.currentStock ?? "-"} {p?.unit}</span></span>
-                            <input aria-label={`Quantity for ${p?.name || "product"}`} type="number" value={item.quantity} min={1}
-                              onChange={(e) => updateItemQty(item.productId, Number(e.target.value))}
+                            {displayProduct?.imageUrl ? <img src={displayProduct.imageUrl} alt="" className="h-9 w-9 rounded-md border border-gray-200 object-cover" /> : <div className="h-9 w-9 rounded-md bg-gray-200" />}
+                            {editingOrder ? <span className="w-24 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{editingOrder.supplier.name}</span> : p?.supplier?.name ? <span className="w-24 flex-shrink-0 truncate text-[10px] font-bold uppercase tracking-wide text-brand-700">{p.supplier.name}</span> : <select aria-label={`Supplier for ${p?.name || "product"}`} value={item.supplierId || ""} onChange={(event) => updateItemSupplier(item.productId, event.target.value)} className="w-28 flex-shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-1.5 py-1.5 text-[10px] font-bold text-brand-800 outline-none focus:ring-2 focus:ring-brand-200"><option value="">{selectedSupplier ? suppliers.find((s) => s.id === selectedSupplier)?.name : "Assign supplier"}</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select>}
+                            <span className="flex-1 text-xs font-semibold text-gray-700">{displayProduct?.name || item.productId}<span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-normal text-gray-500">Available: {p?.currentStock ?? original?.product.currentStock ?? "-"} {displayProduct?.unit}</span></span>
+                            <input aria-label={`Quantity for ${displayProduct?.name || "product"}`} type="number" value={item.quantity} min={1}
+                              onChange={(e) => updateItemQty(item.productId, e.target.value)}
                               className="w-16 rounded-lg border border-brand-200 bg-brand-50 px-2 py-2 text-center text-xs font-bold text-brand-800 outline-none focus:ring-2 focus:ring-brand-200" />
-                            <span className="text-[10px] font-semibold text-gray-400">{p?.unit}</span>
+                            <span className="text-[10px] font-semibold text-gray-400">{displayProduct?.unit}</span>
                             <button onClick={() => removeItem(item.productId)} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 transition hover:bg-red-50 hover:text-red-500 min-h-0">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
+                          <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-gray-600">
+                            {lang === "sw" ? "Bei ya kununua kwa moja (TZS)" : "Unit purchase price (TZS)"}
+                            <input aria-label={`Unit purchase price for ${displayProduct?.name || "product"}`} type="number" min={0} step={1} value={item.unitPrice ?? ""} placeholder={p?.buyingPrice != null ? String(p.buyingPrice) : "0"} onChange={(event) => updateItemPrice(item.productId, event.target.value)} className="w-28 rounded-lg border border-brand-200 bg-brand-50 px-2 py-1.5 text-right text-xs font-semibold text-brand-800 outline-none focus:ring-2 focus:ring-brand-200" />
+                          </label>
                           <input value={item.note || ""} onChange={(e) => updateItemNote(item.productId, e.target.value)} maxLength={500}
                             placeholder={lang === "sw" ? "Maelezo ya order hii (rangi, discount, n.k.)" : "Notes for this order (colour, discount, etc.)"}
                             className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 text-xs outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />

@@ -4,7 +4,6 @@ const PAYMENT_METHODS = ["CASH", "MPESA", "TIGOPESA", "AIRTEL_MONEY", "HALOPESA"
 const ORDER_STATUSES = ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
 const SUMMARY_PERIODS = ["today", "week", "month", "all"];
 const STOCK_MOVEMENT_TYPES = ["IN", "OUT", "ADJUSTMENT"];
-const SUPPLIER_PORTAL_STATUSES = ["CONFIRMED", "OUT_FOR_DELIVERY", "CANCELLED"];
 
 function handleValidationErrors(req, res, next) {
   const result = validationResult(req);
@@ -145,11 +144,6 @@ const supplierOrdersValidation = [
   handleValidationErrors,
 ];
 
-const supplierOrderStatusValidation = [
-  body("status").custom((value) => SUPPLIER_PORTAL_STATUSES.includes(String(value).toUpperCase())).withMessage("Invalid status. Supplier can set: CONFIRMED, OUT_FOR_DELIVERY, CANCELLED"),
-  handleValidationErrors,
-];
-
 module.exports = {
   handleValidationErrors,
   productListValidation,
@@ -165,5 +159,4 @@ module.exports = {
   supplierCreateValidation,
   supplierUpdateValidation,
   supplierOrdersValidation,
-  supplierOrderStatusValidation,
 };

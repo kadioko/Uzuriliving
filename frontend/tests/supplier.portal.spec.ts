@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("supplier can confirm, dispatch, and cancel portal orders", async ({ page }) => {
+test("supplier portal shows orders but cannot change shop-managed statuses", async ({ page }) => {
   const orders = [
     {
       id: "ord-pending-1",
@@ -64,19 +64,10 @@ test("supplier can confirm, dispatch, and cancel portal orders", async ({ page }
     });
   });
 
+  let statusWrites = 0;
   await page.route("**/api/suppliers/portal/orders/*/status", async (route) => {
-    const body = JSON.parse(route.request().postData() || "{}");
-    const orderId = route.request().url().split("/").slice(-2)[0];
-    const order = orders.find((item) => item.id === orderId);
-    if (order) {
-      order.status = body.status;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ ok: true }),
-    });
+    statusWrites++;
+    await route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Owner access required" }) });
   });
 
   await page.goto("/supplier");
@@ -86,21 +77,14 @@ test("supplier can confirm, dispatch, and cancel portal orders", async ({ page }
   await expect(page.getByText("Duka la Juma")).toBeVisible();
 
   await page.getByRole("button", { name: /expand order duka la amina/i }).click();
-  await page.getByRole("button", { name: /thibitisha/i }).click();
+  await expect(page.getByText(/mmiliki wa duka au mfanyakazi mwenye ruhusa/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /thibitisha|safirishwa|kataa agizo/i })).toHaveCount(0);
 
   await page.getByRole("button", { name: /zilizothibitishwa/i }).click();
-  await expect(page.getByText("Duka la Amina")).toBeVisible();
   await expect(page.getByText("Duka la Rehema")).toBeVisible();
-  await expect(page.locator("div.bg-white.rounded-xl.border").filter({ hasText: "Duka la Amina" }).getByText(/zilizothibitishwa/i)).toBeVisible();
-  await page.getByRole("button", { name: /safirishwa duka la amina/i }).click();
-  await page.getByRole("button", { name: /zinakwenda/i }).click();
-  await expect(page.getByText("Duka la Amina")).toBeVisible();
-  await expect(page.locator("div.bg-white.rounded-xl.border").filter({ hasText: "Duka la Amina" }).locator("span").filter({ hasText: "Zinakwenda" })).toBeVisible();
-  await expect(page.getByText(/inasubiri uthibitisho wa mpokeaji/i)).toBeVisible();
-
   await page.getByRole("button", { name: /zinazosubiri/i }).click();
-  await page.getByRole("button", { name: /expand order duka la juma/i }).click();
-  await page.getByRole("button", { name: /kataa agizo duka la juma/i }).click();
+  await expect(page.getByText("Duka la Amina")).toBeVisible();
   await page.getByRole("button", { name: /yote/i }).click();
-  await expect(page.getByText(/imefutwa/i)).toBeVisible();
+  await expect(page.getByText("Duka la Juma")).toBeVisible();
+  expect(statusWrites).toBe(0);
 });

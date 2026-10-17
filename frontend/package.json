@@ -13,7 +13,7 @@
     "test:auth": "playwright test tests/auth.negative.spec.ts",
     "test:inventory": "playwright test tests/inventory.flows.spec.ts",
     "test:supplier": "playwright test tests/supplier.portal.spec.ts",
-    "test:mocked": "playwright test tests/auth.negative.spec.ts tests/inventory.flows.spec.ts tests/supplier.portal.spec.ts tests/sales.permissions.spec.ts",
+    "test:mocked": "playwright test tests/auth.negative.spec.ts tests/inventory.flows.spec.ts tests/orders.edit.spec.ts tests/supplier.portal.spec.ts tests/sales.permissions.spec.ts",
     "test:a11y": "playwright test tests/a11y.spec.ts",
     "test:e2e": "playwright test"
   },

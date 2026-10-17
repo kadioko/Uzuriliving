@@ -67,6 +67,18 @@ BEGIN
     RAISE EXCEPTION 'Invalid order edit accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
   IF (SELECT SUM(quantity) FROM order_items WHERE "orderId"=saved_order)<>2 THEN RAISE EXCEPTION 'Failed edit destroyed order lines'; END IF;
+  UPDATE orders SET status='OUT_FOR_DELIVERY' WHERE id=saved_order;
+  PERFORM save_supplier_order(shop_id,saved_order,jsonb_build_object('items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',3,'unitPrice',7,'note','Supplier correction')),'note','Edited before delivery'));
+  IF (SELECT status FROM orders WHERE id=saved_order)<>'OUT_FOR_DELIVERY'
+     OR (SELECT "totalAmount" FROM orders WHERE id=saved_order)<>21
+     OR (SELECT note FROM orders WHERE id=saved_order)<>'Edited before delivery'
+     OR (SELECT COUNT(*) FROM order_items WHERE "orderId"=saved_order AND quantity=3 AND "unitPrice"=7 AND note='Supplier correction')<>1
+  THEN RAISE EXCEPTION 'Out-for-delivery order edit did not persist'; END IF;
+  BEGIN
+    PERFORM save_supplier_order(shop_id,saved_order,jsonb_build_object('items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',0,'unitPrice',7))));
+    RAISE EXCEPTION 'Invalid out-for-delivery order edit accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+  IF (SELECT "totalAmount" FROM orders WHERE id=saved_order)<>21 OR (SELECT SUM(quantity) FROM order_items WHERE "orderId"=saved_order)<>3 THEN RAISE EXCEPTION 'Failed delivery edit changed the existing order'; END IF;
   result:=apply_subscription_payment(shop_id,owner_id,'{"plan":"BASIC","amount":15000,"months":1,"reference":"AUDIT-PAYMENT"}');
   repeat_result:=apply_subscription_payment(shop_id,owner_id,'{"plan":"BASIC","amount":15000,"months":1,"reference":"AUDIT-PAYMENT"}');
   IF result->'shop'->>'subscriptionEndsAt'<>repeat_result->'shop'->>'subscriptionEndsAt' OR (SELECT COUNT(*) FROM subscription_payments WHERE "shopId"=shop_id)<>1 THEN RAISE EXCEPTION 'Payment retry duplicated entitlement'; END IF;
@@ -84,4 +96,4 @@ BEGIN
   IF has_table_privilege('anon','public.users','SELECT') OR has_function_privilege('anon','public.record_shop_sale(text,text,text,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'Anonymous database access is still open'; END IF;
 END $$;
 ROLLBACK;
-SELECT 'passed: stock/sale/order atomicity, retries, debt ledger, reservations, stale counts, billing, registration, login identity, rate limits, anonymous access restrictions' AS result;
+SELECT 'passed: stock/sale/order atomicity, delivery edits, retries, debt ledger, reservations, stale counts, billing, registration, login identity, rate limits, anonymous access restrictions' AS result;

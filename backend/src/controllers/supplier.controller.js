@@ -244,36 +244,6 @@ const myOrders = asyncHandler(async (req, res) => {
   res.json({ orders, total, limit: Math.min(Number(limit), 200), offset: Number(offset) });
 });
 
-const updateOrderStatus = asyncHandler(async (req, res) => {
-  const supplierRecord = await getPortalSupplier(req.user);
-  if (!supplierRecord) return res.status(404).json({ error: "Supplier profile not found" });
-
-  const { status } = req.body;
-
-  const order = await prisma.order.findFirst({
-    where: { id: req.params.orderId, supplierId: supplierRecord.id },
-  });
-  if (!order) return res.status(404).json({ error: "Order not found" });
-
-  // Enforce forward-only transitions
-  const transitions = { PENDING: ["CONFIRMED", "CANCELLED"], CONFIRMED: ["OUT_FOR_DELIVERY", "CANCELLED"] };
-  const allowed = transitions[order.status] || [];
-  if (!allowed.includes(status.toUpperCase())) {
-    return res.status(400).json({ error: `Cannot move order from ${order.status} to ${status.toUpperCase()}` });
-  }
-
-  const updated = await prisma.order.update({
-    where: { id: order.id },
-    data: { status: status.toUpperCase() },
-    include: {
-      shop: { select: { id: true, name: true, location: true } },
-      items: { include: { product: { select: { id: true, name: true, unit: true } } } },
-    },
-  });
-
-  res.json({ order: updated });
-});
-
 const listPortalProducts = asyncHandler(async (req, res) => {
   const supplierRecord = await getPortalSupplier(req.user);
   if (!supplierRecord) return res.status(404).json({ error: "Supplier profile not found" });
@@ -396,4 +366,4 @@ const supplierDashboard = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { list, get, create, update, importCatalogProduct, remove, myOrders, updateOrderStatus, listPortalProducts, createPortalProduct, updatePortalProduct, removePortalProduct, supplierDashboard };
+module.exports = { list, get, create, update, importCatalogProduct, remove, myOrders, listPortalProducts, createPortalProduct, updatePortalProduct, removePortalProduct, supplierDashboard };

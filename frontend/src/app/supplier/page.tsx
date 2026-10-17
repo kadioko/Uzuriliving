@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api, clearToken, formatTZS } from "@/lib/api";
-import { LogOut, Check, X, Truck, ChevronDown, ChevronUp, Package, Plus, ArrowLeft, Edit2 } from "lucide-react";
+import { LogOut, X, Truck, ChevronDown, ChevronUp, Package, Plus, ArrowLeft, Edit2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import LogoMark from "@/components/brand/LogoMark";
 import { setLanguage, useLang, type Lang } from "@/lib/i18n";
@@ -63,8 +63,7 @@ const copy = {
   cancelled: { sw: "Imefutwa", en: "Cancelled" },
   noOrders: { sw: "Hakuna maagizo", en: "No orders" },
   waitingMerchant: { sw: "Inasubiri uthibitisho wa mpokeaji", en: "Waiting for merchant delivery confirmation" },
-  rejectOrder: { sw: "Kataa Agizo", en: "Reject order" },
-  updating: { sw: "Inasasisha...", en: "Updating..." },
+  orderReadOnly: { sw: "Mmiliki wa duka au mfanyakazi mwenye ruhusa ndiye anayedhibiti hali ya order.", en: "The shop owner or authorized staff manages order status." },
   saveProductSuccess: { sw: "Bidhaa imehifadhiwa", en: "Product saved" },
   saveProductError: { sw: "Imeshindikana kuhifadhi bidhaa", en: "Could not save product" },
   validProductError: { sw: "Weka jina na bei sahihi ya bidhaa", en: "Enter a valid product name and price" },
@@ -96,7 +95,6 @@ export default function SupplierPortal() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("PENDING");
-  const [updating, setUpdating] = useState<string | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<SupplierProduct | null>(null);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -129,25 +127,6 @@ export default function SupplierPortal() {
     DELIVERED: copy.delivered[lang],
     CANCELLED: copy.cancelled[lang],
   };
-
-  // Supplier advances orders up to OUT_FOR_DELIVERY only.
-  // The merchant confirms delivery, which also restocks their inventory.
-  const statusNext: Record<string, { action: string; label: string; color: string }> = {
-    PENDING: { action: "CONFIRMED", label: lang === "sw" ? "Thibitisha" : "Confirm", color: "bg-blue-600" },
-    CONFIRMED: { action: "OUT_FOR_DELIVERY", label: lang === "sw" ? "Safirishwa" : "Mark out for delivery", color: "bg-purple-600" },
-  };
-
-  async function updateStatus(orderId: string, status: string) {
-    setUpdating(orderId);
-    try {
-      await api.patch(`/suppliers/portal/orders/${orderId}/status`, { status });
-      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
-    } catch (e: unknown) {
-      toast(e instanceof Error ? e.message : copy.genericError[lang], "error");
-    } finally {
-      setUpdating(null);
-    }
-  }
 
   async function changeLanguage(nextLang: Lang) {
     setLanguage(nextLang);
@@ -361,7 +340,6 @@ export default function SupplierPortal() {
         ) : (
           <div className="space-y-3">
             {filtered.map((order) => {
-              const nextAction = statusNext[order.status];
               return (
                 <div key={order.id} className="bg-white rounded-xl border border-gray-200 p-4">
                   <div className="flex items-start justify-between">
@@ -405,36 +383,12 @@ export default function SupplierPortal() {
                       </div>
                       {order.note && <p className="text-xs text-gray-400 italic mb-3">"{order.note}"</p>}
 
-                      {nextAction && (
-                        <button
-                          onClick={() => updateStatus(order.id, nextAction.action)}
-                          disabled={updating === order.id}
-                          aria-label={`${nextAction.label} ${order.shop.name}`}
-                          className={`w-full ${nextAction.color} text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-60 flex items-center justify-center gap-2`}
-                        >
-                          {updating === order.id ? (
-                            copy.updating[lang]
-                          ) : (
-                            <>
-                              <Check className="w-4 h-4" />
-                              {nextAction.label}
-                            </>
-                          )}
-                        </button>
-                      )}
-
                       {order.status === "OUT_FOR_DELIVERY" && (
                         <p className="text-xs text-gray-400 text-center mt-2">
                           {copy.waitingMerchant[lang]}
                         </p>
                       )}
-                      {order.status === "PENDING" && (
-                        <button onClick={() => updateStatus(order.id, "CANCELLED")}
-                          aria-label={`${copy.rejectOrder[lang]} ${order.shop.name}`}
-                          className="w-full mt-2 border border-red-200 text-red-600 py-2 rounded-lg text-sm hover:bg-red-50 flex items-center justify-center gap-2">
-                          <X className="w-3.5 h-3.5" /> {copy.rejectOrder[lang]}
-                        </button>
-                      )}
+                      <p className="mt-2 text-xs text-gray-500">{copy.orderReadOnly[lang]}</p>
                     </div>
                   )}
                 </div>
