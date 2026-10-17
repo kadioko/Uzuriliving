@@ -62,8 +62,8 @@ jobs:
           grep -q 'https://uzuriliving.com/sales' android/twa-manifest.json
           grep -q 'https://uzuriliving.com/inventory' android/twa-manifest.json
           grep -q 'https://uzuriliving.com/debts' android/twa-manifest.json
-          curl --fail --silent --show-error https://www.uzuriliving.com/manifest.json | grep -q 'Uzuri Living'
-          curl --fail --silent --show-error https://www.uzuriliving.com/.well-known/assetlinks.json | grep -q 'com.uzuriliving.app'
+          curl --fail --silent --show-error https://uzuriliving.com/manifest.json | grep -q 'Uzuri Living'
+          curl --fail --silent --show-error https://uzuriliving.com/.well-known/assetlinks.json | grep -q 'com.uzuriliving.app'
 
   playwright-mocked:
     runs-on: ubuntu-latest
