@@ -421,7 +421,11 @@ async function productList(client: SupabaseClient, request: Request, user: Recor
   const search = url.searchParams.get("search")?.trim();
   const lowStock = url.searchParams.get("lowStock") === "true";
   let query = client.from("products").select("*,supplier:suppliers(id,name,phone)", { count: "exact" }).eq("shopId", shop.id).eq("isActive", true);
-  if (search) query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,barcode.ilike.%${search.toUpperCase()}%`);
+  if (search) {
+    // A product name may contain extra spaces, while a customer types a single space.
+    const namePattern = search.split(/\s+/).join("%");
+    query = query.or(`name.ilike.%${namePattern}%,sku.ilike.%${search}%,barcode.ilike.%${search.toUpperCase()}%`);
+  }
   const { data, count, error } = await query.order("name").range((page - 1) * limit, page * limit - 1);
   if (error) throw error;
   const { data: openOrders, error: openOrdersError } = await client.from("orders").select("status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
@@ -1271,10 +1275,14 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
       const { error: updateError } = await client.from("orders").update({ status: "DELIVERED", receivedAt: now, receivedTotalAmount: requestedReceivedTotal, updatedAt: now }).eq("id", orderId).eq("shopId", shop.id);
       if (updateError) throw updateError;
       for (const item of existing.items ?? []) {
-        const { data: product } = await client.from("products").select("currentStock").eq("id", item.productId).single();
+        const { data: product, error: productError } = await client.from("products").select("currentStock").eq("id", item.productId).eq("shopId", shop.id).single();
+        if (productError) throw productError;
         if (product) {
-          await client.from("products").update({ currentStock: product.currentStock + item.quantity, updatedAt: now }).eq("id", item.productId);
-          await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: item.quantity, note: `Order delivery #${orderId.slice(-6)}`, productId: item.productId, createdById: user.userId, createdByStaffId: user.staffId ?? null });
+          // A received item must be visible in inventory even if it was archived after ordering.
+          const { error: stockError } = await client.from("products").update({ currentStock: product.currentStock + item.quantity, isActive: true, updatedAt: now }).eq("id", item.productId).eq("shopId", shop.id);
+          if (stockError) throw stockError;
+          const { error: movementError } = await client.from("stock_movements").insert({ id: crypto.randomUUID(), type: "IN", quantity: item.quantity, note: `Order delivery #${orderId.slice(-6)}`, productId: item.productId, createdById: user.userId, createdByStaffId: user.staffId ?? null });
+          if (movementError) throw movementError;
         }
       }
       return json({ message: "Delivery confirmed and stock updated" });

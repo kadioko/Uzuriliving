@@ -140,9 +140,16 @@ const [stockCountCode, setStockCountCode] = useState("");
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       params.set("limit", "1000");
-      const data = await api.get<{ products: Product[] }>(`/products?${params}`);
+      params.set("page", "1");
+      const first = await api.get<{ products: Product[]; pagination?: { totalPages?: number } }>(`/products?${params}`);
+      const totalPages = first.pagination?.totalPages ?? 1;
+      const remaining = await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => {
+        const nextParams = new URLSearchParams(params);
+        nextParams.set("page", String(index + 2));
+        return api.get<{ products: Product[] }>(`/products?${nextParams}`);
+      }));
       if (requestId !== latestLoad.current) return;
-      setProducts(data.products);
+      setProducts([first.products, ...remaining.map((page) => page.products)].flat());
     } catch (value: unknown) {
       if (requestId === latestLoad.current) {
         toast(value instanceof Error ? value.message : (lang === "sw" ? "Imeshindikana kupakia bidhaa." : "Could not load products."), "error");

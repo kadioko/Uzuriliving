@@ -388,8 +388,8 @@ export default function SalesPage() {
 
   const historyTotalPages = Math.max(1, Math.ceil(historyTotal / HISTORY_PAGE_SIZE));
 
-  const query = search.trim().toLowerCase();
-  const filtered = products.filter((p) => !query || `${p.name} ${p.sku || ""} ${p.barcode || ""}`.toLowerCase().includes(query));
+  const query = search.trim().replace(/\s+/g, " ").toLowerCase();
+  const filtered = products.filter((p) => !query || `${p.name} ${p.sku || ""} ${p.barcode || ""}`.replace(/\s+/g, " ").toLowerCase().includes(query));
 
   function defaultPriceFor(product: Product): number {
     if (saleMode === "WHOLESALE" && product.wholesalePrice != null) {
