@@ -238,12 +238,12 @@ interface BillingDraft {
 
 type Tab = "overview" | "users" | "audit" | "reset" | "reports" | "subscriptions" | "suppliers" | "sync";
 
-async function optionalAdminLoad<T>(label: string, request: Promise<T>, fallback: T): Promise<T> {
+async function optionalAdminLoad<T>(label: string, request: Promise<T>, fallback: T): Promise<{ value: T; error: string | null }> {
   try {
-    return await request;
+    return { value: await request, error: null };
   } catch (error) {
     console.warn(`Admin optional load failed: ${label}`, error);
-    return fallback;
+    return { value: fallback, error: error instanceof Error ? error.message : `Unable to load ${label}` };
   }
 }
 
@@ -335,6 +335,9 @@ export default function AdminPage() {
   const [billingDrafts, setBillingDrafts] = useState<Record<string, BillingDraft>>({});
   const [supplierNotes, setSupplierNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [loadErrors, setLoadErrors] = useState<Partial<Record<Tab, string>>>({});
+  const [fatalError, setFatalError] = useState("");
+  const [reloadCount, setReloadCount] = useState(0);
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
 
   // User search / PIN reset
@@ -349,6 +352,9 @@ export default function AdminPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setLoadErrors({});
+    setFatalError("");
     api.get<{ user: { role: string } }>("/auth/me")
       .then(({ user }) => {
         if (user.role !== "ADMIN") throw new Error("Admin access required");
@@ -366,26 +372,37 @@ export default function AdminPage() {
       })
       .then(([ov, u, al, rp, sub, supplierData, syncData, syncEventsData, assistantAnalytics]) => {
         if (cancelled) return;
-        setOverview(ov && assistantAnalytics ? { ...ov, assistantAnalytics } : ov);
-        setUsers(u.users);
-        setAuditLogs(al.logs);
-        setReports(rp.reports);
-        setSubscriptions(sub.shops);
-        setSuppliers(supplierData.suppliers);
-        setSyncSummaries(syncData.shops);
-        setSyncEvents(syncEventsData.events);
-        setSyncDevices(syncEventsData.devices);
-        setFollowUpDrafts(Object.fromEntries(sub.shops.map((shop) => [shop.id, shop.followUpNotes || ""])));
-        setSupplierNotes(Object.fromEntries(supplierData.suppliers.map((supplier) => [supplier.id, supplier.adminNotes || ""])));
+        setOverview(ov.value && assistantAnalytics.value ? { ...ov.value, assistantAnalytics: assistantAnalytics.value } : ov.value);
+        setUsers(u.value.users);
+        setAuditLogs(al.value.logs);
+        setReports(rp.value.reports);
+        setSubscriptions(sub.value.shops);
+        setSuppliers(supplierData.value.suppliers);
+        setSyncSummaries(syncData.value.shops);
+        setSyncEvents(syncEventsData.value.events);
+        setSyncDevices(syncEventsData.value.devices);
+        setFollowUpDrafts(Object.fromEntries(sub.value.shops.map((shop) => [shop.id, shop.followUpNotes || ""])));
+        setSupplierNotes(Object.fromEntries(supplierData.value.suppliers.map((supplier) => [supplier.id, supplier.adminNotes || ""])));
+        setLoadErrors({
+          ...(ov.error || assistantAnalytics.error ? { overview: ov.error || assistantAnalytics.error || "Unable to load overview" } : {}),
+          ...(u.error ? { users: u.error } : {}),
+          ...(al.error ? { audit: al.error } : {}),
+          ...(rp.error ? { reports: rp.error } : {}),
+          ...(sub.error ? { subscriptions: sub.error } : {}),
+          ...(supplierData.error ? { suppliers: supplierData.error } : {}),
+          ...(syncData.error || syncEventsData.error ? { sync: syncData.error || syncEventsData.error || "Unable to load sync data" } : {}),
+        });
       })
       .catch((error) => {
-        if (!cancelled && error instanceof Error && !error.message.includes("Session expired")) console.error(error);
+        if (cancelled) return;
+        setFatalError(error instanceof Error ? error.message : "Unable to load the admin dashboard");
+        if (error instanceof Error && !error.message.includes("Session expired")) console.error(error);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadCount]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -858,6 +875,18 @@ export default function AdminPage() {
     );
   }
 
+  if (fatalError) {
+    return (
+      <AppShell>
+        <div role="alert" className="mx-auto max-w-2xl rounded-xl border border-red-200 bg-red-50 p-5 text-red-900">
+          <h1 className="font-semibold">Admin dashboard unavailable</h1>
+          <p className="mt-1 text-sm">{fatalError}</p>
+          <button type="button" onClick={() => setReloadCount((count) => count + 1)} className="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-red-800 shadow-sm">Retry loading</button>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto pb-24 lg:pb-6">
@@ -883,6 +912,15 @@ export default function AdminPage() {
           ))}
         </div>
 
+        {loadErrors[tab] ? (
+          <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+            <h2 className="font-semibold">Unable to load {TABS.find((item) => item.id === tab)?.label || tab}</h2>
+            <p className="mt-1 text-sm">{loadErrors[tab]}</p>
+            <p className="mt-1 text-sm">The data is unavailable; an empty list or zero count would be misleading.</p>
+            <button type="button" onClick={() => setReloadCount((count) => count + 1)} className="mt-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-amber-900 shadow-sm">Retry loading</button>
+          </div>
+        ) : (
+          <>
         {/* OVERVIEW */}
         {tab === "overview" && overview && (
           <div className="space-y-4">
@@ -2299,6 +2337,8 @@ export default function AdminPage() {
               ))
             )}
           </div>
+        )}
+          </>
         )}
       </div>
     </AppShell>

@@ -15,7 +15,6 @@ Production is live at:
 What is strong:
 
 - The domain, HTTPS redirect, Vercel hosting, Supabase API, and production database are working.
-- Push launch: deploy migration `20260722001000_push_notifications_and_app_usage`, set `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, and `VAPID_PRIVATE_KEY` in Supabase, then create a dedicated Supabase cron service with start command `npm run push:process` and schedule `0 5 * * *` UTC. Do not expose or commit the private VAPID key.
 - The product already has the critical merchant workflow: registration, inventory, sales, debts, expenses, staff, billing, catalog, supplier orders, AI assistant, Swahili/English, and WhatsApp support.
 - Pricing is understandable for Tanzania: free trial, TZS 15,000/month Basic, TZS 35,000/month Pro.
 - The product has a natural sales motion: WhatsApp support plus M-Pesa payment reference verification.
@@ -24,6 +23,8 @@ What is strong:
 
 What should improve before scaling ads:
 
+- SMS PIN reset is not active until the production Africa's Talking `AT_API_KEY` and `AT_USERNAME` are set as Supabase Edge Function secrets and delivery is tested with an authorized phone. Never put these values in Git or chat.
+- Browser push is not active. The Supabase API stores preferences and device subscriptions, but it does not send Web Push messages. The legacy `npm run push:process` command depends on the old Prisma backend and is not a Supabase cron service. Build and schedule a Supabase-native sender, then configure `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and finally `PUSH_DELIVERY_ENABLED=true` only after a real delivery test. Do not expose or commit the private key.
 - The homepage is currently login-first. That is good for returning users, but cold visitors need a clearer promise before the form: "Track stock, sales, debts, and supplier orders in Kiswahili from your phone."
 - Public pages should show screenshots or short videos of dashboard, sales, inventory, catalog, and AI Assistant.
 - Keep Search Console verified, submit the sitemap after public-page changes, and build trustworthy local backlinks; technical metadata and structured data are already in place.

@@ -64,8 +64,7 @@ public class PrintActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         IntentFilter filter = new IntentFilter(USB_PERMISSION_ACTION);
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        else registerReceiver(usbPermissionReceiver, filter);
+        ContextCompat.registerReceiver(this, usbPermissionReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         pendingUri = getIntent().getData();
         if (pendingUri == null || !"uzuriliving".equals(pendingUri.getScheme()) || !"print".equals(pendingUri.getHost())) {
             showResult(false, "Invalid Uzuri Living print request.");

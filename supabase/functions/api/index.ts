@@ -1567,7 +1567,58 @@ async function adminSuppliers(client: SupabaseClient, request: Request, path: st
 
 async function publicOrderAtomic(client: SupabaseClient, request: Request) { const body = await request.json().catch(() => ({})); if (!body.shopId || !body.customerName || !body.customerPhone || !Array.isArray(body.items) || !body.items.length) return json({ error: "shopId, customerName, customerPhone, and items are required" }, 400); const { data: shop } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", body.shopId).maybeSingle(); if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "This shop is not currently accepting catalog orders" }, 402); const items: Array<{ productId: string; quantity: number; pricingTier: string }> = body.items.map((item: Record<string, unknown>) => ({ productId: String(item.productId ?? "").trim(), quantity: Number(item.quantity), pricingTier: String(item.pricingTier ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL" })); if (items.some((item) => !item.productId || !Number.isInteger(item.quantity) || item.quantity <= 0)) return json({ error: "Each item must include a productId and a whole-number quantity greater than 0" }, 400); const { data, error } = await client.rpc("create_public_customer_order", { p_shop_id: shop.id, p_customer_name: String(body.customerName).trim(), p_customer_phone: normalizePhone(body.customerPhone), p_note: body.note ? String(body.note).trim() : null, p_items: items }); if (error) { if (error.code === "22023") return json({ error: error.message }, 400); throw error; } return json({ order: data, shopWhatsAppUrl: null }, 201); }
 
-async function push(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) { if (path === "/push/config") return json({ enabled: Boolean(Deno.env.get("VAPID_PUBLIC_KEY")), publicKey: Deno.env.get("VAPID_PUBLIC_KEY") || null }); if (path === "/push/preferences" && request.method === "GET") { const { data: preferences } = await client.from("notification_preferences").upsert({ id: crypto.randomUUID(), shopId: shop.id, createdAt: new Date().toISOString() }, { onConflict: "shopId" }).select("*").single(); const { data: subscriptions } = await client.from("push_subscriptions").select("id,deviceId,deviceLabel,isActive,lastSeenAt").eq("shopId", shop.id); return json({ preferences, subscriptions: subscriptions ?? [], pushConfigured: Boolean(Deno.env.get("VAPID_PUBLIC_KEY")) }); } if (path === "/push/preferences" && request.method === "PATCH") { const body = await request.json().catch(() => ({})); const fields = ["lowStock", "debtDue", "subscriptionExpiry", "dailyAssistant"]; const update = Object.fromEntries(fields.filter((key) => typeof body[key] === "boolean").map((key) => [key, body[key]])); const { data, error } = await client.from("notification_preferences").upsert({ id: crypto.randomUUID(), shopId: shop.id, ...update, updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() }, { onConflict: "shopId" }).select("*").single(); if (error) throw error; return json({ preferences: data }); } if (path === "/push/subscribe" && request.method === "POST") { const body = await request.json().catch(() => ({})); if (!String(body.endpoint ?? "").startsWith("https://") || !body.keys?.p256dh || !body.keys?.auth || !body.deviceId) return json({ error: "A valid device subscription is required" }, 400); const now = new Date().toISOString(); const { error } = await client.from("push_subscriptions").upsert({ id: crypto.randomUUID(), shopId: shop.id, endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth, deviceId: body.deviceId, deviceLabel: body.deviceLabel || null, userId: user.userId, isActive: true, failureCount: 0, lastSeenAt: now, createdAt: now, updatedAt: now }, { onConflict: "shopId,deviceId" }); if (error) throw error; return json({ message: "Device alerts enabled" }, 201); } if (path === "/push/unsubscribe" && request.method === "POST") { const body = await request.json().catch(() => ({})); const { error } = await client.from("push_subscriptions").update({ isActive: false, updatedAt: new Date().toISOString() }).eq("shopId", shop.id).eq("deviceId", body.deviceId); if (error) throw error; return json({ message: "Device alerts disabled" }); } if (path === "/push/deliveries") { const { data, error } = await client.from("push_deliveries").select("*").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(100); if (error) throw error; return json({ deliveries: data ?? [] }); } return json({ error: "Push route not found" }, 404); }
+const defaultNotificationPreferences = { lowStock: true, debtDue: true, subscriptionExpiry: true, dailyAssistant: false };
+
+function pushDeliveryConfigured() {
+  return Deno.env.get("PUSH_DELIVERY_ENABLED") === "true" && Boolean(Deno.env.get("VAPID_PUBLIC_KEY") && Deno.env.get("VAPID_PRIVATE_KEY") && Deno.env.get("VAPID_SUBJECT"));
+}
+
+async function push(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, path: string) {
+  if (path === "/push/config") {
+    const enabled = pushDeliveryConfigured();
+    return json({ enabled, publicKey: enabled ? Deno.env.get("VAPID_PUBLIC_KEY") : null });
+  }
+  if (path === "/push/preferences" && request.method === "GET") {
+    const [{ data: preferences, error: preferencesError }, { data: subscriptions, error: subscriptionsError }] = await Promise.all([
+      client.from("notification_preferences").select("*").eq("shopId", shop.id).maybeSingle(),
+      client.from("push_subscriptions").select("id,deviceId,deviceLabel,isActive,lastSeenAt").eq("shopId", shop.id),
+    ]);
+    if (preferencesError) throw preferencesError;
+    if (subscriptionsError) throw subscriptionsError;
+    return json({ preferences: preferences ?? defaultNotificationPreferences, subscriptions: subscriptions ?? [], pushConfigured: pushDeliveryConfigured() });
+  }
+  if (path === "/push/preferences" && request.method === "PATCH") {
+    const body = await request.json().catch(() => ({}));
+    const fields = ["lowStock", "debtDue", "subscriptionExpiry", "dailyAssistant"];
+    const update = Object.fromEntries(fields.filter((key) => typeof body[key] === "boolean").map((key) => [key, body[key]]));
+    const { data: existing, error: readError } = await client.from("notification_preferences").select("id,createdAt").eq("shopId", shop.id).maybeSingle();
+    if (readError) throw readError;
+    const now = new Date().toISOString();
+    const { data, error } = await client.from("notification_preferences").upsert({ id: existing?.id ?? crypto.randomUUID(), shopId: shop.id, ...update, updatedAt: now, createdAt: existing?.createdAt ?? now }, { onConflict: "shopId" }).select("*").single();
+    if (error) throw error;
+    return json({ preferences: data });
+  }
+  if (path === "/push/subscribe" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    if (!String(body.endpoint ?? "").startsWith("https://") || !body.keys?.p256dh || !body.keys?.auth || !body.deviceId) return json({ error: "A valid device subscription is required" }, 400);
+    const now = new Date().toISOString();
+    const { error } = await client.from("push_subscriptions").upsert({ id: crypto.randomUUID(), shopId: shop.id, endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth, deviceId: body.deviceId, deviceLabel: body.deviceLabel || null, userId: user.userId, isActive: true, failureCount: 0, lastSeenAt: now, createdAt: now, updatedAt: now }, { onConflict: "shopId,deviceId" });
+    if (error) throw error;
+    return json({ message: "Device alerts enabled" }, 201);
+  }
+  if (path === "/push/unsubscribe" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const { error } = await client.from("push_subscriptions").update({ isActive: false, updatedAt: new Date().toISOString() }).eq("shopId", shop.id).eq("deviceId", body.deviceId);
+    if (error) throw error;
+    return json({ message: "Device alerts disabled" });
+  }
+  if (path === "/push/deliveries") {
+    const { data, error } = await client.from("push_deliveries").select("*").eq("shopId", shop.id).order("createdAt", { ascending: false }).limit(100);
+    if (error) throw error;
+    return json({ deliveries: data ?? [] });
+  }
+  return json({ error: "Push route not found" }, 404);
+}
 
 async function supplierPortal(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) {
   const { data: supplier, error: supplierError } = await client.from("suppliers").select("id").eq("userId", user.userId).maybeSingle();
