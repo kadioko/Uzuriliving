@@ -1575,7 +1575,7 @@ async function supplierPortal(client: SupabaseClient, user: Record<string, unkno
   if (!supplier) return json({ error: "Supplier profile not found" }, 404);
   if (path === "/suppliers/portal/dashboard") return supplierDashboard(client, user);
   if (path === "/suppliers/portal/orders" || path.startsWith("/suppliers/portal/orders/")) {
-    if (request.method !== "GET") return json({ error: "Use the order status endpoint" }, 405);
+    if (request.method !== "GET") return json({ error: "Supplier orders are read-only; the shop owner or authorized stock staff manages them" }, 403);
     const orderId = path === "/suppliers/portal/orders" ? null : path.split("/").pop();
     const rows = await readAll(() => {
       let query = client.from("orders").select("*,shop:shops(id,name,location,district),items:order_items(*,product:products(id,name,unit))").eq("supplierId", supplier.id).order("createdAt", { ascending: false }).order("id");
