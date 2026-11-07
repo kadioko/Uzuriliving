@@ -1635,12 +1635,103 @@ async function stockCountRead(client: SupabaseClient, shopId: string, id: string
   return json({ count: { ...count, items } },status);
 }
 
-async function assistantStockSnapshot(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
-  if (!hasStaffPermission(user, "canUseAssistant") || !hasStaffPermission(user, "canManageStock")) return json({ error: "You do not have permission to view assistant stock recommendations" }, 403);
-  const response = await productList(client, new Request(new URL("/products?lowStock=true&limit=1000", request.url)), user, shop);
-  if (!response.ok) return json({ error: "Stock data is unavailable" }, response.status);
-  const result = await response.json();
-  return json({ products: result.products ?? [], checkedAt: new Date().toISOString(), source: "Inventory and open supplier orders", href: "/inventory?lowStock=true", timeZone: shopTimeZone(shop) });
+async function assistantStockSnapshot(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>) {
+  if (!hasStaffPermission(user, "canUseAssistant") || !hasStaffPermission(user, "canViewInventoryAndPrices")) return json({ error: "You do not have permission to view stock through the assistant" }, 403);
+  const { data, error } = await client.rpc("assistant_stock_snapshot", {
+    p_shop_id: shop.id,
+    p_time_zone: shopTimeZone(shop),
+    p_can_manage_stock: hasStaffPermission(user, "canManageStock"),
+    p_can_view_reports: hasStaffPermission(user, "canViewReports"),
+  });
+  if (error) throw error;
+  return json({ ...data, source: "Inventory and open supplier orders", href: "/inventory?lowStock=true" });
+}
+
+function assistantStartOfTomorrow(now: Date, timeZone: string) {
+  return startOfTimeZoneDate(shiftDateKey(dateKeyInTimeZone(now, timeZone), 1), timeZone);
+}
+
+function assistantSnapshotPermissions(user: Record<string, unknown>) {
+  return Object.fromEntries(["canViewReports", "canSell", "canRecordExpenses", "canManageStock", "canViewInventoryAndPrices"].map((permission) => [permission, hasStaffPermission(user, permission)]));
+}
+
+async function assistantHomeSnapshot(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>) {
+  if (!hasStaffPermission(user, "canUseAssistant")) return json({ error: "You do not have permission to use the assistant" }, 403);
+  const { data, error } = await client.rpc("assistant_shop_snapshot", {
+    p_shop_id: shop.id,
+    p_time_zone: shopTimeZone(shop),
+    p_permissions: assistantSnapshotPermissions(user),
+  });
+  if (error) throw error;
+  return json({ ...(data ?? {}), permissions: assistantSnapshotPermissions(user) });
+}
+
+function assistantDateTimeInTimeZone(dateKey: string, timeZone: string, hour: number, minute: number, second: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const wallClock = Date.UTC(year, month - 1, day, hour, minute, second);
+  let result = new Date(wallClock);
+  for (let index = 0; index < 3; index += 1) result = new Date(wallClock - timeZoneOffsetMs(result, timeZone));
+  return result;
+}
+
+function assistantShiftMonth(dateKey: string, amount: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const targetMonth = new Date(Date.UTC(year, month - 1 + amount, 1));
+  const lastDay = new Date(Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${targetMonth.getUTCFullYear()}-${String(targetMonth.getUTCMonth() + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
+function assistantRange(period: string, now: Date, timeZone: string, customFrom?: string, customTo?: string) {
+  const today = dateKeyInTimeZone(now, timeZone);
+  const todayStart = startOfTimeZoneDate(today, timeZone);
+  const local = timeZoneParts(now, timeZone);
+  const yearStart = startOfTimeZoneDate(`${local.year}-01-01`, timeZone);
+  const monthStart = startOfTimeZoneDate(`${local.year}-${local.month}-01`, timeZone);
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const weekStart = startOfTimeZoneDate(shiftDateKey(today, -((weekday + 6) % 7)), timeZone);
+  if (period === "today") return { from: todayStart, to: now };
+  if (period === "yesterday") return { from: startOfTimeZoneDate(shiftDateKey(today, -1), timeZone), to: todayStart };
+  if (period === "last_7_days") return { from: startOfTimeZoneDate(shiftDateKey(today, -6), timeZone), to: now };
+  if (period === "this_week") return { from: weekStart, to: now };
+  if (period === "last_week") return { from: addCalendarDaysInTimeZone(weekStart, -7, timeZone), to: weekStart };
+  if (period === "month") return { from: monthStart, to: now };
+  if (period === "last_month") return { from: startOfTimeZoneDate(assistantShiftMonth(`${local.year}-${local.month}-01`, -1), timeZone), to: monthStart };
+  if (period === "year") return { from: yearStart, to: now };
+  if (period === "custom" && customFrom && customTo) {
+    const from = parseDateInTimeZone(customFrom, timeZone);
+    const inclusiveTo = parseDateInTimeZone(customTo, timeZone);
+    return from && inclusiveTo ? { from, to: addCalendarDaysInTimeZone(inclusiveTo, 1, timeZone) } : null;
+  }
+  if (period === "all" || period === "current") return { from: null, to: null };
+  return { from: monthStart, to: now };
+}
+
+function assistantComparisonRange(compareTo: string, period: string, now: Date, timeZone: string) {
+  const current = assistantRange(period, now, timeZone);
+  if (!current?.from || period === "month" && compareTo !== "last_month" || period === "this_week" && compareTo !== "last_week") return null;
+  const local = timeZoneParts(now, timeZone);
+  if (compareTo === "last_week") {
+    const currentDate = dateKeyInTimeZone(now, timeZone);
+    const priorDate = shiftDateKey(currentDate, -7);
+    const priorEnd = assistantDateTimeInTimeZone(priorDate, timeZone, Number(local.hour), Number(local.minute), Number(local.second));
+    return { from: addCalendarDaysInTimeZone(current.from, -7, timeZone), to: priorEnd };
+  }
+  const firstOfMonth = `${local.year}-${local.month}-01`;
+  const previousMonthStart = startOfTimeZoneDate(assistantShiftMonth(firstOfMonth, -1), timeZone);
+  const previousEndDate = assistantShiftMonth(dateKeyInTimeZone(now, timeZone), -1);
+  const previousEnd = assistantDateTimeInTimeZone(previousEndDate, timeZone, Number(local.hour), Number(local.minute), Number(local.second));
+  return { from: previousMonthStart, to: previousEnd };
+}
+
+function assistantPeriodLabel(period: string, compare = false, sw = false) {
+  const labels: Record<string, [string, string]> = {
+    today: ["today so far", "leo hadi sasa"], yesterday: ["yesterday", "jana"], last_7_days: ["the last 7 calendar days", "siku 7 za kalenda zilizopita"],
+    this_week: [compare ? "this week so far" : "this week", compare ? "wiki hii hadi sasa" : "wiki hii"],
+    last_week: ["last week", "wiki iliyopita"], month: ["this month so far", "mwezi huu hadi sasa"],
+    last_month: ["last month", "mwezi uliopita"], year: ["this year so far", "mwaka huu hadi sasa"],
+    all: ["all time", "muda wote"], custom: ["the selected date range", "kipindi cha tarehe ulichochagua"], current: ["currently", "kwa sasa"],
+  };
+  return labels[period]?.[sw ? 1 : 0] ?? (sw ? "kipindi ulichochagua" : "the selected period");
 }
 
 async function askAssistant(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
@@ -1651,79 +1742,108 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
   const parsed = parseAssistantQuestion(question);
   const now = new Date();
   const timeZone = shopTimeZone(shop);
-  if (!parsed) return json({ answer: { message: sw ? "Tafadhali fafanua kipindi: mauzo au matumizi ya leo/mwezi huu, manunuzi yaliyopokelewa mwezi huu/wakati wote, stock ya sasa, au madeni yaliyopo." : "Please clarify the period: sales or expenses today/this month, received purchases this month/all time, current stock, or outstanding debts. Other questions are not supported yet.", source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
+  if (!parsed) return json({ answer: { message: sw ? "Sijaelewa vizuri. Uliza kuhusu mauzo, matumizi, manunuzi yaliyopokelewa, makusanyo, njia za malipo, bidhaa bora, msambazaji bora, stock au madeni. Unaweza pia kuweka kipindi kama wiki hii, mwezi huu, au tarehe mbili." : "I couldn’t map that question safely. Ask about sales, expenses, received purchases, collections, payment methods, top products, top suppliers, stock, or outstanding debts. You can specify this week, this month, or a date range.", source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
   const required = assistantRequiredPermissions(parsed.intent);
   if (!required.every((permission) => hasStaffPermission(user, permission))) return json({ error: "You do not have permission to view the records needed for this answer" }, 403);
-  if (parsed.intent === "purchases") {
-    const purchasesUrl = new URL("/purchases/analytics", request.url);
-    purchasesUrl.searchParams.set("period", parsed.period === "all" ? "all" : "month");
-    const response = await purchaseAnalytics(client, user, shop, new Request(purchasesUrl));
-    if (!response.ok) return response;
-    const purchaseData = await response.json();
-    const total = Number(purchaseData.summary?.totalPurchaseAmount ?? 0);
-    const count = Number(purchaseData.summary?.purchaseCount ?? 0);
-    const periodLabel = parsed.period === "all" ? (sw ? "wakati wote" : "all time") : (sw ? "mwezi huu hadi sasa" : "this month so far");
-    const message = sw
-      ? `Manunuzi yaliyopokelewa ${periodLabel}: TZS ${Math.round(total).toLocaleString("en-US")} katika order ${count}. Hii ni thamani iliyorekodiwa ya order zilizofikishwa, si uthibitisho wa malipo yaliyotoka.`
-      : `Received purchases ${periodLabel}: TZS ${Math.round(total).toLocaleString("en-US")} across ${count} delivered supplier orders. This is recorded purchase value, not proof of cash paid.`;
-    return json({ answer: { message, source: sw ? "Order za supplier zilizopokelewa" : "Received supplier orders", href: "/purchases", from: purchaseData.from ?? null, to: now.toISOString(), checkedAt: now.toISOString(), timeZone: purchaseData.timeZone ?? timeZone } });
-  }
-  const from = parsed.period === "month" ? startOfMonthInTimeZone(now, timeZone) : parsed.period === "today" ? tzDayStart(now, timeZone) : null;
-  const money = (value: number) => `TZS ${Math.round(value).toLocaleString("en-US")}`;
-  const periodLabel = parsed.period === "month" ? (sw ? "mwezi huu hadi sasa" : "this month so far") : (sw ? "leo hadi sasa" : "today so far");
-  let message: string;
-  let source: string;
-  let href: string;
-  if (parsed.intent === "sales") {
-    const rows = await readAll(() => client.from("sales").select("id,totalAmount,createdAt").eq("shopId", shop.id).gte("createdAt", from!.toISOString()).lte("createdAt", now.toISOString()).order("id"));
-    const total = rows.reduce((sum, row) => sum + Number(row.totalAmount ?? 0), 0);
-    message = sw ? `Mauzo yaliyorekodiwa ${periodLabel}: ${money(total)} (${rows.length} mauzo). Hii inajumuisha mauzo ya mkopo; si kiasi cha fedha kilichokusanywa.` : `Recorded sales ${periodLabel}: ${money(total)} across ${rows.length} sales. This includes credit sales and is not cash collected.`;
-    source = sw ? "Mauzo yaliyorekodiwa" : "Recorded sales";
-    href = "/analytics";
-  } else if (parsed.intent === "expenses") {
-    const rows = await readAll(() => client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id).gte("spentAt", from!.toISOString()).lte("spentAt", now.toISOString()).order("id"));
-    const total = rows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-    message = sw ? `Matumizi yaliyorekodiwa ${periodLabel}: ${money(total)} katika rekodi ${rows.length}.` : `Recorded expenses ${periodLabel}: ${money(total)} across ${rows.length} records.`;
-    source = sw ? "Matumizi yaliyorekodiwa" : "Recorded expenses";
-    href = "/expenses";
-  } else if (parsed.intent === "debts") {
-    const rows = await readAll(() => client.from("debts").select("id,amount,amountPaid,status").eq("shopId", shop.id).in("status", ["OPEN", "PARTIAL"]).order("id"));
-    const total = rows.reduce((sum, row) => sum + Math.max(0, Number(row.amount ?? 0) - Number(row.amountPaid ?? 0)), 0);
-    message = sw ? `Salio la madeni yaliyo wazi sasa ni ${money(total)} katika rekodi ${rows.length}. Hiki si kiasi kilichokusanywa.` : `Currently outstanding debt is ${money(total)} across ${rows.length} records. This is not cash collected.`;
-    source = sw ? "Madeni yaliyo wazi" : "Open debt records";
-    href = "/debts";
-  } else {
-    const response = await productList(client, new Request(new URL("/products?lowStock=true&limit=1000", request.url)), user, shop);
-    if (!response.ok) return json({ error: "Stock data is unavailable" }, response.status);
-    const data = await response.json();
-    const selected: Array<Record<string, unknown>> = (data.products ?? []).slice(0, 3);
-    let saleRows: Array<Record<string, any>> | null = null;
-    if (selected.length && hasStaffPermission(user, "canViewReports")) {
-      try {
-        const firstDay = addCalendarDaysInTimeZone(tzDayStart(now, timeZone), -27, timeZone);
-        const productIds = selected.map((product) => String(product.id));
-        saleRows = await readAll(() => client.from("sale_items").select("id,productId,quantity,sale:sales!inner(shopId,createdAt)").eq("sale.shopId", shop.id).in("productId", productIds).gte("sale.createdAt", firstDay.toISOString()).lte("sale.createdAt", now.toISOString()).order("id"));
-      } catch {
-        // Keep current stock visible, but do not guess when sales history fails.
-        saleRows = null;
-      }
-    }
-    const todayKey = dateKeyInTimeZone(now, timeZone);
-    const items = selected.map((p) => {
-      const sales = (saleRows ?? []).filter((row) => row.productId === p.id).flatMap((row) => {
-        const sale = Array.isArray(row.sale) ? row.sale[0] : row.sale;
-        return sale?.createdAt ? [{ date: dateKeyInTimeZone(new Date(sale.createdAt), timeZone), quantity: Number(row.quantity ?? 0) }] : [];
-      });
-      const estimate = saleRows ? estimateStockCover(Number(p.currentStock ?? 0), Number(p.onOrderQuantity ?? 0), todayKey, sales) : null;
-      const base = `${p.name}: ${p.currentStock} ${p.unit}`;
-      return estimate ? (sw ? `${base}; takriban siku ${estimate.daysOfCover} za cover zikijumuisha order zilizopo, kiasi cha ziada ${estimate.suggestedAdditionalUnits}` : `${base}; about ${estimate.daysOfCover} days of cover including current orders, ${estimate.suggestedAdditionalUnits} additional units for a 14-day target`) : (sw ? `${base}; hakuna makadirio ya kutosha` : `${base}; no reliable estimate available`);
+  const range = assistantRange(parsed.period, now, timeZone, parsed.fromDate, parsed.toDate);
+  if (!range) return json({ error: "Enter valid dates for the requested period" }, 400);
+  const customDaySpan = parsed.fromDate && parsed.toDate ? (Date.parse(`${parsed.toDate}T00:00:00Z`) - Date.parse(`${parsed.fromDate}T00:00:00Z`)) / 86400000 : 0;
+  if (parsed.period === "custom" && (!range.from || !range.to || customDaySpan > 365 || range.to > assistantStartOfTomorrow(now, timeZone))) return json({ error: "Choose a date range of up to 366 calendar days ending by today" }, 400);
+  const money = (value: unknown) => `TZS ${Math.round(Number(value) || 0).toLocaleString("en-US")}`;
+  const periodLabel = assistantPeriodLabel(parsed.period, Boolean(parsed.compareTo), sw);
+  let data: Record<string, any>;
+  if (parsed.intent === "stock") {
+    const snapshot = await client.rpc("assistant_stock_snapshot", {
+      p_shop_id: shop.id, p_time_zone: timeZone,
+      p_can_manage_stock: hasStaffPermission(user, "canManageStock"),
+      p_can_view_reports: hasStaffPermission(user, "canViewReports"),
     });
-    const count = Number(data.pagination?.total ?? 0);
-    message = count ? (sw ? `Bidhaa ${count} zinahitaji ukaguzi: ${items.join("; ")}. Makadirio hutumia mauzo yaliyorekodiwa bila kutoa marejesho, huhesabu order zilizopo kama zikipokelewa, lakini hayajui stockouts au muda wa supplier. Thibitisha kabla ya kuagiza.` : `${count} products need a stock review: ${items.join("; ")}. Estimates use gross recorded sales without subtracting returns and count existing orders as if received; stockouts and supplier lead time are unknown. Confirm before ordering.`) : (sw ? "Hakuna bidhaa zinazohitaji kuagizwa kulingana na kiwango cha chini na order zilizopo." : "No products currently need reordering under the minimum-stock and existing-order rules.");
-    source = sw ? "Stock na order za wasambazaji" : "Inventory and open supplier orders";
-    href = "/inventory?lowStock=true";
+    if (snapshot.error) throw snapshot.error;
+    data = snapshot.data ?? {};
+  } else {
+    const metrics = await client.rpc("assistant_query_metrics", {
+      p_shop_id: shop.id,
+      p_intent: parsed.intent,
+      p_from: range.from?.toISOString() ?? null,
+      p_to: range.to?.toISOString() ?? null,
+      p_time_zone: timeZone,
+    });
+    if (metrics.error) throw metrics.error;
+    data = metrics.data ?? {};
   }
-  return json({ answer: { message, source, href, from: from?.toISOString() ?? null, to: now.toISOString(), checkedAt: now.toISOString(), timeZone } });
+
+  let message = "";
+  let source = "";
+  let href = "";
+  if (parsed.intent === "sales") {
+    message = sw ? `Mauzo yaliyorekodiwa ${periodLabel}: ${money(data.amount)} katika mauzo ${Number(data.count ?? 0)}. Hii inajumuisha mauzo ya mkopo; si fedha zilizokusanywa.` : `Recorded sales ${periodLabel}: ${money(data.amount)} across ${Number(data.count ?? 0)} sales. This includes credit sales; it is not the amount of cash collected.`;
+    source = sw ? "Rekodi za mauzo" : "Sales records"; href = "/analytics";
+  } else if (parsed.intent === "expenses") {
+    message = sw ? `Matumizi yaliyorekodiwa ${periodLabel}: ${money(data.amount)} katika rekodi ${Number(data.count ?? 0)}.` : `Recorded expenses ${periodLabel}: ${money(data.amount)} across ${Number(data.count ?? 0)} records.`;
+    source = sw ? "Rekodi za matumizi" : "Expense records"; href = "/expenses";
+  } else if (parsed.intent === "debts") {
+    message = sw ? `Salio la madeni yaliyo wazi sasa ni ${money(data.amount)} katika rekodi ${Number(data.count ?? 0)}. Hii ni pesa inayodaiwa, si iliyokusanywa.` : `Outstanding debt currently totals ${money(data.amount)} across ${Number(data.count ?? 0)} records. This is money owed, not money collected.`;
+    source = sw ? "Madeni yaliyo wazi" : "Open debt records"; href = "/debts";
+  } else if (parsed.intent === "purchases") {
+    message = sw ? `Thamani ya manunuzi yaliyopokelewa ${periodLabel}: ${money(data.amount)} katika order ${Number(data.count ?? 0)}. Hii ni thamani iliyorekodiwa ya order zilizofikishwa, si uthibitisho wa malipo yaliyotoka.` : `Recorded value of received purchases ${periodLabel}: ${money(data.amount)} across ${Number(data.count ?? 0)} delivered supplier orders. This is not proof of cash paid.`;
+    source = sw ? "Order za supplier zilizopokelewa" : "Received supplier orders"; href = "/purchases";
+  } else if (parsed.intent === "collections") {
+    message = sw ? `Makusanyo yaliyorekodiwa ${periodLabel}: ${money(data.totalCollected)} — ${money(data.paidSales)} kutoka mauzo yasiyo ya mkopo na ${money(data.debtPayments)} kutoka malipo ya madeni.` : `Recorded collections ${periodLabel}: ${money(data.totalCollected)} — ${money(data.paidSales)} from non-credit sales and ${money(data.debtPayments)} from debt payments.`;
+    source = sw ? "Mauzo yaliyolipwa na malipo ya madeni" : "Paid sales and debt-payment records"; href = "/analytics";
+  } else if (parsed.intent === "payment_breakdown") {
+    const methods = Array.isArray(data.paymentMethods) ? data.paymentMethods : [];
+    const details = methods.slice(0, 5).map((row: Record<string, unknown>) => `${String(row.method).replaceAll("_", " ")}: ${money(row.amount)}`).join(sw ? ", " : ", ");
+    message = sw ? `Mgawanyo wa makusanyo yaliyorekodiwa ${periodLabel}: ${details || "hakuna malipo yaliyorekodiwa"}. Mauzo ya mkopo yanahesabiwa baada tu ya malipo kurekodiwa.` : `Recorded collections by payment method ${periodLabel}: ${details || "no payments recorded"}. Credit sales are counted only when a debt payment is recorded.`;
+    source = sw ? "Rekodi za mauzo yaliyolipwa na malipo ya madeni" : "Paid-sale and debt-payment records"; href = "/analytics";
+  } else if (parsed.intent === "top_products") {
+    const products = Array.isArray(data.products) ? data.products.slice(0, 5) : [];
+    const details = products.map((product: Record<string, unknown>, index: number) => `${index + 1}. ${product.name}: ${money(product.revenue)} (${Number(product.unitsSold ?? 0)} ${String(product.unit ?? "units")})`).join("; ");
+    message = sw ? `Bidhaa bora kwa mauzo ${periodLabel}: ${details || "hakuna bidhaa zilizouzwa"}.` : `Top products by sales revenue ${periodLabel}: ${details || "no products sold"}.`;
+    source = sw ? "Vipengee vya mauzo" : "Sale-item records"; href = "/analytics";
+  } else if (parsed.intent === "top_supplier") {
+    const supplier = data.supplier;
+    message = supplier?.name ? (sw ? `Msambazaji mkuu kwa thamani ya order zilizopokelewa ${periodLabel} ni ${supplier.name}: ${money(supplier.amount)} katika order ${Number(supplier.orders ?? 0)}.` : `Top supplier by received order value ${periodLabel}: ${supplier.name}, ${money(supplier.amount)} across ${Number(supplier.orders ?? 0)} delivered orders.`) : (sw ? `Hakuna order za supplier zilizopokelewa ${periodLabel}.` : `No delivered supplier orders were recorded ${periodLabel}.`);
+    source = sw ? "Order za supplier zilizopokelewa" : "Received supplier orders"; href = "/purchases";
+  } else {
+    const products = Array.isArray(data.products) ? data.products : [];
+    const items = products.slice(0, 3).map((product: Record<string, unknown>) => {
+      const base = `${product.name}: ${Number(product.currentStock ?? 0)} ${product.unit ?? "pcs"}`;
+      if (!hasStaffPermission(user, "canManageStock")) return base;
+      const sales = (data.dailySales ?? []).filter((row: Record<string, unknown>) => row.productId === product.id).map((row: Record<string, unknown>) => ({ date: String(row.date), quantity: Number(row.quantity ?? 0) }));
+      const estimate = data.demandStatus === "ready" ? estimateStockCover(Number(product.currentStock ?? 0), Number(product.onOrderQuantity ?? 0), String(data.businessDate), sales) : null;
+      if (estimate) return sw ? `${base}; takriban siku ${estimate.daysOfCover} za cover zikijumuisha order zilizopo` : `${base}; about ${estimate.daysOfCover} days of cover including open orders`;
+      if (data.demandStatus === "unavailable") return sw ? `${base}; historia ya mauzo haipatikani, hakuna makadirio` : `${base}; sales history is unavailable, so no estimate is shown`;
+      if (data.demandStatus === "restricted") return sw ? `${base}; ruhusa ya historia ya mauzo haipo, hakuna makadirio` : `${base}; sales history is restricted, so no estimate is shown`;
+      return sw ? `${base}; data ya mauzo haitoshi kwa makadirio` : `${base}; not enough sales history for a reliable cover estimate`;
+    });
+    const count = Number(data.count ?? products.length);
+    message = count ? (sw ? `Bidhaa ${count} zinahitaji ukaguzi wa stock: ${items.join("; ")}.` : `${count} products need a stock review: ${items.join("; ")}.`) : (sw ? "Hakuna bidhaa zinazohitaji kuagizwa kwa sasa kulingana na kiwango cha chini na order zilizopo." : "No products currently need a stock review under minimum-stock and open-order rules.");
+    if (hasStaffPermission(user, "canManageStock")) message += sw ? " Makadirio ya mahitaji hayapunguzi marejesho na hayajui muda wa supplier; hakiki kabla ya kuagiza." : " Demand estimates do not subtract returns or know supplier lead time; verify before ordering.";
+    source = sw ? "Stock na order za wasambazaji" : "Inventory and open supplier orders"; href = "/inventory?lowStock=true";
+  }
+
+  let compared: string | null = null;
+  if (parsed.compareTo) {
+    const comparisonRange = assistantComparisonRange(parsed.compareTo, parsed.period, now, timeZone);
+    if (!comparisonRange) return json({ error: "That comparison period is not supported" }, 400);
+    const comparison = await client.rpc("assistant_query_metrics", {
+      p_shop_id: shop.id, p_intent: parsed.intent,
+      p_from: comparisonRange.from.toISOString(), p_to: comparisonRange.to.toISOString(), p_time_zone: timeZone,
+    });
+    if (comparison.error) throw comparison.error;
+    const previous = comparison.data ?? {};
+    const metricKey = parsed.intent === "collections" ? "totalCollected" : "amount";
+    const currentValue = Number(data[metricKey] ?? 0);
+    const previousValue = Number(previous[metricKey] ?? 0);
+    const change = previousValue ? Math.round((currentValue - previousValue) / previousValue * 100) : null;
+    const currentText = money(currentValue); const previousText = money(previousValue);
+    compared = sw ? ` Ulinganisho: ${currentText} sasa dhidi ya ${previousText} kipindi kilichotangulia${change === null ? "." : ` (${change >= 0 ? "+" : ""}${change}%).`}` : ` Compared with the matching elapsed period before it: ${currentText} versus ${previousText}${change === null ? "." : ` (${change >= 0 ? "+" : ""}${change}%).`}`;
+    message += compared;
+  }
+  const evidenceFrom = range.from?.toISOString() ?? null;
+  const evidenceToDate = range.to && ["yesterday", "last_week", "last_month", "custom"].includes(parsed.period) ? new Date(range.to.getTime() - 1) : range.to;
+  const evidenceTo = evidenceToDate?.toISOString() ?? null;
+  return json({ answer: { message, source, href, from: evidenceFrom, to: evidenceTo, checkedAt: now.toISOString(), timeZone } });
 }
 
 async function assistant(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
@@ -2216,10 +2336,15 @@ async function handle(request: Request) {
     if (access.response) return access.response;
     return askAssistant(db, access.user!, access.shop!, request);
   }
+  if (path === "/assistant/snapshot" && request.method === "GET") {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    return assistantHomeSnapshot(db, access.user!, access.shop!);
+  }
   if (path === "/assistant/stock" && request.method === "GET") {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    return assistantStockSnapshot(db, access.user!, access.shop!, request);
+    return assistantStockSnapshot(db, access.user!, access.shop!);
   }
   if (path === "/assistant/actions") {
     const access = await requireUser(db, request);

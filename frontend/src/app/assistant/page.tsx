@@ -21,8 +21,8 @@ interface DebtSummary {
 }
 
 interface ExpenseSummary {
-  summary: { total: number; count: number };
-  expenses?: Array<{ title: string; amount: number; category: string; spentAt: string }>;
+  daily: Array<{ businessDate: string; amount: number; count: number }>;
+  businessDate: string;
 }
 
 interface ProfitCoverage {
@@ -30,7 +30,21 @@ interface ProfitCoverage {
 }
 
 interface StockSnapshot {
-  products: Array<{ id: string; name: string; currentStock: number; minimumStock: number; unit: string }>;
+  products: Array<{ id: string; name: string; currentStock: number; minimumStock: number; unit: string; onOrderQuantity?: number }>;
+}
+
+interface AssistantSnapshot {
+  checkedAt: string;
+  businessDate: string;
+  timeZone: string;
+  permissions: { canManageStock: boolean };
+  sources: Record<Exclude<SourceKey, "actions">, { status: "ready" | "unavailable" | "restricted" }>;
+  dashboard: DashboardData | null;
+  allTime: DashboardData | null;
+  debts: DebtSummary | null;
+  expenses: { daily: ExpenseSummary["daily"] } | null;
+  costs: ProfitCoverage | null;
+  stock: StockSnapshot | null;
 }
 
 interface AssistantAnswer {
@@ -87,6 +101,8 @@ export default function AssistantPage() {
   const [stock, setStock] = useState<StockSnapshot | null>(null);
   const [sourceStatus, setSourceStatus] = useState<Partial<Record<SourceKey, SourceStatus>>>({});
   const sourceGeneration = useRef<Partial<Record<SourceKey, number>>>({});
+  const snapshotGeneration = useRef(0);
+  const [canManageStock, setCanManageStock] = useState(false);
   const shownOccurrences = useRef(new Set<string>());
   const lastDayRefresh = useRef("");
   const [actionError, setActionError] = useState("");
@@ -99,27 +115,46 @@ export default function AssistantPage() {
   async function loadSource(key: SourceKey) {
     const generation = (sourceGeneration.current[key] ?? 0) + 1;
     sourceGeneration.current[key] = generation;
-    setSourceStatus((current) => ({ ...current, [key]: { status: "loading" } }));
-    if (key === "today") setDashboard(null);
-    if (key === "history") setAllTime(null);
-    if (key === "debts") setDebts(null);
-    if (key === "expenses") setExpenses(null);
-    if (key === "actions") setActions([]);
-    if (key === "costs") setCosts(null);
-    if (key === "stock") setStock(null);
+    if (key === "actions") {
+      setSourceStatus((current) => ({ ...current, actions: { status: "loading" } }));
+      setActions([]);
+    } else {
+      const snapshotKeys = SOURCE_KEYS.filter((source): source is Exclude<SourceKey, "actions"> => source !== "actions");
+      const snapshotId = ++snapshotGeneration.current;
+      setSourceStatus((current) => ({ ...current, ...Object.fromEntries(snapshotKeys.map((source) => [source, { status: "loading" }])) }));
+      try {
+        const data = await api.get<AssistantSnapshot>("/assistant/snapshot", lang);
+        if (snapshotGeneration.current !== snapshotId) return;
+        setDashboard(data.dashboard);
+        setAllTime(data.allTime);
+        setDebts(data.debts);
+        setExpenses(data.expenses ? { ...data.expenses, businessDate: data.businessDate } : null);
+        setCosts(data.costs);
+        setStock(data.stock);
+        setCanManageStock(Boolean(data.permissions?.canManageStock));
+        const checkedAt = data.checkedAt || new Date().toISOString();
+        setSourceStatus((current) => ({
+          ...current,
+          ...Object.fromEntries(snapshotKeys.map((source) => [source, {
+            status: data.sources?.[source]?.status ?? "unavailable",
+            checkedAt,
+            businessDate: data.businessDate,
+            timeZone: data.timeZone,
+          }])),
+        }));
+      } catch {
+        if (snapshotGeneration.current !== snapshotId) return;
+        const checkedAt = new Date().toISOString();
+        setSourceStatus((current) => ({ ...current, ...Object.fromEntries(snapshotKeys.map((source) => [source, { status: "unavailable", checkedAt }])) }));
+        setDashboard(null); setAllTime(null); setDebts(null); setExpenses(null); setCosts(null); setStock(null);
+      }
+      return;
+    }
     try {
-      const paths: Record<SourceKey, string> = { today: "/dashboard?period=today", history: "/dashboard?period=all", debts: "/debts", expenses: "/expenses", actions: "/assistant/actions?days=1&limit=100", costs: "/dashboard/profit?period=today", stock: "/assistant/stock", purchases: "/purchases/analytics?period=month" };
-      const data = await api.get<unknown>(paths[key], lang);
+      const data = await api.get<{ actions: AssistantAction[]; businessDate?: string; timeZone?: string }>("/assistant/actions?days=1&limit=100", lang);
       if (sourceGeneration.current[key] !== generation) return;
-      if (key === "today") setDashboard(data as DashboardData);
-      if (key === "history") setAllTime(data as DashboardData);
-      if (key === "debts") setDebts(data as DebtSummary);
-      if (key === "expenses") setExpenses(data as ExpenseSummary);
-      if (key === "actions") setActions((data as { actions: AssistantAction[] }).actions);
-      if (key === "costs") setCosts(data as ProfitCoverage);
-      if (key === "stock") setStock(data as StockSnapshot);
-      const dayContext = key === "actions" ? data as { businessDate?: string; timeZone?: string } : null;
-      setSourceStatus((current) => ({ ...current, [key]: { status: "ready", checkedAt: new Date().toISOString(), ...(dayContext ? { businessDate: dayContext.businessDate, timeZone: dayContext.timeZone } : {}) } }));
+      setActions(data.actions ?? []);
+      setSourceStatus((current) => ({ ...current, actions: { status: "ready", checkedAt: new Date().toISOString(), businessDate: data.businessDate, timeZone: data.timeZone } }));
     } catch (error) {
       if (sourceGeneration.current[key] !== generation) return;
       const message = error instanceof Error ? error.message.toLowerCase() : "";
@@ -128,7 +163,8 @@ export default function AssistantPage() {
   }
 
   useEffect(() => {
-    SOURCE_KEYS.forEach((key) => { void loadSource(key); });
+    void loadSource("today");
+    void loadSource("actions");
   }, [lang]);
 
   useEffect(() => {
@@ -141,13 +177,14 @@ export default function AssistantPage() {
       const currentDate = `${values.year}-${values.month}-${values.day}`;
       if (currentDate !== expectedDate && lastDayRefresh.current !== currentDate) {
         lastDayRefresh.current = currentDate;
-        SOURCE_KEYS.forEach((key) => { void loadSource(key); });
+        void loadSource("today");
+        void loadSource("actions");
       }
     }, 60_000);
     return () => window.clearInterval(interval);
   }, [sourceStatus.actions?.businessDate, sourceStatus.actions?.timeZone, lang]);
 
-  const recommendations = useMemo(() => sourceStatus.actions?.status === "ready" ? buildRecommendations({ dashboard, allTime, debts, expenses, costs, stockAlerts: stock?.products ?? null, lang }) : [], [sourceStatus.actions?.status, dashboard, allTime, debts, expenses, costs, stock, lang]);
+  const recommendations = useMemo(() => sourceStatus.actions?.status === "ready" ? buildRecommendations({ dashboard, allTime, debts, expenses, costs, stockAlerts: stock?.products ?? null, canManageStock, lang }) : [], [sourceStatus.actions?.status, dashboard, allTime, debts, expenses, costs, stock, canManageStock, lang]);
   const ownerSummary = buildOwnerSummary(recommendations, lang);
   const urgentCount = recommendations.filter((item) => item.rank >= 80).length;
   const actionCount = recommendations.length;
@@ -258,7 +295,7 @@ export default function AssistantPage() {
 
         <section className="rounded-xl border border-brand-100 bg-white p-4">
           <h2 className="font-bold text-gray-950">{lang === "sw" ? "Uliza Uzuri Living" : "Ask Uzuri Living"}</h2>
-          <p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Uliza kuhusu mauzo au matumizi ya leo au mwezi huu, stock ya sasa, au madeni yaliyopo. Jibu hutumia rekodi zilizoruhusiwa tu." : "Ask about sales or expenses today or this month, current stock, or outstanding debts. Answers use only records you are allowed to see."}</p>
+          <p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Uliza kuhusu mauzo, matumizi, manunuzi yaliyopokelewa, makusanyo, njia za malipo, bidhaa bora, stock au madeni. Tumia wiki, mwezi au tarehe maalum." : "Ask about sales, expenses, received purchases, collections, payment methods, top products, stock, or debts. Use weekly, monthly, or custom date periods."}</p>
           <form onSubmit={askQuestion} className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input aria-label={lang === "sw" ? "Swali kwa msaidizi" : "Question for assistant"} value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={250} placeholder={lang === "sw" ? "Mauzo ya mwezi huu ni kiasi gani?" : "What were my sales this month?"} className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             <button type="submit" disabled={asking || !question.trim()} className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{asking ? (lang === "sw" ? "Inatafuta…" : "Checking…") : (lang === "sw" ? "Uliza" : "Ask")}</button>
@@ -405,6 +442,7 @@ function buildRecommendations({
   expenses,
   costs,
   stockAlerts,
+  canManageStock,
   lang,
 }: {
   dashboard: DashboardData | null;
@@ -413,6 +451,7 @@ function buildRecommendations({
   expenses: ExpenseSummary | null;
   costs: ProfitCoverage | null;
   stockAlerts: StockSnapshot["products"] | null;
+  canManageStock: boolean;
   lang: "sw" | "en";
 }): Recommendation[] {
   const items: Recommendation[] = [];
@@ -464,7 +503,7 @@ function buildRecommendations({
     });
   }
 
-  if (mostUrgentStock) {
+  if (mostUrgentStock && canManageStock) {
     items.push({
       id: `stock-${mostUrgentStock.id}`,
       rank: 100,
@@ -517,7 +556,7 @@ function buildRecommendations({
     });
   }
 
-  const expenseTrend = getExpenseTrend(expenses?.expenses || []);
+  const expenseTrend = getExpenseTrend(expenses?.daily || [], expenses?.businessDate || "");
   if (expenseTrend.current > 0) {
     const rose = expenseTrend.currentCount >= 3 && expenseTrend.previousCount >= 3 && expenseTrend.previous > 0 && expenseTrend.current >= expenseTrend.previous * 1.25;
     const percent = expenseTrend.previous > 0 ? Math.round(((expenseTrend.current - expenseTrend.previous) / expenseTrend.previous) * 100) : null;
@@ -610,14 +649,15 @@ function mostUrgStockMinimum(product: { minimumStock: number }) {
   return product.minimumStock;
 }
 
-function getExpenseTrend(expenses: Array<{ amount: number; spentAt: string }>) {
-  const now = Date.now();
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+function getExpenseTrend(expenses: Array<{ businessDate: string; amount: number; count: number }>, businessDate: string) {
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(businessDate) ? Date.parse(`${businessDate}T00:00:00Z`) / 86400000 : NaN;
   return expenses.reduce(
     (totals, expense) => {
-      const age = now - new Date(expense.spentAt).getTime();
-      if (age >= 0 && age <= sevenDays) { totals.current += expense.amount; totals.currentCount += 1; }
-      if (age > sevenDays && age <= sevenDays * 2) { totals.previous += expense.amount; totals.previousCount += 1; }
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(expense.businessDate) ? Date.parse(`${expense.businessDate}T00:00:00Z`) / 86400000 : NaN;
+      const ageInBusinessDays = today - date;
+      if (!Number.isFinite(ageInBusinessDays) || ageInBusinessDays < 0) return totals;
+      if (ageInBusinessDays <= 6) { totals.current += Number(expense.amount) || 0; totals.currentCount += Number(expense.count) || 0; }
+      if (ageInBusinessDays >= 7 && ageInBusinessDays <= 13) { totals.previous += Number(expense.amount) || 0; totals.previousCount += Number(expense.count) || 0; }
       return totals;
     },
     { current: 0, previous: 0, currentCount: 0, previousCount: 0 }

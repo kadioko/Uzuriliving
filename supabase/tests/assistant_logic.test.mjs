@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { assistantActionRequiredPermissions, assistantRequiredPermissions, estimateStockCover, parseAssistantQuestion } from "../functions/api/assistant-intent.ts";
-import { shopRouteAllowed } from "../functions/api/permissions.ts";
+import { hasStaffPermission, shopRouteAllowed } from "../functions/api/permissions.ts";
 
 test("assistant questions are bounded to supported topics and periods", () => {
   assert.deepEqual(parseAssistantQuestion("What were my sales this month?"), { intent: "sales", period: "month" });
@@ -11,9 +11,21 @@ test("assistant questions are bounded to supported topics and periods", () => {
   assert.deepEqual(parseAssistantQuestion("How much were my purchases this month?"), { intent: "purchases", period: "month" });
   assert.deepEqual(parseAssistantQuestion("How much have I purchased all time?"), { intent: "purchases", period: "all" });
   assert.deepEqual(parseAssistantQuestion("What were sales today?"), { intent: "sales", period: "today" });
-  for (const question of ["sales", "expenses", "purchases", "sales last month", "sales in 2024", "sales and expenses today", "profit this month", "stock this month", "sales all time"]) {
+  assert.deepEqual(parseAssistantQuestion("How much did I sell last week?"), { intent: "sales", period: "last_week" });
+  assert.deepEqual(parseAssistantQuestion("sales this week vs last week"), { intent: "sales", period: "this_week", compareTo: "last_week" });
+  assert.deepEqual(parseAssistantQuestion("Compare collections this month with last month"), { intent: "collections", period: "month", compareTo: "last_month" });
+  assert.deepEqual(parseAssistantQuestion("How much did I spend from 2026-10-01 to 2026-10-31?"), { intent: "expenses", period: "custom", fromDate: "2026-10-01", toDate: "2026-10-31" });
+  assert.deepEqual(parseAssistantQuestion("sales over the last 7 days"), { intent: "sales", period: "last_7_days" });
+  assert.deepEqual(parseAssistantQuestion("top selling products this month"), { intent: "top_products", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("top supplier purchases last month"), { intent: "top_supplier", period: "last_month" });
+  assert.deepEqual(parseAssistantQuestion("How much cash did I collect this week?"), { intent: "collections", period: "this_week" });
+  assert.deepEqual(parseAssistantQuestion("payment method breakdown this month"), { intent: "payment_breakdown", period: "month" });
+  for (const question of ["sales and expenses today", "profit this month", "stock this month", "stock from 2026-10-01 to 2026-10-31", "debts from 2026-10-01 to 2026-10-31", "sales in 2024", "sales from 2026-02-30 to 2026-03-01", "top products and expenses this month", "sales today and purchases this month", "compare sales this week with last month"]) {
     assert.equal(parseAssistantQuestion(question), null, question);
   }
+  assert.deepEqual(parseAssistantQuestion("sales"), { intent: "sales", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("expenses"), { intent: "expenses", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("purchases"), { intent: "purchases", period: "month" });
 });
 
 test("stock estimates require enough observations and subtract incoming units", () => {
@@ -38,12 +50,16 @@ test("assistant permission is separate and recommendation history stays source-s
   assert.equal(shopRouteAllowed(staff, "/debts", "GET"), false);
   assert.equal(shopRouteAllowed({ ...staff, permissions: { canViewReports: true } }, "/assistant/ask", "POST"), false);
   assert.equal(shopRouteAllowed({ role: "MERCHANT" }, "/assistant/actions", "GET"), true);
+  const inventoryViewer = { ...staff, permissions: { canUseAssistant: true, canViewInventoryAndPrices: true } };
+  assert.equal(shopRouteAllowed(inventoryViewer, "/assistant/ask", "POST"), true);
+  assert.equal(hasStaffPermission(inventoryViewer, "canViewInventoryAndPrices"), true);
+  assert.equal(hasStaffPermission(inventoryViewer, "canManageStock"), false);
   assert.deepEqual(assistantActionRequiredPermissions("stock-product-1"), ["canManageStock"]);
   assert.deepEqual(assistantActionRequiredPermissions("orders"), ["canManageStock"]);
   assert.deepEqual(assistantActionRequiredPermissions("debt"), ["canSell"]);
   assert.deepEqual(assistantActionRequiredPermissions("expenses"), ["canRecordExpenses"]);
   assert.deepEqual(assistantActionRequiredPermissions("top-product"), ["canViewReports"]);
-  assert.deepEqual(assistantRequiredPermissions("stock"), ["canManageStock"]);
+  assert.deepEqual(assistantRequiredPermissions("stock"), ["canViewInventoryAndPrices"]);
   assert.deepEqual(assistantRequiredPermissions("debts"), ["canViewReports", "canSell"]);
   assert.deepEqual(assistantRequiredPermissions("expenses"), ["canRecordExpenses"]);
   assert.deepEqual(assistantRequiredPermissions("purchases"), ["canViewReports"]);

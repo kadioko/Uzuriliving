@@ -1,11 +1,40 @@
-export type AssistantIntent = "sales" | "stock" | "debts" | "expenses" | "purchases";
-export type AssistantPeriod = "today" | "month" | "current" | "all";
+export type AssistantIntent =
+  | "sales"
+  | "stock"
+  | "debts"
+  | "expenses"
+  | "purchases"
+  | "collections"
+  | "payment_breakdown"
+  | "top_products"
+  | "top_supplier";
+
+export type AssistantPeriod =
+  | "today"
+  | "yesterday"
+  | "last_7_days"
+  | "this_week"
+  | "last_week"
+  | "month"
+  | "last_month"
+  | "year"
+  | "all"
+  | "current"
+  | "custom";
+
+export type AssistantComparison = "last_week" | "last_month";
+export type ParsedAssistantQuestion = {
+  intent: AssistantIntent;
+  period: AssistantPeriod;
+  compareTo?: AssistantComparison;
+  fromDate?: string;
+  toDate?: string;
+};
 
 export function assistantRequiredPermissions(intent: AssistantIntent): string[] {
-  if (intent === "stock") return ["canManageStock"];
-  if (intent === "debts") return ["canViewReports", "canSell"];
+  if (intent === "stock") return ["canViewInventoryAndPrices"];
+  if (intent === "debts" || intent === "collections") return ["canViewReports", "canSell"];
   if (intent === "expenses") return ["canRecordExpenses"];
-  if (intent === "purchases") return ["canViewReports"];
   return ["canViewReports"];
 }
 
@@ -36,30 +65,96 @@ export function estimateStockCover(currentStock: number, incoming: number, today
   };
 }
 
-// This is deliberately a bounded intent router, not a general-purpose LLM.
-// Refuse unsupported periods and mixed questions instead of guessing.
-export function parseAssistantQuestion(question: string): { intent: AssistantIntent; period: AssistantPeriod } | null {
+function isValidDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+// This is a bounded intent router, not a general-purpose LLM. It only emits
+// supported, typed queries; date arithmetic and database access stay server-side.
+export function parseAssistantQuestion(question: string): ParsedAssistantQuestion | null {
   const text = question.toLocaleLowerCase().trim();
   if (!text || text.length > 250) return null;
-  const topics: Array<[AssistantIntent, RegExp]> = [
-    ["purchases", /\b(purchases?|purchased|manunuzi)\b/],
-    ["sales", /\b(sales?|revenue|mauzo)\b/],
-    ["stock", /\b(stock|inventory|products?|bidhaa|reorder|restock|kuagiza)\b/],
-    ["debts", /\b(debts?|owed|owe|madeni|deni|nadai)\b/],
-    ["expenses", /\b(expenses?|costs?|matumizi|gharama)\b/],
-  ];
-  if (/\b(profit|faida|supplier|msambazaji|refunds?|returns?|marejesho)\b/.test(text)) return null;
-  const matches = topics.filter(([, pattern]) => pattern.test(text));
-  if (matches.length !== 1) return null;
-  const today = /\b(today|leo)\b/.test(text);
-  const month = /\b(this month|mwezi huu)\b/.test(text);
-  const allTime = /\b(all time|lifetime)\b/.test(text);
-  if (Number(today) + Number(month) + Number(allTime) > 1) return null;
-  if (/\b(yesterday|jana|juzi|kesho|tomorrow|last|previous|past|ago|week|wiki|year|mwaka|quarter|custom|between|from|mpaka|uliopita|iliyopita|ever|morning|afternoon|evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b|\d/.test(text)) return null;
-  if (/\b(month|mwezi)\b/.test(text) && !month) return null;
-  const intent = matches[0][0];
-  if (intent === "purchases") return month ? { intent, period: "month" } : allTime ? { intent, period: "all" } : null;
-  if (intent === "stock" || intent === "debts") return month ? null : { intent, period: "current" };
-  if (allTime || (!today && !month)) return null;
-  return { intent, period: month ? "month" : "today" };
+  if (/\b(?:in|for|during|since)\s+20\d{2}\b/.test(text) && !/\d{4}-\d{2}-\d{2}/.test(text)) return null;
+
+  const range = text.match(/\b(?:between|from|kuanzia)?\s*(\d{4}-\d{2}-\d{2})\s+(?:and|to|through|mpaka|hadi)\s+(\d{4}-\d{2}-\d{2})\b/);
+  if (range && (!isValidDateKey(range[1]) || !isValidDateKey(range[2]) || range[1] > range[2])) return null;
+
+  const asksForTopProducts = /\b(top|best|most|highest|best-selling|top-selling|bora|zilizouza|zinazouza)\b/.test(text)
+    && /\b(products?|items?|bidhaa)\b/.test(text);
+  const asksForTopSupplier = /\b(top|best|highest|most|largest|bora|mkuu)\b/.test(text)
+    && /\b(suppliers?|vendors?|wasambazaji|msambazaji)\b/.test(text);
+  const asksForPaymentBreakdown = /\b(payment methods?|methods of payment|payment breakdown|by payment|how (?:did|was) (?:customers? )?(?:pay|paid)|malipo kwa njia|njia za malipo)\b/.test(text);
+  const asksForCollections = /\b(collect|collected|collection|collections|cash collected|money collected|cash received|money received|debt payments?|pesa zilizokusanywa|makusanyo|malipo yaliyopokelewa|nimekusanya)\b/.test(text);
+
+  const flags = {
+    sales: /\b(sales?|sell|sells|sold|revenue|mapato|mauzo|niliuza)\b/.test(text),
+    expenses: /\b(expenses?|spend(?:ing)?|matumizi|gharama)\b/.test(text),
+    debts: /\b(debts?|owed|owe|madeni|deni|nadai)\b/.test(text),
+    purchases: /\b(purchases?|purchased|bought|manunuzi|nilinunua)\b/.test(text),
+    stock: /\b(stock|inventory|low stock|out of stock|reorder(?:ing)?|restock|kuagiza|bidhaa zilizobaki)\b/.test(text),
+  };
+  if (asksForTopProducts && (asksForTopSupplier || flags.expenses || flags.debts || flags.purchases || flags.stock)) return null;
+  if (asksForTopSupplier && (flags.sales || flags.expenses || flags.debts || flags.stock)) return null;
+  if (asksForPaymentBreakdown && (flags.expenses || flags.purchases || flags.stock || asksForTopProducts || asksForTopSupplier)) return null;
+  if (asksForCollections && (flags.expenses || flags.purchases || flags.stock || asksForTopProducts || asksForTopSupplier)) return null;
+
+  let intent: AssistantIntent | null = null;
+  if (asksForTopProducts) intent = "top_products";
+  else if (asksForTopSupplier) intent = "top_supplier";
+  else if (asksForPaymentBreakdown) intent = "payment_breakdown";
+  else if (asksForCollections) intent = "collections";
+  else {
+    const topics: Array<[AssistantIntent, keyof typeof flags]> = [
+      ["purchases", "purchases"], ["sales", "sales"], ["debts", "debts"], ["expenses", "expenses"], ["stock", "stock"],
+    ];
+    const matches = topics.filter(([, flag]) => flags[flag]);
+    if (matches.length === 1) intent = matches[0][0];
+    else return null;
+  }
+
+  const comparisonRequested = /\b(compare|compared|versus|vs\.?|against|linganisha|ikilinganishwa)\b/.test(text);
+  let compareTo: AssistantComparison | undefined;
+  let period: AssistantPeriod | null = null;
+  if (range) {
+    period = "custom";
+  } else if (comparisonRequested) {
+    if (/\b(this week|wiki hii)\b/.test(text) && /\b(last week|previous week|wiki iliyopita|wiki iliyotangulia)\b/.test(text)) {
+      period = "this_week";
+      compareTo = "last_week";
+    } else if (/\b(this month|mwezi huu)\b/.test(text) && /\b(last month|previous month|mwezi uliopita|mwezi uliotangulia)\b/.test(text)) {
+      period = "month";
+      compareTo = "last_month";
+    } else return null;
+  } else {
+    const periods: Array<[AssistantPeriod, RegExp]> = [
+      ["today", /\b(today|leo)\b/],
+      ["yesterday", /\b(yesterday|jana)\b/],
+      ["last_7_days", /\b(last|past|previous) 7 days\b/],
+      ["this_week", /\b(this week|wiki hii)\b/],
+      ["last_week", /\b(last week|previous week|wiki iliyopita|wiki iliyotangulia)\b/],
+      ["month", /\b(this month|mwezi huu)\b/],
+      ["last_month", /\b(last month|previous month|mwezi uliopita|mwezi uliotangulia)\b/],
+      ["year", /\b(this year|mwaka huu)\b/],
+      ["all", /\b(all time|lifetime|ever|muda wote|tangu mwanzo)\b/],
+    ];
+    const matches = periods.filter(([, pattern]) => pattern.test(text));
+    if (matches.length === 1) period = matches[0][0];
+    else if (matches.length !== 0) return null;
+  }
+
+  if (period === null) period = intent === "stock" || intent === "debts" ? "current" : "month";
+
+  if (period === "custom") {
+    if (!range || intent === "stock" || intent === "debts" || /\b(compare|compared|versus|vs\.?|against|last|previous)\b/.test(text)) return null;
+    return { intent, period, fromDate: range[1], toDate: range[2] };
+  }
+  if (period === "last_7_days" && (intent === "stock" || intent === "debts")) return null;
+  if (intent === "stock" && period !== "current") return null;
+  if (intent === "debts" && period !== "current") return null;
+  if (period === "all" && ["collections", "payment_breakdown"].includes(intent)) return null;
+  if (compareTo && !["sales", "expenses", "collections", "purchases"].includes(intent)) return null;
+
+  return { intent, period, ...(compareTo ? { compareTo } : {}) };
 }
