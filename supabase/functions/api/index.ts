@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs@3.0.2";
 import { jwtVerify, SignJWT } from "npm:jose@6.1.0";
 import { hasStaffPermission, canReadProducts, shopRouteAllowed, redactProduct } from "./permissions.ts";
+import { assistantActionRequiredPermissions, assistantRequiredPermissions, estimateStockCover, parseAssistantQuestion } from "./assistant-intent.ts";
 import { readAll, csvCell } from "./query.ts";
 
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -221,7 +222,7 @@ async function profile(client: SupabaseClient, userId: string, staffId?: string)
     client.from("suppliers").select("id,name,phone,address").eq("userId", userId).maybeSingle(),
   ]);
   if (!staffId) return { ...user, shop: shop ?? null, supplier: supplier ?? null };
-  const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,role,language,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId").eq("id", staffId).eq("shopId", shop?.id ?? "").eq("isActive", true).maybeSingle();
+  const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,role,language,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId").eq("id", staffId).eq("shopId", shop?.id ?? "").eq("isActive", true).maybeSingle();
   if (staffError) throw staffError;
   if (!staff || !shop) return null;
   return {
@@ -278,7 +279,7 @@ async function authLogin(client: SupabaseClient, request: Request) {
     await client.from("auth_rate_limits").delete().eq("key", `login:${phone}`);
     return json({ user: await profile(client, user.id) }, 200, authHeaders(access, refresh));
   }
-  const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,pin,role,language,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId,shop:shops!inner(id,userId,user:users!inner(id,phone,role,language,approvalStatus,createdAt))").eq("phone", phone).maybeSingle();
+  const { data: staff, error: staffError } = await client.from("staff_members").select("id,name,phone,pin,role,language,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId,shop:shops!inner(id,userId,user:users!inner(id,phone,role,language,approvalStatus,createdAt))").eq("phone", phone).maybeSingle();
   if (staffError) throw staffError;
   const staffShop = Array.isArray(staff?.shop) ? staff.shop[0] : staff?.shop;
   const accountUser = Array.isArray(staffShop?.user) ? staffShop.user[0] : staffShop?.user;
@@ -303,7 +304,7 @@ async function authRefresh(client: SupabaseClient, request: Request) {
     if (!user || user.approvalStatus !== "APPROVED") return json({ error: "Account access expired" }, 401);
     let staff: Record<string, unknown> | null = null;
     if (typeof payload.staffId === "string") {
-      const { data } = await client.from("staff_members").select("id,name,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId,shop:shops!inner(userId)").eq("id", payload.staffId).eq("isActive", true).maybeSingle();
+      const { data } = await client.from("staff_members").select("id,name,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId,shop:shops!inner(userId)").eq("id", payload.staffId).eq("isActive", true).maybeSingle();
       const staffShop = Array.isArray(data?.shop) ? data?.shop[0] : data?.shop;
       if (!data || !staffShop || staffShop.userId !== user.id) return json({ error: "Staff access expired" }, 401);
       staff = data;
@@ -352,7 +353,7 @@ async function requireUser(client: SupabaseClient, request: Request) {
   if (!shop.isActive && !["/subscription/status", "/reports", "/reports/my", "/settings"].includes(routePath(request))) return { response: json({ error: "This shop is suspended. Contact Uzuri Living support." }, 403) };
   if (typeof user.staffId === "string") {
     const { data: staff, error: staffError } = await client.from("staff_members")
-      .select("id,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId")
+      .select("id,role,phone,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,shopId")
       .eq("id", user.staffId).eq("shopId", shop.id).eq("isActive", true).maybeSingle();
     if (staffError) throw staffError;
     if (!staff) return { response: json({ error: "Staff access expired" }, 401) };
@@ -441,8 +442,7 @@ async function productList(client: SupabaseClient, request: Request, user: Recor
   query = query.order("name").order("id");
   const { data, count, error } = lowStock ? { data: await readAll(() => query), count: null, error: null } : await query.range((page - 1) * limit, page * limit - 1);
   if (error) throw error;
-  const { data: openOrders, error: openOrdersError } = await client.from("orders").select("status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]);
-  if (openOrdersError) throw openOrdersError;
+  const openOrders = await readAll(() => client.from("orders").select("id,status,items:order_items(productId,quantity)").eq("shopId", shop.id).in("status", ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"]).order("id"));
   const onOrder = new Map<string, { total: number; ordered: number; onTheWay: number }>();
   for (const order of openOrders ?? []) for (const item of order.items ?? []) {
     const quantity = Number(item.quantity ?? 0);
@@ -867,25 +867,25 @@ async function sales(client: SupabaseClient, user: Record<string, unknown>, shop
 
 function staffPermissions(role: string, overrides?: Record<string, unknown>) {
   const defaults = ["OWNER", "MANAGER"].includes(role)
-    ? { canSell: true, canManageStock: true, canViewInventoryAndPrices: true, canViewProductPerformance: true, canManageBarcodeSettings: true, canAddInventory: true, canManageExpiry: true, canRefundStock: true, canManageStaff: true, canViewReports: true, canRecordExpenses: true }
+    ? { canSell: true, canManageStock: true, canViewInventoryAndPrices: true, canViewProductPerformance: true, canUseAssistant: true, canManageBarcodeSettings: true, canAddInventory: true, canManageExpiry: true, canRefundStock: true, canManageStaff: true, canViewReports: true, canRecordExpenses: true }
     : role === "STOCK_CLERK"
-      ? { canSell: false, canManageStock: true, canViewInventoryAndPrices: true, canViewProductPerformance: false, canManageBarcodeSettings: false, canAddInventory: true, canManageExpiry: true, canRefundStock: true, canManageStaff: false, canViewReports: false, canRecordExpenses: false }
-      : { canSell: true, canManageStock: false, canViewInventoryAndPrices: false, canViewProductPerformance: false, canManageBarcodeSettings: false, canAddInventory: false, canManageExpiry: false, canRefundStock: false, canManageStaff: false, canViewReports: false, canRecordExpenses: false };
+      ? { canSell: false, canManageStock: true, canViewInventoryAndPrices: true, canViewProductPerformance: false, canUseAssistant: false, canManageBarcodeSettings: false, canAddInventory: true, canManageExpiry: true, canRefundStock: true, canManageStaff: false, canViewReports: false, canRecordExpenses: false }
+      : { canSell: true, canManageStock: false, canViewInventoryAndPrices: false, canViewProductPerformance: false, canUseAssistant: false, canManageBarcodeSettings: false, canAddInventory: false, canManageExpiry: false, canRefundStock: false, canManageStaff: false, canViewReports: false, canRecordExpenses: false };
   const permissionKeys = Object.keys(defaults) as Array<keyof typeof defaults>;
   return Object.fromEntries(permissionKeys.map((key) => [key, typeof overrides?.[key] === "boolean" ? overrides[key] : defaults[key]]));
 }
 
 async function staff(client: SupabaseClient, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
-  if (method === "GET") { const { data, error } = await client.from("staff_members").select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").eq("shopId", shop.id).order("isActive", { ascending: false }).order("name"); if (error) throw error; return json({ staff: data ?? [] }); }
+  if (method === "GET") { const { data, error } = await client.from("staff_members").select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").eq("shopId", shop.id).order("isActive", { ascending: false }).order("name"); if (error) throw error; return json({ staff: data ?? [] }); }
   const body = await request.json().catch(() => ({})); const now = new Date().toISOString();
-  if (method === "POST") { const role = String(body.role ?? "CASHIER").toUpperCase(); const defaults = staffPermissions(role); const phone = body.phone ? normalizePhone(body.phone) : ""; const pin = String(body.pin ?? "").trim(); if (!String(body.name ?? "").trim()) return json({ error: "Staff name is required" }, 400); if (!["OWNER", "MANAGER", "CASHIER", "STOCK_CLERK"].includes(role)) return json({ error: "Invalid staff role" }, 400); if (!phone || !validPhone(phone) || !validPin(pin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); const [{ data: existingUser }, { data: existingStaff }] = await Promise.all([client.from("users").select("id").eq("phone", phone).maybeSingle(), client.from("staff_members").select("id").eq("phone", phone).maybeSingle()]); if (existingUser || existingStaff) return json({ error: "This phone number already belongs to another Uzuri Living login" }, 409); const { data, error } = await client.from("staff_members").insert({ id: crypto.randomUUID(), name: String(body.name).trim(), phone, pin: await bcrypt.hash(pin, 10), role, ...Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, typeof body[key] === "boolean" ? body[key] : fallback])), shopId: shop.id, createdAt: now, updatedAt: now }).select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data }, 201); }
+  if (method === "POST") { const role = String(body.role ?? "CASHIER").toUpperCase(); const defaults = staffPermissions(role); const phone = body.phone ? normalizePhone(body.phone) : ""; const pin = String(body.pin ?? "").trim(); if (!String(body.name ?? "").trim()) return json({ error: "Staff name is required" }, 400); if (!["OWNER", "MANAGER", "CASHIER", "STOCK_CLERK"].includes(role)) return json({ error: "Invalid staff role" }, 400); if (!phone || !validPhone(phone) || !validPin(pin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); const [{ data: existingUser }, { data: existingStaff }] = await Promise.all([client.from("users").select("id").eq("phone", phone).maybeSingle(), client.from("staff_members").select("id").eq("phone", phone).maybeSingle()]); if (existingUser || existingStaff) return json({ error: "This phone number already belongs to another Uzuri Living login" }, 409); const { data, error } = await client.from("staff_members").insert({ id: crypto.randomUUID(), name: String(body.name).trim(), phone, pin: await bcrypt.hash(pin, 10), role, ...Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [key, typeof body[key] === "boolean" ? body[key] : fallback])), shopId: shop.id, createdAt: now, updatedAt: now }).select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data }, 201); }
   if (!id) return json({ error: "Staff member not found" }, 404);
   const { data: existingStaff } = await client.from("staff_members").select("phone").eq("id", id).eq("shopId", shop.id).maybeSingle();
   if (!existingStaff) return json({ error: "Staff member not found" }, 404);
   if (body.phone !== undefined && !validPhone(normalizePhone(body.phone))) return json({ error: "Enter a valid staff phone number" }, 400);
   if (body.role !== undefined && !["OWNER", "MANAGER", "CASHIER", "STOCK_CLERK"].includes(String(body.role))) return json({ error: "Invalid staff role" }, 400);
-  const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "role", "phone", "canSell", "canManageStock", "canViewInventoryAndPrices", "canViewProductPerformance", "canManageBarcodeSettings", "canAddInventory", "canManageExpiry", "canRefundStock", "canManageStaff", "canViewReports", "canRecordExpenses", "isActive"]) if (body[key] !== undefined) update[key] = key === "phone" ? normalizePhone(body[key]) || null : body[key]; if (body.pin !== undefined) { const nextPhone = String(update.phone ?? existingStaff.phone ?? "").trim(); const nextPin = String(body.pin ?? "").trim(); if (!nextPhone || !validPhone(nextPhone) || !validPin(nextPin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); update.pin = await bcrypt.hash(nextPin, 10); }
-  const { data, error } = await client.from("staff_members").update(update).eq("id", id).eq("shopId", shop.id).select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data });
+  const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "role", "phone", "canSell", "canManageStock", "canViewInventoryAndPrices", "canViewProductPerformance", "canUseAssistant", "canManageBarcodeSettings", "canAddInventory", "canManageExpiry", "canRefundStock", "canManageStaff", "canViewReports", "canRecordExpenses", "isActive"]) if (body[key] !== undefined) update[key] = key === "phone" ? normalizePhone(body[key]) || null : body[key]; if (body.pin !== undefined) { const nextPhone = String(update.phone ?? existingStaff.phone ?? "").trim(); const nextPin = String(body.pin ?? "").trim(); if (!nextPhone || !validPhone(nextPhone) || !validPin(nextPin)) return json({ error: "Staff login requires a valid phone and a 4 to 8 digit PIN" }, 400); update.pin = await bcrypt.hash(nextPin, 10); }
+  const { data, error } = await client.from("staff_members").update(update).eq("id", id).eq("shopId", shop.id).select("id,name,phone,role,canSell,canManageStock,canViewInventoryAndPrices,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,canAddInventory,canManageExpiry,canRefundStock,canManageStaff,canViewReports,canRecordExpenses,isActive,createdAt,updatedAt").single(); if (error) throw error; return json({ staff: data });
 }
 
 async function reports(client: SupabaseClient, user: Record<string, unknown>, request: Request, path: string) {
@@ -1252,7 +1252,7 @@ async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, 
 }
 
 async function orders(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
-  const orderId = id?.replace(/\/(confirm-delivery|cancel|reorder)$/, "");
+  const orderId = id?.replace(/\/(confirm-delivery|cancel|reorder|receipts|receipt-corrections|revisions)$/, "");
   const readOrder = async (savedId: string) => {
     const { data, error } = await client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("id", savedId).eq("shopId", shop.id).maybeSingle();
     if (error) throw error;
@@ -1263,7 +1263,29 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
     const phone = String(order.supplier?.phone ?? "").replace(/\D/g, "");
     return json({ order, whatsappMessage: { message, whatsappUrl: phone.length >= 7 ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null } }, status);
   };
+  const whatsappFor = (order: any) => {
+    const message = "Habari " + (order.supplier?.name ?? "") + ", naomba order kutoka " + (shop.name ?? "duka") + ":\n"
+      + order.items.map((item: any) => "- " + (item.product?.name ?? "Product") + ": " + item.quantity + " " + (item.product?.unit ?? "pcs")).join("\n");
+    const phone = String(order.supplier?.phone ?? "").replace(/\D/g, "");
+    return { message, whatsappUrl: phone.length >= 7 ? "https://wa.me/" + phone + "?text=" + encodeURIComponent(message) : null };
+  };
   if (method === "GET") {
+    if (id?.endsWith("/revisions")) {
+      if (!canViewOrderQuantities(user)) return json({ error: "Only the owner or stock staff can view order revision history" }, 403);
+      const { data, error } = await client.from("supplier_order_revisions")
+        .select("id,revisionNumber,action,beforeSnapshot,afterSnapshot,createdById,createdByStaffId,createdAt")
+        .eq("shopId", shop.id).eq("orderId", orderId).order("revisionNumber", { ascending: true });
+      if (error) throw error;
+      return json({ revisions: data ?? [] });
+    }
+    if (id?.endsWith("/receipts")) {
+      if (!canViewOrderQuantities(user)) return json({ error: "Only the owner or stock staff can view receipt quantities" }, 403);
+      const { data, error } = await client.from("supplier_order_receipts")
+        .select("id,receiptType,actualTotalAmount,note,createdAt,items:supplier_order_receipt_items(id,productId,orderedQuantity,receivedQuantity,stockAddedQuantity,unitPrice,note,product:products(id,name,unit))")
+        .eq("shopId", shop.id).eq("orderId", orderId).order("createdAt", { ascending: true });
+      if (error) throw error;
+      return json({ receipts: data ?? [] });
+    }
     if (orderId) { const order = await readOrder(orderId); return order ? reply(order) : json({ error: "Order not found" }, 404); }
     const status = new URL(request.url).searchParams.get("status")?.toUpperCase();
     const rows = await readAll(() => {
@@ -1275,6 +1297,54 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
   }
   if (!canViewOrderQuantities(user)) return json({ error: "Only the owner or stock staff can manage supplier orders" }, 403);
   const body = await request.json().catch(() => ({}));
+  if (method === "POST" && id === "batch") {
+    const groups = Array.isArray(body.groups) ? body.groups : null;
+    if (!groups?.length || groups.length > 20 || typeof body.orderGroupId !== "string") {
+      return json({ error: "A valid supplier order batch is required" }, 400);
+    }
+    const { data, error } = await client.rpc("save_supplier_order_batch", {
+      p_shop_id: shop.id,
+      p_groups: groups,
+      p_order_group_id: body.orderGroupId,
+      p_note: typeof body.note === "string" ? body.note : null,
+      p_user_id: user.userId,
+      p_staff_id: user.staffId ?? null,
+    });
+    if (error) throw error;
+    const savedRows = Array.isArray(data?.orders) ? data.orders.filter((row: any) => typeof row?.id === "string" && typeof row?.supplierId === "string") : [];
+    const orderIdBySupplier = new Map(savedRows.map((row: any) => [row.supplierId, row.id]));
+    const orderIds = groups.map((group: any) => orderIdBySupplier.get(group.supplierId)).filter((savedOrderId: unknown): savedOrderId is string => typeof savedOrderId === "string");
+    if (!orderIds.length || orderIds.length !== groups.length) throw new Error("Supplier order batch was saved without returning every supplier order");
+    const savedOrders = await Promise.all(orderIds.map(readOrder));
+    if (savedOrders.some((order) => !order)) throw new Error("Supplier order batch was saved, but one order could not be read back");
+    return json({ orders: savedOrders, reused: Boolean(data?.reused), whatsappMessage: whatsappFor(savedOrders[0]) }, data?.reused ? 200 : 201);
+  }
+  if (method === "POST" && id?.endsWith("/receipt-corrections")) {
+    const items = Array.isArray(body.items) ? body.items : null;
+    const note = typeof body.note === "string" ? body.note.trim() : "";
+    const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
+    if (!items?.length || note.length < 5 || note.length > 500 || !idempotencyKey) {
+      return json({ error: "Add received products, a reason of at least 5 characters, and retry safely" }, 400);
+    }
+    if (items.some((item: any) => typeof item.productId !== "string" || !item.productId
+      || typeof item.receivedQuantity !== "number" || !Number.isInteger(item.receivedQuantity) || item.receivedQuantity < 1
+      || typeof item.stockAddedQuantity !== "number" || !Number.isInteger(item.stockAddedQuantity) || item.stockAddedQuantity < 0
+      || item.stockAddedQuantity > item.receivedQuantity
+      || typeof item.unitPrice !== "number" || !Number.isInteger(item.unitPrice) || item.unitPrice < 0)) {
+      return json({ error: "Correction products need valid quantities (stock added cannot exceed quantity received) and a non-negative unit cost" }, 400);
+    }
+    const { data, error } = await client.rpc("record_supplier_order_stock_correction", {
+      p_shop_id: shop.id,
+      p_order_id: orderId,
+      p_user_id: user.userId,
+      p_staff_id: user.staffId ?? null,
+      p_items: items,
+      p_note: note,
+      p_idempotency_key: idempotencyKey,
+    });
+    if (error) throw error;
+    return json(data);
+  }
   if (method === "POST" && (!id || id.endsWith("/reorder"))) {
     let source = body;
     if (orderId) {
@@ -1282,7 +1352,7 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
       if (!order) return json({ error: "Order not found" }, 404);
       source = { supplierId: order.supplierId, items: order.items.map((item: any) => ({ productId: item.productId, quantity: item.quantity, unitPrice: item.unitPrice, note: item.note })), note: order.note };
     }
-    const { data: savedId, error } = await client.rpc("save_supplier_order", { p_shop_id: shop.id, p_order_id: null, p_body: source });
+    const { data: savedId, error } = await client.rpc("save_supplier_order_with_revision", { p_shop_id: shop.id, p_order_id: null, p_body: source, p_user_id: user.userId, p_staff_id: user.staffId ?? null });
     if (error) throw error;
     return reply(await readOrder(savedId), 201);
   }
@@ -1290,12 +1360,27 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
   if (method === "PATCH" && id?.endsWith("/confirm-delivery")) {
     const amount = body.actualTotalAmount == null ? null : Number(body.actualTotalAmount);
     if (amount !== null && (!Number.isInteger(amount) || amount < 0)) return json({ error: "The received purchase amount must be a whole number that is zero or greater" }, 400);
-    const { data, error } = await client.rpc("receive_supplier_order", { p_shop_id: shop.id, p_order_id: orderId, p_user_id: user.userId, p_staff_id: user.staffId ?? null, p_amount: amount });
+    const receivedItems = Array.isArray(body.receivedItems) ? body.receivedItems : null;
+    if (!receivedItems?.length || typeof body.idempotencyKey !== "string" || !body.idempotencyKey) {
+      return json({ error: "Reconcile every order line and confirm the receipt before marking delivered" }, 400);
+    }
+    const note = typeof body.discrepancyNote === "string" ? body.discrepancyNote.trim() : "";
+    if (note.length > 500) return json({ error: "Receipt notes must be 500 characters or fewer" }, 400);
+    const { data, error } = await client.rpc("receive_supplier_order", {
+      p_shop_id: shop.id,
+      p_order_id: orderId,
+      p_user_id: user.userId,
+      p_staff_id: user.staffId ?? null,
+      p_amount: amount,
+      p_received_items: receivedItems,
+      p_note: note || null,
+      p_idempotency_key: body.idempotencyKey,
+    });
     if (error) throw error;
     return json(data);
   }
   if (method === "PATCH" && Array.isArray(body.items)) {
-    const { data: savedId, error } = await client.rpc("save_supplier_order", { p_shop_id: shop.id, p_order_id: orderId, p_body: body });
+    const { data: savedId, error } = await client.rpc("save_supplier_order_with_revision", { p_shop_id: shop.id, p_order_id: orderId, p_body: body, p_user_id: user.userId, p_staff_id: user.staffId ?? null });
     if (error) throw error;
     return reply(await readOrder(savedId));
   }
@@ -1334,7 +1419,7 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
     let settingsAccount: Record<string, unknown> = { ...account, isStaff: false };
     if (typeof user.staffId === "string") {
       const { data: staff, error: staffError } = await client.from("staff_members")
-        .select("id,name,phone,role,language,canViewProductPerformance,canManageBarcodeSettings,isActive,shopId").eq("id", user.staffId).eq("shopId", shop.id).eq("isActive", true).maybeSingle();
+        .select("id,name,phone,role,language,canViewProductPerformance,canUseAssistant,canManageBarcodeSettings,isActive,shopId").eq("id", user.staffId).eq("shopId", shop.id).eq("isActive", true).maybeSingle();
       if (staffError) throw staffError;
       if (!staff) return json({ error: "Staff access expired" }, 401);
       settingsAccount = {
@@ -1550,10 +1635,154 @@ async function stockCountRead(client: SupabaseClient, shopId: string, id: string
   return json({ count: { ...count, items } },status);
 }
 
-async function assistant(client: SupabaseClient, shop: Record<string, unknown>, request: Request, path: string) { if (request.method === "GET") { const { data, error } = await client.from("assistant_actions").select("*").eq("shopId", shop.id).order("updatedAt", { ascending: false }).limit(200); if (error) throw error; return json({ actions: data ?? [] }); } const body = await request.json().catch(() => ({})); if (!body.actionKey || !body.title || !body.href) return json({ error: "actionKey, title, and href are required" }, 400); const now = new Date().toISOString(); const { data, error } = await client.from("assistant_actions").upsert({ id: crypto.randomUUID(), shopId: shop.id, actionKey: String(body.actionKey), title: String(body.title), href: String(body.href), status: String(body.status ?? "OPEN").toUpperCase(), updatedAt: now, createdAt: now }, { onConflict: "shopId,actionKey" }).select("*").single(); if (error) throw error; return json({ action: data }, 201); }
+async function assistantStockSnapshot(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
+  if (!hasStaffPermission(user, "canUseAssistant") || !hasStaffPermission(user, "canManageStock")) return json({ error: "You do not have permission to view assistant stock recommendations" }, 403);
+  const response = await productList(client, new Request(new URL("/products?lowStock=true&limit=1000", request.url)), user, shop);
+  if (!response.ok) return json({ error: "Stock data is unavailable" }, response.status);
+  const result = await response.json();
+  return json({ products: result.products ?? [], checkedAt: new Date().toISOString(), source: "Inventory and open supplier orders", href: "/inventory?lowStock=true", timeZone: shopTimeZone(shop) });
+}
+
+async function askAssistant(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const question = typeof body.question === "string" ? body.question.trim() : "";
+  if (!question || question.length > 250) return json({ error: "Enter a question of up to 250 characters" }, 400);
+  const sw = body.language === "sw";
+  const parsed = parseAssistantQuestion(question);
+  const now = new Date();
+  const timeZone = shopTimeZone(shop);
+  if (!parsed) return json({ answer: { message: sw ? "Tafadhali fafanua kipindi: mauzo au matumizi ya leo/mwezi huu, manunuzi yaliyopokelewa mwezi huu/wakati wote, stock ya sasa, au madeni yaliyopo." : "Please clarify the period: sales or expenses today/this month, received purchases this month/all time, current stock, or outstanding debts. Other questions are not supported yet.", source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
+  const required = assistantRequiredPermissions(parsed.intent);
+  if (!required.every((permission) => hasStaffPermission(user, permission))) return json({ error: "You do not have permission to view the records needed for this answer" }, 403);
+  if (parsed.intent === "purchases") {
+    const purchasesUrl = new URL("/purchases/analytics", request.url);
+    purchasesUrl.searchParams.set("period", parsed.period === "all" ? "all" : "month");
+    const response = await purchaseAnalytics(client, user, shop, new Request(purchasesUrl));
+    if (!response.ok) return response;
+    const purchaseData = await response.json();
+    const total = Number(purchaseData.summary?.totalPurchaseAmount ?? 0);
+    const count = Number(purchaseData.summary?.purchaseCount ?? 0);
+    const periodLabel = parsed.period === "all" ? (sw ? "wakati wote" : "all time") : (sw ? "mwezi huu hadi sasa" : "this month so far");
+    const message = sw
+      ? `Manunuzi yaliyopokelewa ${periodLabel}: TZS ${Math.round(total).toLocaleString("en-US")} katika order ${count}. Hii ni thamani iliyorekodiwa ya order zilizofikishwa, si uthibitisho wa malipo yaliyotoka.`
+      : `Received purchases ${periodLabel}: TZS ${Math.round(total).toLocaleString("en-US")} across ${count} delivered supplier orders. This is recorded purchase value, not proof of cash paid.`;
+    return json({ answer: { message, source: sw ? "Order za supplier zilizopokelewa" : "Received supplier orders", href: "/purchases", from: purchaseData.from ?? null, to: now.toISOString(), checkedAt: now.toISOString(), timeZone: purchaseData.timeZone ?? timeZone } });
+  }
+  const from = parsed.period === "month" ? startOfMonthInTimeZone(now, timeZone) : parsed.period === "today" ? tzDayStart(now, timeZone) : null;
+  const money = (value: number) => `TZS ${Math.round(value).toLocaleString("en-US")}`;
+  const periodLabel = parsed.period === "month" ? (sw ? "mwezi huu hadi sasa" : "this month so far") : (sw ? "leo hadi sasa" : "today so far");
+  let message: string;
+  let source: string;
+  let href: string;
+  if (parsed.intent === "sales") {
+    const rows = await readAll(() => client.from("sales").select("id,totalAmount,createdAt").eq("shopId", shop.id).gte("createdAt", from!.toISOString()).lte("createdAt", now.toISOString()).order("id"));
+    const total = rows.reduce((sum, row) => sum + Number(row.totalAmount ?? 0), 0);
+    message = sw ? `Mauzo yaliyorekodiwa ${periodLabel}: ${money(total)} (${rows.length} mauzo). Hii inajumuisha mauzo ya mkopo; si kiasi cha fedha kilichokusanywa.` : `Recorded sales ${periodLabel}: ${money(total)} across ${rows.length} sales. This includes credit sales and is not cash collected.`;
+    source = sw ? "Mauzo yaliyorekodiwa" : "Recorded sales";
+    href = "/analytics";
+  } else if (parsed.intent === "expenses") {
+    const rows = await readAll(() => client.from("expenses").select("id,amount,spentAt").eq("shopId", shop.id).gte("spentAt", from!.toISOString()).lte("spentAt", now.toISOString()).order("id"));
+    const total = rows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+    message = sw ? `Matumizi yaliyorekodiwa ${periodLabel}: ${money(total)} katika rekodi ${rows.length}.` : `Recorded expenses ${periodLabel}: ${money(total)} across ${rows.length} records.`;
+    source = sw ? "Matumizi yaliyorekodiwa" : "Recorded expenses";
+    href = "/expenses";
+  } else if (parsed.intent === "debts") {
+    const rows = await readAll(() => client.from("debts").select("id,amount,amountPaid,status").eq("shopId", shop.id).in("status", ["OPEN", "PARTIAL"]).order("id"));
+    const total = rows.reduce((sum, row) => sum + Math.max(0, Number(row.amount ?? 0) - Number(row.amountPaid ?? 0)), 0);
+    message = sw ? `Salio la madeni yaliyo wazi sasa ni ${money(total)} katika rekodi ${rows.length}. Hiki si kiasi kilichokusanywa.` : `Currently outstanding debt is ${money(total)} across ${rows.length} records. This is not cash collected.`;
+    source = sw ? "Madeni yaliyo wazi" : "Open debt records";
+    href = "/debts";
+  } else {
+    const response = await productList(client, new Request(new URL("/products?lowStock=true&limit=1000", request.url)), user, shop);
+    if (!response.ok) return json({ error: "Stock data is unavailable" }, response.status);
+    const data = await response.json();
+    const selected: Array<Record<string, unknown>> = (data.products ?? []).slice(0, 3);
+    let saleRows: Array<Record<string, any>> | null = null;
+    if (selected.length && hasStaffPermission(user, "canViewReports")) {
+      try {
+        const firstDay = addCalendarDaysInTimeZone(tzDayStart(now, timeZone), -27, timeZone);
+        const productIds = selected.map((product) => String(product.id));
+        saleRows = await readAll(() => client.from("sale_items").select("id,productId,quantity,sale:sales!inner(shopId,createdAt)").eq("sale.shopId", shop.id).in("productId", productIds).gte("sale.createdAt", firstDay.toISOString()).lte("sale.createdAt", now.toISOString()).order("id"));
+      } catch {
+        // Keep current stock visible, but do not guess when sales history fails.
+        saleRows = null;
+      }
+    }
+    const todayKey = dateKeyInTimeZone(now, timeZone);
+    const items = selected.map((p) => {
+      const sales = (saleRows ?? []).filter((row) => row.productId === p.id).flatMap((row) => {
+        const sale = Array.isArray(row.sale) ? row.sale[0] : row.sale;
+        return sale?.createdAt ? [{ date: dateKeyInTimeZone(new Date(sale.createdAt), timeZone), quantity: Number(row.quantity ?? 0) }] : [];
+      });
+      const estimate = saleRows ? estimateStockCover(Number(p.currentStock ?? 0), Number(p.onOrderQuantity ?? 0), todayKey, sales) : null;
+      const base = `${p.name}: ${p.currentStock} ${p.unit}`;
+      return estimate ? (sw ? `${base}; takriban siku ${estimate.daysOfCover} za cover zikijumuisha order zilizopo, kiasi cha ziada ${estimate.suggestedAdditionalUnits}` : `${base}; about ${estimate.daysOfCover} days of cover including current orders, ${estimate.suggestedAdditionalUnits} additional units for a 14-day target`) : (sw ? `${base}; hakuna makadirio ya kutosha` : `${base}; no reliable estimate available`);
+    });
+    const count = Number(data.pagination?.total ?? 0);
+    message = count ? (sw ? `Bidhaa ${count} zinahitaji ukaguzi: ${items.join("; ")}. Makadirio hutumia mauzo yaliyorekodiwa bila kutoa marejesho, huhesabu order zilizopo kama zikipokelewa, lakini hayajui stockouts au muda wa supplier. Thibitisha kabla ya kuagiza.` : `${count} products need a stock review: ${items.join("; ")}. Estimates use gross recorded sales without subtracting returns and count existing orders as if received; stockouts and supplier lead time are unknown. Confirm before ordering.`) : (sw ? "Hakuna bidhaa zinazohitaji kuagizwa kulingana na kiwango cha chini na order zilizopo." : "No products currently need reordering under the minimum-stock and existing-order rules.");
+    source = sw ? "Stock na order za wasambazaji" : "Inventory and open supplier orders";
+    href = "/inventory?lowStock=true";
+  }
+  return json({ answer: { message, source, href, from: from?.toISOString() ?? null, to: now.toISOString(), checkedAt: now.toISOString(), timeZone } });
+}
+
+async function assistant(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
+  const timeZone = shopTimeZone(shop);
+  const currentDate = dateKeyInTimeZone(new Date(), timeZone);
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days")) || 90));
+    const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit")) || 200));
+    const since = shiftDateKey(currentDate, -days + 1);
+    const { data, error } = await client.from("assistant_action_occurrences").select("*").eq("shopId", shop.id).gte("businessDate", since).order("businessDate", { ascending: false }).order("createdAt", { ascending: false }).limit(Math.min(5000, limit * 10));
+    if (error) throw error;
+    const actions = (data ?? []).filter((action) => assistantActionRequiredPermissions(action.actionKey).every((permission) => hasStaffPermission(user, permission))).slice(0, limit);
+    return json({ actions, days, timeZone, businessDate: currentDate });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const actionKey = String(body.actionKey ?? "").trim();
+  const title = String(body.title ?? "").trim();
+  const href = String(body.href ?? "").trim();
+  const eventType = String(body.eventType ?? "").toUpperCase();
+  if (!/^[a-zA-Z0-9:_-]{1,160}$/.test(actionKey) || !title || title.length > 240 || !href.startsWith("/") || href.startsWith("//")) return json({ error: "A valid actionKey, title, and in-app link are required" }, 400);
+  if (!["SHOWN", "OPENED", "COMPLETED", "DISMISSED"].includes(eventType)) return json({ error: "Invalid recommendation event" }, 400);
+  if (!assistantActionRequiredPermissions(actionKey).every((permission) => hasStaffPermission(user, permission))) return json({ error: "You do not have permission to track this recommendation" }, 403);
+
+  const businessDate = currentDate;
+  const productId = actionKey.startsWith("stock-") ? actionKey.slice("stock-".length) : null;
+  let baselineStock: number | null = null;
+  let observedOutcome: Record<string, unknown> | null = null;
+  if (productId && eventType === "SHOWN") {
+    const { data: product, error } = await client.from("products").select("currentStock").eq("id", productId).eq("shopId", shop.id).maybeSingle();
+    if (error) throw error;
+    baselineStock = product ? Number(product.currentStock) : null;
+  } else if (productId && eventType === "COMPLETED") {
+    const [{ data: previous, error: previousError }, { data: product, error: productError }] = await Promise.all([
+      client.from("assistant_action_occurrences").select("baselineStock,observedOutcome").eq("shopId", shop.id).eq("actionKey", actionKey).eq("businessDate", businessDate).maybeSingle(),
+      client.from("products").select("currentStock").eq("id", productId).eq("shopId", shop.id).maybeSingle(),
+    ]);
+    if (previousError) throw previousError;
+    if (productError) throw productError;
+    const before = previous?.baselineStock === null || previous?.baselineStock === undefined ? null : Number(previous.baselineStock);
+    const after = product ? Number(product.currentStock) : null;
+    if (before !== null && after !== null && !previous?.observedOutcome) {
+      observedOutcome = { type: "stock-level-change", beforeUnits: before, afterUnits: after, changeUnits: after - before, observedAt: new Date().toISOString(), attribution: "not-established" };
+    }
+  }
+
+  const { data, error } = await client.rpc("record_assistant_action_occurrence", {
+    p_id: crypto.randomUUID(), p_shop_id: String(shop.id), p_action_key: actionKey, p_title: title,
+    p_href: href, p_business_date: businessDate, p_event_type: eventType,
+    p_baseline_stock: baselineStock, p_observed_outcome: observedOutcome,
+  });
+  if (error) throw error;
+  const occurrence = Array.isArray(data) ? data[0] : data;
+  return json({ action: occurrence }, eventType === "SHOWN" ? 201 : 200);
+}
 
 async function assistantAdminAnalytics(client: SupabaseClient, request: Request) {
-  const days = Math.max(1, Math.min(365, Number(new URL(request.url).searchParams.get("days")) || 30)); const since = new Date(Date.now() - days * 86400000).toISOString(); const { data, error } = await client.from("assistant_actions").select("actionKey,title,href,status,updatedAt").gte("updatedAt", since).order("updatedAt", { ascending: false }).limit(1000); if (error) throw error; const rows = data ?? []; const counts: Record<string, number> = {}; const actions = new Map<string, { actionKey: string; count: number; title: string; href: string }>(); for (const row of rows) { const status = String(row.status ?? "OPEN"); counts[status] = (counts[status] ?? 0) + 1; const current = actions.get(row.actionKey) ?? { actionKey: row.actionKey, count: 0, title: row.title, href: row.href }; current.count += 1; actions.set(row.actionKey, current); } const total = rows.length; const rate = (value: number) => total ? Math.round((value / total) * 100) : 0; return json({ days, summary: { total, open: counts.OPEN ?? 0, opened: counts.OPENED ?? 0, completed: counts.COMPLETED ?? 0, dismissed: counts.DISMISSED ?? 0, completedRate: rate(counts.COMPLETED ?? 0), dismissedRate: rate(counts.DISMISSED ?? 0), openedRate: rate(counts.OPENED ?? 0) }, topActions: [...actions.values()].sort((a, b) => b.count - a.count).slice(0, 8), recentActions: rows.slice(0, 12) });
+  const days = Math.max(1, Math.min(365, Number(new URL(request.url).searchParams.get("days")) || 30)); const since = shiftDateKey(dateKeyInTimeZone(new Date(), DEFAULT_TIME_ZONE), -days + 1); const rows = await readAll(() => client.from("assistant_action_occurrences").select("actionKey,title,href,status,shownAt,openedAt,completedAt,dismissedAt,observedOutcome,businessDate,updatedAt").gte("businessDate", since).order("businessDate", { ascending: false }).order("id")); const counts: Record<string, number> = {}; const actions = new Map<string, { actionKey: string; count: number; title: string; href: string }>(); for (const row of rows) { const status = String(row.status ?? "OPEN"); counts[status] = (counts[status] ?? 0) + 1; const current = actions.get(row.actionKey) ?? { actionKey: row.actionKey, count: 0, title: row.title, href: row.href }; current.count += 1; actions.set(row.actionKey, current); } const total = rows.length; const rate = (value: number) => total ? Math.round((value / total) * 100) : 0; return json({ days, summary: { total, shown: rows.length, open: counts.OPEN ?? 0, opened: counts.OPENED ?? 0, completed: counts.COMPLETED ?? 0, dismissed: counts.DISMISSED ?? 0, measured: rows.filter((row) => row.observedOutcome !== null).length, completedRate: rate(counts.COMPLETED ?? 0), dismissedRate: rate(counts.DISMISSED ?? 0), openedRate: rate(counts.OPENED ?? 0) }, topActions: [...actions.values()].sort((a, b) => b.count - a.count).slice(0, 8), recentActions: rows.slice(0, 12) });
 }
 
 async function adminSuppliers(client: SupabaseClient, request: Request, path: string) {
@@ -1982,10 +2211,20 @@ async function handle(request: Request) {
     if (!user?.userId || typeof user.userId !== "string") return json({ error: "Unauthorized" }, 401);
     return user.role === "ADMIN" ? assistantAdminAnalytics(db, request) : json({ error: "Forbidden" }, 403);
   }
+  if (path === "/assistant/ask" && request.method === "POST") {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    return askAssistant(db, access.user!, access.shop!, request);
+  }
+  if (path === "/assistant/stock" && request.method === "GET") {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    return assistantStockSnapshot(db, access.user!, access.shop!, request);
+  }
   if (path === "/assistant/actions") {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
-    return assistant(db, access.shop!, request, path);
+    return assistant(db, access.user!, access.shop!, request);
   }
 
   if (request.method === "DELETE" && path.startsWith("/admin/users/")) {

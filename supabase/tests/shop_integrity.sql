@@ -29,8 +29,31 @@ BEGIN
   INSERT INTO orders(id,"shopId","supplierId",status,"totalAmount","updatedAt") VALUES(order_id,shop_id,supplier_id,'OUT_FOR_DELIVERY',25,NOW());
   INSERT INTO order_items(id,"orderId","productId",quantity,"unitPrice") VALUES(gen_random_uuid()::TEXT,order_id,product_id,5,5);
   UPDATE products SET "isActive"=FALSE WHERE id=product_id;
-  PERFORM receive_supplier_order(shop_id,order_id,owner_id,NULL,NULL);
-  PERFORM receive_supplier_order(shop_id,order_id,owner_id,NULL,NULL);
+  result := receive_supplier_order(
+    shop_id,order_id,owner_id,NULL,NULL,
+    jsonb_build_array(jsonb_build_object(
+      'productId',product_id,
+      'orderItemId',(SELECT id FROM order_items WHERE "orderId"=order_id AND "productId"=product_id),
+      'orderedQuantity',5,
+      'expectedUnitPrice',5,
+      'receivedQuantity',5
+    )),
+    NULL,
+    'audit-receipt'
+  );
+  repeat_result := receive_supplier_order(
+    shop_id,order_id,owner_id,NULL,NULL,
+    jsonb_build_array(jsonb_build_object(
+      'productId',product_id,
+      'orderItemId',(SELECT id FROM order_items WHERE "orderId"=order_id AND "productId"=product_id),
+      'orderedQuantity',5,
+      'expectedUnitPrice',5,
+      'receivedQuantity',5
+    )),
+    NULL,
+    'audit-receipt'
+  );
+  IF result->>'reused' <> 'false' OR repeat_result->>'reused' <> 'true' THEN RAISE EXCEPTION 'Supplier receipt retry was not idempotent'; END IF;
   SELECT "currentStock" INTO qty FROM products WHERE id=product_id AND "isActive";
   IF qty IS DISTINCT FROM 13 THEN RAISE EXCEPTION 'Receiving duplicated stock or failed to restore product'; END IF;
   INSERT INTO debts(id,"customerPhone",amount,"shopId","updatedAt") VALUES(debt_id,'+255700000000',100,shop_id,NOW());
@@ -61,19 +84,23 @@ BEGIN
     RAISE EXCEPTION 'Stale count overwrote current stock';
   EXCEPTION WHEN SQLSTATE '40001' THEN NULL; END;
   IF (SELECT "currentStock" FROM products WHERE id=product_id) <> 14 THEN RAISE EXCEPTION 'Stale stock count changed stock'; END IF;
-  saved_order:=save_supplier_order(shop_id,NULL,jsonb_build_object('supplierId',supplier_id,'items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',2))));
+  saved_order:=save_supplier_order_with_revision(shop_id,NULL,jsonb_build_object('supplierId',supplier_id,'items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',2)),'orderGroupId','audit-revision-group'),owner_id,NULL);
   BEGIN
     PERFORM save_supplier_order(shop_id,saved_order,jsonb_build_object('items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',2,'unitPrice',-1))));
     RAISE EXCEPTION 'Invalid order edit accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
   IF (SELECT SUM(quantity) FROM order_items WHERE "orderId"=saved_order)<>2 THEN RAISE EXCEPTION 'Failed edit destroyed order lines'; END IF;
   UPDATE orders SET status='OUT_FOR_DELIVERY' WHERE id=saved_order;
-  PERFORM save_supplier_order(shop_id,saved_order,jsonb_build_object('items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',3,'unitPrice',7,'note','Supplier correction')),'note','Edited before delivery'));
+  PERFORM save_supplier_order_with_revision(shop_id,saved_order,jsonb_build_object('items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',3,'unitPrice',7,'note','Supplier correction')),'note','Edited before delivery'),owner_id,NULL);
   IF (SELECT status FROM orders WHERE id=saved_order)<>'OUT_FOR_DELIVERY'
      OR (SELECT "totalAmount" FROM orders WHERE id=saved_order)<>21
      OR (SELECT note FROM orders WHERE id=saved_order)<>'Edited before delivery'
      OR (SELECT COUNT(*) FROM order_items WHERE "orderId"=saved_order AND quantity=3 AND "unitPrice"=7 AND note='Supplier correction')<>1
   THEN RAISE EXCEPTION 'Out-for-delivery order edit did not persist'; END IF;
+  IF (SELECT COUNT(*) FROM supplier_order_revisions WHERE "orderId"=saved_order)<>2
+     OR (SELECT "beforeSnapshot"->'items'->0->>'quantity' FROM supplier_order_revisions WHERE "orderId"=saved_order AND "revisionNumber"=2)<>'2'
+     OR (SELECT "afterSnapshot"->'items'->0->>'quantity' FROM supplier_order_revisions WHERE "orderId"=saved_order AND "revisionNumber"=2)<>'3'
+  THEN RAISE EXCEPTION 'Order revision history did not preserve before/after state'; END IF;
   BEGIN
     PERFORM save_supplier_order(shop_id,saved_order,jsonb_build_object('items',jsonb_build_array(jsonb_build_object('productId',product_id,'quantity',0,'unitPrice',7))));
     RAISE EXCEPTION 'Invalid out-for-delivery order edit accepted';

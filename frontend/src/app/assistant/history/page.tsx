@@ -17,6 +17,9 @@ interface AssistantAction {
   openedAt?: string | null;
   completedAt?: string | null;
   dismissedAt?: string | null;
+  shownAt: string;
+  businessDate: string;
+  observedOutcome?: { type: string; beforeUnits: number; afterUnits: number; changeUnits: number; observedAt: string; attribution: "not-established" } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,7 +43,7 @@ export default function AssistantHistoryPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<{ actions: AssistantAction[] }>("/assistant/actions?limit=200", lang)
+    api.get<{ actions: AssistantAction[] }>("/assistant/actions?days=90&limit=200", lang)
       .then((data) => setActions(data.actions))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -64,7 +67,11 @@ export default function AssistantHistoryPage() {
               {lang === "sw" ? "Ona hatua ulizofungua, kukamilisha au kuacha." : "See actions you opened, completed, or dismissed."}
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+            <div className="rounded-xl bg-brand-50 px-3 py-2 text-brand-800">
+              <p className="text-lg font-black">{actions.length}</p>
+              <p>{lang === "sw" ? "Zilizoonyeshwa" : "Shown"}</p>
+            </div>
             <div className="rounded-xl bg-green-50 px-3 py-2 text-green-800">
               <p className="text-lg font-black">{completed}</p>
               <p>{lang === "sw" ? "Zimefanyika" : "Done"}</p>
@@ -100,11 +107,19 @@ export default function AssistantHistoryPage() {
                           {action.status}
                         </span>
                         <span className="font-mono text-[11px] text-gray-400">{action.actionKey}</span>
+                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700">{lang === "sw" ? "Imeonyeshwa" : "Shown"}</span>
                       </div>
                       <p className="mt-2 font-semibold text-gray-950">{action.title}</p>
                       <p className="mt-1 text-xs text-gray-500">
-                        {lang === "sw" ? "Mwisho kubadilishwa" : "Last updated"} {formatAppDateTime(action.updatedAt)}
+                        {lang === "sw" ? "Siku ya biashara" : "Business day"} {action.businessDate} · {lang === "sw" ? "Ilionyeshwa" : "Shown"} {formatAppDateTime(action.shownAt)} · {lang === "sw" ? "Mwisho kubadilishwa" : "Last updated"} {formatAppDateTime(action.updatedAt)}
                       </p>
+                      {action.observedOutcome?.type === "stock-level-change" && (
+                        <p className="mt-2 rounded-lg bg-blue-50 p-2 text-xs text-blue-900">
+                          {lang === "sw"
+                            ? `Stock ilibadilika kutoka ${action.observedOutcome.beforeUnits} hadi ${action.observedOutcome.afterUnits} baada ya pendekezo kuonyeshwa (${action.observedOutcome.changeUnits >= 0 ? "+" : ""}${action.observedOutcome.changeUnits}). Huu ni mabadiliko yaliyoonekana tu; hayathibitishi kuwa pendekezo limesababisha mabadiliko.`
+                            : `Stock changed from ${action.observedOutcome.beforeUnits} to ${action.observedOutcome.afterUnits} after the recommendation was shown (${action.observedOutcome.changeUnits >= 0 ? "+" : ""}${action.observedOutcome.changeUnits}). This is an observed change only; it does not prove the recommendation caused it.`}
+                        </p>
+                      )}
                     </div>
                     <Link href={action.href} className="inline-flex items-center justify-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">
                       {lang === "sw" ? "Fungua" : "Open"}

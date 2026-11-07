@@ -14,6 +14,7 @@ interface StaffMember {
   canManageStock: boolean;
   canViewInventoryAndPrices: boolean;
   canViewProductPerformance: boolean;
+  canUseAssistant: boolean;
   canManageBarcodeSettings: boolean;
   canAddInventory: boolean;
   canManageExpiry: boolean;
@@ -48,7 +49,7 @@ export default function StaffPage() {
     await load();
   }
 
-  async function togglePermission(member: StaffMember, field: keyof Pick<StaffMember, "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canViewProductPerformance" | "canManageBarcodeSettings" | "canAddInventory" | "canManageExpiry" | "canRefundStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "isActive">) {
+  async function togglePermission(member: StaffMember, field: keyof Pick<StaffMember, "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canViewProductPerformance" | "canUseAssistant" | "canManageBarcodeSettings" | "canAddInventory" | "canManageExpiry" | "canRefundStock" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "isActive">) {
     await api.patch(`/staff/${member.id}`, { [field]: !member[field] }, lang);
     await load();
   }
@@ -58,6 +59,7 @@ export default function StaffPage() {
     canManageStock: lang === "sw" ? "Udhibiti wa stock" : "Stock controls",
     canViewInventoryAndPrices: lang === "sw" ? "Kuona stock na bei tu" : "View inventory and prices (read-only)",
     canViewProductPerformance: lang === "sw" ? "Kuona utendaji wa bidhaa" : "View product performance",
+    canUseAssistant: lang === "sw" ? "Kutumia msaidizi" : "Use assistant",
     canManageBarcodeSettings: lang === "sw" ? "Mipangilio ya barcode" : "Manage barcode settings",
     canAddInventory: lang === "sw" ? "Ongeza stock / inventory" : "Add stock / inventory",
     canManageExpiry: lang === "sw" ? "Tarehe za mwisho" : "Manage expiry dates",

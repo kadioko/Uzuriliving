@@ -16,7 +16,9 @@ export function shopRouteAllowed(user: Principal, path: string, method: string):
   if (path === "/staff" || path.startsWith("/staff/")) return has("canManageStaff");
   if (["/sales", "/debts", "/customer-orders", "/sync/events"].some((root) => path === root || path.startsWith(`${root}/`))) return has("canSell");
   if (path === "/expenses" || path.startsWith("/expenses/")) return has("canRecordExpenses");
-  if (["/dashboard", "/purchases", "/assistant", "/exports"].some((root) => path === root || path.startsWith(`${root}/`))) return has("canViewReports");
+  if (path === "/assistant/actions" || path.startsWith("/assistant/actions/")) return has("canUseAssistant");
+  if (path === "/assistant" || path.startsWith("/assistant/")) return has("canUseAssistant");
+  if (["/dashboard", "/purchases", "/exports"].some((root) => path === root || path.startsWith(`${root}/`))) return has("canViewReports");
   if (path === "/stock-counts" || path.startsWith("/stock-counts/") || path === "/orders" || path.startsWith("/orders/")) return has("canManageStock");
   if (path === "/barcodes/settings") return has("canManageBarcodeSettings");
   if (path.startsWith("/barcodes/lookup/")) return method === "GET" && canReadProducts(user);

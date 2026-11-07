@@ -44,6 +44,7 @@ interface User {
       canManageStock: boolean;
       canViewInventoryAndPrices: boolean;
       canViewProductPerformance: boolean;
+      canUseAssistant: boolean;
       canManageStaff: boolean;
       canViewReports: boolean;
       canRecordExpenses: boolean;
@@ -61,7 +62,7 @@ interface NavItem {
   labelKey?: string;
   label?: string;
   icon: typeof LayoutDashboard;
-  permission?: "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canManageStaff" | "canViewReports" | "canRecordExpenses";
+  permission?: "canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canManageStaff" | "canViewReports" | "canRecordExpenses" | "canUseAssistant";
   anyPermissions?: Array<"canSell" | "canManageStock" | "canViewInventoryAndPrices" | "canManageStaff" | "canViewReports" | "canRecordExpenses">;
   feature?: "staff" | "assistant" | "exports";
   ownerOnly?: boolean;
@@ -80,7 +81,7 @@ const merchantNav: NavItem[] = [
   { href: "/orders/customers", labelKey: "nav.customerOrders", icon: ShoppingBag, permission: "canSell" },
   { href: "/suppliers", labelKey: "nav.suppliers", icon: Truck, permission: "canManageStock" },
   { href: "/staff", labelKey: "nav.staff", icon: Users, permission: "canManageStaff", feature: "staff" },
-  { href: "/assistant", labelKey: "nav.assistant", icon: Sparkles, permission: "canViewReports", feature: "assistant" },
+  { href: "/assistant", labelKey: "nav.assistant", icon: Sparkles, permission: "canUseAssistant", feature: "assistant" },
   { href: "/analytics", labelKey: "nav.analytics", icon: ChartNoAxesCombined, permission: "canViewReports" },
   { href: "/billing", labelKey: "nav.billing", icon: CreditCard, permission: "canManageStaff" },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
