@@ -356,7 +356,7 @@ test("broad earnings questions offer choices and evidence can carry offline-sync
   await page.goto("/assistant");
   await page.getByLabel("Question for assistant").fill("How much did I make last week?");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
-  await page.getByRole("button", { name: "Gross profit" }).click();
+  await page.getByRole("button", { name: "Gross profit", exact: true }).click();
   await expect(page.getByText("How this was calculated")).toBeVisible();
   await expect(page.getByText("Sale-item revenue less saved buying cost.")).toBeVisible();
   await expect(page.getByText("Sales: 3")).toBeVisible();

@@ -57,6 +57,7 @@ interface Order {
   id: string;
   orderGroupId?: string | null;
   status: string;
+  expectedDeliveryDate?: string | null;
   totalAmount?: number;
   note?: string;
   createdAt: string;
@@ -154,6 +155,7 @@ export default function OrdersPage() {
   const [orderItems, setOrderItems] = useState<OrderDraftItem[]>([]);
   const [note, setNote] = useState("");
   const [orderGroupIdDraft, setOrderGroupIdDraft] = useState("");
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [whatsappMsg, setWhatsappMsg] = useState<{ message: string; whatsappUrl: string | null } | null>(null);
@@ -326,6 +328,7 @@ export default function OrdersPage() {
     setSelectedSupplier(order.supplier.id);
     setOrderItems(order.items.map((item) => ({ productId: item.productId, quantity: item.quantity, note: item.note || "", supplierId: order.supplier.id, unitPrice: item.unitPrice })));
     setNote(order.note || "");
+    setExpectedDeliveryDate(order.expectedDeliveryDate || "");
     setProductSearch("");
     setSupplierCatalog([]);
   }
@@ -585,12 +588,13 @@ export default function OrdersPage() {
     if (editingOrder) {
       setSaving(true);
       try {
-        const { order: updated } = await api.patch<{ order: Order }>(`/orders/${editingOrder.id}`, { items: validItems, note: note || null }, lang);
+        const { order: updated } = await api.patch<{ order: Order }>(`/orders/${editingOrder.id}`, { items: validItems, note: note || null, expectedDeliveryDate: expectedDeliveryDate || null }, lang);
         setOrders((current) => current.map((order) => order.id === updated.id ? updated : order));
         setShowForm(false);
         setEditingOrder(null);
         setOrderItems([]);
         setNote("");
+        setExpectedDeliveryDate("");
         toast(lang === "sw" ? "Order imebadilishwa." : "Order updated.", "success");
         void fetchOrders().catch(() => toast(lang === "sw" ? "Order imehifadhiwa, lakini orodha imeshindwa kujisasisha." : "Order saved, but the list could not refresh.", "error"));
       } catch (error) {
@@ -618,6 +622,7 @@ export default function OrdersPage() {
         groups: [...groups.entries()].map(([supplierId, items]) => ({ supplierId, items })),
         note: note || undefined,
         orderGroupId,
+        expectedDeliveryDate: expectedDeliveryDate || null,
       });
       const savedItemCount = created.orders.reduce((sum, order) => sum + order.items.length, 0);
       if (savedItemCount !== validItems.length) {
@@ -628,6 +633,7 @@ export default function OrdersPage() {
       setShowForm(false);
       setOrderItems([]);
       setNote("");
+      setExpectedDeliveryDate("");
       setProductSearch("");
       setOrderGroupIdDraft("");
       toast(lang === "sw" ? created.orders.length + " supplier order zimeundwa." : created.orders.length + " supplier order" + (created.orders.length === 1 ? "" : "s") + " created.", "success");
@@ -675,7 +681,7 @@ export default function OrdersPage() {
   function orderMarkup(batch: Order[]) {
     const first = batch[0];
     const date = formatAppDate(first.createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
-    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Suppliers:</b> ${batch.map((order) => escapeHtml(order.supplier.name)).join(", ")} &nbsp; <b>Order:</b> #${(first.orderGroupId || first.id).slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p><p class="staff-note">Staff copy · retail selling prices shown · supplier costs and order total are not shown.</p>${batch.map((order) => `<h3>${escapeHtml(order.supplier.name)} <span class="status">${escapeHtml(order.status.replaceAll("_", " "))}</span></h3><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Retail selling price</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td class="product">${item.product.imageUrl ? `<img src="${escapeHtml(item.product.imageUrl)}" alt="" />` : ""}<span>${escapeHtml(item.product.name)}</span></td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${item.product.sellingPrice == null ? "Not set" : formatTZS(item.product.sellingPrice)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>`).join("")}</div>`;
+    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Suppliers:</b> ${batch.map((order) => escapeHtml(order.supplier.name)).join(", ")} &nbsp; <b>Order:</b> #${(first.orderGroupId || first.id).slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date} &nbsp; <b>Expected delivery:</b> ${batch.map((order) => `${escapeHtml(order.supplier.name)}: ${escapeHtml(order.expectedDeliveryDate || "Not set")}`).join("; ")}</p><p class="staff-note">Staff copy · retail selling prices shown · supplier costs and order total are not shown.</p>${batch.map((order) => `<h3>${escapeHtml(order.supplier.name)} <span class="status">${escapeHtml(order.status.replaceAll("_", " "))}</span></h3><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Retail selling price</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td class="product">${item.product.imageUrl ? `<img src="${escapeHtml(item.product.imageUrl)}" alt="" />` : ""}<span>${escapeHtml(item.product.name)}</span></td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${item.product.sellingPrice == null ? "Not set" : formatTZS(item.product.sellingPrice)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>`).join("")}</div>`;
   }
 
   async function getFreshOrderBatch(batch: Order[]) {
@@ -745,6 +751,9 @@ export default function OrdersPage() {
     context.fillStyle = "#64748b"; context.font = "20px Arial"; context.fillText(`Order #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, pagePadding + 32, 222);
     const date = formatAppDate(batch[0].createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
     context.fillText(date, width - pagePadding - 220, 222);
+    const etaLine = `Expected delivery: ${batch.map((order) => `${order.supplier.name} ${order.expectedDeliveryDate || "not set"}`).join(" · ")}`;
+    context.font = "16px Arial"; context.fillStyle = "#526b5a";
+    wrapText(etaLine, width - pagePadding * 2 - 64, 1).forEach((line, index) => context.fillText(line, pagePadding + 32, 250 + index * 20));
     const supplierText = batch.map((order) => order.supplier.name).join(", ");
     context.font = "bold 18px Arial"; context.fillStyle = "#854b08"; context.fillText("SUPPLIERS", width - pagePadding - 360, 90);
     context.font = "18px Arial"; context.fillStyle = "#334155"; wrapText(supplierText, 330, 3).forEach((line, index) => context.fillText(line, width - pagePadding - 360, 120 + index * 27));
@@ -814,7 +823,7 @@ export default function OrdersPage() {
       <div className="max-w-3xl mx-auto pb-24 lg:pb-6">
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-gray-900">{t("orders.title", lang)}</h1>
-          {canViewOrderQuantities && <button onClick={() => { setEditingOrder(null); setShowForm(true); setOrderItems([]); setNote(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); setOrderGroupIdDraft(crypto.randomUUID()); }}
+          {canViewOrderQuantities && <button onClick={() => { setEditingOrder(null); setShowForm(true); setOrderItems([]); setNote(""); setExpectedDeliveryDate(""); setProductSearch(""); setSelectedSupplier(""); setSupplierCatalog([]); setOrderGroupIdDraft(crypto.randomUUID()); }}
             className="flex items-center gap-2 bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t("orders.newOrder", lang)}</span>
@@ -884,6 +893,7 @@ export default function OrdersPage() {
                       #{batchKey.slice(-8).toUpperCase()} •{" "}
                       {formatAppDate(order.createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short" })}
                     </p>
+                    {batch.some((item) => item.expectedDeliveryDate) && <p className="mt-1 text-xs font-semibold text-brand-700">{lang === "sw" ? "Tarehe inayotarajiwa" : "Expected delivery"}: {[...new Set(batch.map((item) => item.expectedDeliveryDate).filter(Boolean))].join(" · ")}</p>}
                     {canViewOrderQuantities && !hideOrderTotal && batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0))}</p>
                     )}
@@ -899,7 +909,7 @@ export default function OrdersPage() {
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     {canViewOrderQuantities && <div className="space-y-3 mb-3">
                       {batch.map((supplierOrder) => <div key={supplierOrder.id} className="rounded-lg border border-gray-100 p-2">
-                        <div className="mb-1 flex items-center justify-between"><p className="text-xs font-bold text-brand-700">{supplierOrder.supplier.name}</p><span className={`text-[11px] rounded-full px-2 py-0.5 font-semibold ${STATUS_COLOR[supplierOrder.status]}`}>{t(`orders.status.${supplierOrder.status}`, lang)}</span></div>
+                        <div className="mb-1 flex items-center justify-between"><p className="text-xs font-bold text-brand-700">{supplierOrder.supplier.name}{supplierOrder.expectedDeliveryDate ? <span className="ml-2 font-medium text-gray-500">· ETA {supplierOrder.expectedDeliveryDate}</span> : null}</p><span className={`text-[11px] rounded-full px-2 py-0.5 font-semibold ${STATUS_COLOR[supplierOrder.status]}`}>{t(`orders.status.${supplierOrder.status}`, lang)}</span></div>
                         {supplierOrder.items.map((item) => <div key={`${supplierOrder.id}-${item.productId}`} className="flex items-center gap-3 border-b border-gray-100 py-2 text-sm last:border-0">
                           {item.product.imageUrl ? <img src={item.product.imageUrl} alt="" className="h-10 w-10 rounded-lg border border-gray-200 object-cover" /> : <div className="h-10 w-10 rounded-lg bg-gray-100" />}
                           <span className="flex-1 text-gray-600">{item.product.name}<span className="block text-xs text-gray-400">Available: {item.product.currentStock ?? "-"} {item.product.unit}{item.note ? ` · ${item.note}` : ""}</span></span>
@@ -975,6 +985,12 @@ export default function OrdersPage() {
                   <option value="">{t("orders.selectSupplier", lang)}</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.phone})</option>)}
                 </select>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                <label htmlFor="supplier-order-eta" className="block text-sm font-bold text-gray-900">{lang === "sw" ? "Tarehe inayotarajiwa kufika (hiari)" : "Expected delivery date (optional)"}</label>
+                <p className="mt-1 text-xs leading-5 text-gray-600">{editingOrder ? (lang === "sw" ? "Sasisha tarehe ikiwa supplier amebadilisha muda wa kufika." : "Update this if the supplier changes the expected arrival date.") : (lang === "sw" ? "Tarehe hii itatumika kwa suppliers wote kwenye batch hii na kusaidia AI kubaini order zilizochelewa." : "This date applies to every supplier in this order batch and helps the assistant identify overdue orders.")}</p>
+                <input id="supplier-order-eta" type="date" value={expectedDeliveryDate} onChange={(event) => setExpectedDeliveryDate(event.target.value)} className="mt-3 w-full rounded-xl border border-blue-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-300 sm:max-w-xs" />
               </div>
 
               <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">

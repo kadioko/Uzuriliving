@@ -112,6 +112,8 @@ interface AssistantAnswer {
   timeZone: string;
   evidence?: { definition: string; recordCount: number | null; recordCountLabel?: string; relatedRecordCount?: number | null; relatedRecordCountLabel?: string; warnings: string[] };
   clarificationOptions?: Array<{ label: string; question: string }>;
+  relatedLinks?: Array<{ label: string; href: string }>;
+  followUpOptions?: Array<{ label: string; question: string }>;
 }
 
 type SourceKey = "today" | "history" | "trends" | "debts" | "expenses" | "actions" | "costs" | "stock" | "purchases" | "sync";
@@ -416,15 +418,28 @@ export default function AssistantPage() {
 
         <section className="rounded-xl border border-brand-100 bg-white p-4">
           <h2 className="font-bold text-gray-950">{lang === "sw" ? "Uliza Uzuri Living" : "Ask Uzuri Living"}</h2>
-          <p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Uliza kuhusu mauzo, bidhaa ambazo hazijauzwa, matumizi, manunuzi, makusanyo, mwenendo wa bidhaa, supplier, mabadiliko ya stock, madeni yaliyochelewa au stock. Tumia wiki, siku 30/90, mwezi au tarehe maalum." : "Ask about sales, products with no recorded sales, expenses, purchases, collections, product trends, supplier spend, stock movements, debt aging, or inventory. Use weekly, last 30/90 days, monthly, or custom dates."}</p>
+          <p className="mt-1 text-sm text-gray-600">{lang === "sw" ? "Uliza kuhusu mauzo, mabadiliko yake, malengo, bidhaa zisizouzwa au zenye faida, hatari ya kuishiwa, order za supplier, tofauti za upokeaji, makusanyo na saa zenye shughuli nyingi. Majibu hutumia hesabu za seva na vyanzo vilivyoidhinishwa." : "Ask about sales changes, targets, unsold or profitable products, run-out risk, supplier orders, delivery differences, collections, and busy hours. Answers use server-side calculations and permission-checked records."}</p>
           <form onSubmit={askQuestion} className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input aria-label={lang === "sw" ? "Swali kwa msaidizi" : "Question for assistant"} value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={250} placeholder={lang === "sw" ? "Mauzo ya mwezi huu ni kiasi gani?" : "What were my sales this month?"} className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             <button type="submit" disabled={asking || !question.trim()} className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{asking ? (lang === "sw" ? "Inatafuta…" : "Checking…") : (lang === "sw" ? "Uliza" : "Ask")}</button>
           </form>
+          <div className="mt-3 flex flex-wrap gap-2" aria-label={lang === "sw" ? "Maswali ya mfano" : "Example questions"}>
+            {[
+              { en: "What needs my attention today?", sw: "Nini kinahitaji kipaumbele leo?" },
+              { en: "What changed this week, and what drove it?", sw: "Nini kimebadilika wiki hii?" },
+              { en: "Which products made the most gross profit this month?", sw: "Bidhaa gani zimeleta faida ghafi zaidi mwezi huu?" },
+              { en: "Which products have had no sales in the last 60 days?", sw: "Bidhaa gani hazijauzwa siku 60 zilizopita?" },
+              { en: "How much did we collect versus record in sales this month?", sw: "Tumekusanya kiasi gani dhidi ya mauzo yaliyorekodiwa mwezi huu?" },
+            ].map((example) => {
+              const text = lang === "sw" ? example.sw : example.en;
+              return <button key={example.en} type="button" disabled={asking} onClick={() => { setQuestion(text); void askQuestionText(text); }} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-xs font-medium text-gray-700 hover:border-brand-200 hover:bg-brand-50 disabled:opacity-50">{text}</button>;
+            })}
+          </div>
           {askError && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{askError}</p>}
           {answer && <div aria-live="polite" className="mt-3 rounded-lg bg-brand-50 p-3 text-sm text-gray-800">
             <p>{answer.message}</p>
             {answer.clarificationOptions?.length ? <div className="mt-3 flex flex-wrap gap-2">{answer.clarificationOptions.map((option) => <button key={option.question} type="button" disabled={asking} onClick={() => { setQuestion(option.question); void askQuestionText(option.question); }} className="rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-800 hover:bg-brand-100 disabled:opacity-50">{option.label}</button>)}</div> : null}
+            {answer.followUpOptions?.length ? <div className="mt-3 border-t border-brand-100 pt-3"><p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Maswali yanayofuata" : "Useful follow-ups"}</p><div className="flex flex-wrap gap-2">{answer.followUpOptions.map((option) => <button key={option.question} type="button" disabled={asking} onClick={() => { setQuestion(option.question); void askQuestionText(option.question); }} className="rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-800 hover:bg-brand-100 disabled:opacity-50">{option.label}</button>)}</div></div> : null}
             {answer.source && <p className="mt-2 text-xs text-gray-600">{lang === "sw" ? "Chanzo" : "Source"}: {answer.source} · {answer.from ? `${formatAppDateTime(answer.from)} – ` : ""}{answer.to ? formatAppDateTime(answer.to) : formatAppDateTime(answer.checkedAt)} · {answer.timeZone}</p>}
             {answer.evidence && <div className="mt-3 rounded-lg border border-brand-100 bg-white/80 p-3">
               <p className="text-xs font-bold text-gray-800">{lang === "sw" ? "Jinsi jibu lilivyohesabiwa" : "How this was calculated"}</p>
@@ -432,7 +447,7 @@ export default function AssistantPage() {
               {answer.evidence.recordCount !== null && <p className="mt-1 text-xs text-gray-600">{answer.evidence.recordCountLabel ?? (lang === "sw" ? "Rekodi zilizohusika" : "Records included")}: {answer.evidence.recordCount}{answer.evidence.relatedRecordCount != null ? ` · ${answer.evidence.relatedRecordCountLabel ?? (lang === "sw" ? "Rekodi zinazohusiana" : "Related records")}: ${answer.evidence.relatedRecordCount}` : ""}</p>}
               {answer.evidence.warnings.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-amber-800">{answer.evidence.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
             </div>}
-            {answer.href && <Link href={answer.href} className="mt-2 inline-block text-xs font-bold text-brand-700">{lang === "sw" ? "Fungua rekodi husika" : "Open relevant records"} →</Link>}
+            {answer.relatedLinks?.length ? <div className="mt-3 flex flex-wrap gap-2">{answer.relatedLinks.map((item) => <Link key={`${item.label}:${item.href}`} href={item.href} className="inline-flex items-center rounded-lg border border-brand-200 bg-white px-3 py-2 text-xs font-bold text-brand-700 hover:bg-brand-100">{item.label} →</Link>)}</div> : answer.href ? <Link href={answer.href} className="mt-2 inline-block text-xs font-bold text-brand-700">{lang === "sw" ? "Fungua rekodi husika" : "Open relevant records"} →</Link> : null}
           </div>}
           <p className="mt-2 text-xs text-gray-500">{lang === "sw" ? "Msaidizi huyu hutumia kanuni na haitumii huduma ya AI ya nje; haibadilishi rekodi zako." : "This rules-based assistant does not use an external AI service or change your records."}</p>
         </section>

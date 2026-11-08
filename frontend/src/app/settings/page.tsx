@@ -24,6 +24,9 @@ interface UserSettings {
     category: string;
     isCatalogPublished: boolean;
     timeZone?: string | null;
+    dailySalesTarget?: number | null;
+    weeklySalesTarget?: number | null;
+    monthlySalesTarget?: number | null;
   };
 }
 
@@ -71,6 +74,9 @@ export default function SettingsPage() {
   const [shopCategory, setShopCategory] = useState("general");
   const [catalogPublished, setCatalogPublished] = useState(true);
   const [shopTimeZone, setShopTimeZone] = useState(DEFAULT_TIME_ZONE);
+  const [dailySalesTarget, setDailySalesTarget] = useState("");
+  const [weeklySalesTarget, setWeeklySalesTarget] = useState("");
+  const [monthlySalesTarget, setMonthlySalesTarget] = useState("");
   const [detectedTimeZone, setDetectedTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [shopSaving, setShopSaving] = useState(false);
@@ -106,6 +112,9 @@ export default function SettingsPage() {
           setShopCategory(s.shop.category);
           setCatalogPublished(s.shop.isCatalogPublished !== false);
           setShopTimeZone(s.shop.timeZone || DEFAULT_TIME_ZONE);
+          setDailySalesTarget(s.shop.dailySalesTarget == null ? "" : String(s.shop.dailySalesTarget));
+          setWeeklySalesTarget(s.shop.weeklySalesTarget == null ? "" : String(s.shop.weeklySalesTarget));
+          setMonthlySalesTarget(s.shop.monthlySalesTarget == null ? "" : String(s.shop.monthlySalesTarget));
         }
       })
       .catch(console.error)
@@ -126,6 +135,11 @@ export default function SettingsPage() {
       setShopError(lang === "sw" ? "Jina na jiji lazima zijazwe" : "Shop name and city are required");
       return;
     }
+    const targetValues = [dailySalesTarget, weeklySalesTarget, monthlySalesTarget];
+    if (targetValues.some((value) => value.trim() !== "" && (!/^\d+$/.test(value.trim()) || Number(value) < 1 || Number(value) > 2_147_483_647))) {
+      setShopError(lang === "sw" ? "Malengo ya mauzo yawe kiasi kizima cha TZS kuanzia 1 hadi 2,147,483,647." : "Sales targets must be whole TZS amounts from 1 to 2,147,483,647.");
+      return;
+    }
     setShopSaving(true);
     try {
       await api.patch("/settings/shop", {
@@ -135,12 +149,15 @@ export default function SettingsPage() {
         category: shopCategory,
         isCatalogPublished: catalogPublished,
         timeZone: shopTimeZone,
+        dailySalesTarget: dailySalesTarget.trim() ? Number(dailySalesTarget) : null,
+        weeklySalesTarget: weeklySalesTarget.trim() ? Number(weeklySalesTarget) : null,
+        monthlySalesTarget: monthlySalesTarget.trim() ? Number(monthlySalesTarget) : null,
       });
       setAppTimeZone(shopTimeZone);
       setShopMsg(t("settings.saved", lang));
       setSettings((prev) => prev ? {
         ...prev,
-        shop: prev.shop ? { ...prev.shop, name: shopName.trim(), location: shopLocation.trim(), district: shopDistrict.trim() || null, category: shopCategory, isCatalogPublished: catalogPublished, timeZone: shopTimeZone } : prev.shop,
+        shop: prev.shop ? { ...prev.shop, name: shopName.trim(), location: shopLocation.trim(), district: shopDistrict.trim() || null, category: shopCategory, isCatalogPublished: catalogPublished, timeZone: shopTimeZone, dailySalesTarget: dailySalesTarget.trim() ? Number(dailySalesTarget) : null, weeklySalesTarget: weeklySalesTarget.trim() ? Number(weeklySalesTarget) : null, monthlySalesTarget: monthlySalesTarget.trim() ? Number(monthlySalesTarget) : null } : prev.shop,
       } : prev);
       setTimeout(() => setShopMsg(""), 3000);
     } catch (err: unknown) {
@@ -333,6 +350,20 @@ export default function SettingsPage() {
                     ))}
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div className="rounded-lg border border-brand-100 bg-brand-50/50 p-3">
+                <h3 className="text-sm font-semibold text-gray-800">{lang === "sw" ? "Malengo ya mauzo" : "Sales targets"}</h3>
+                <p className="mt-1 text-xs leading-5 text-gray-600">{lang === "sw" ? "Weka lengo la TZS kwa siku, wiki au mwezi. Msaidizi atalinganisha na mauzo yaliyorekodiwa, pamoja na mauzo ya mkopo; acha wazi ili kuzima lengo." : "Set a TZS target for a day, week, or month. The assistant compares it with recorded sales, including credit sales; leave a field blank to disable that target."}</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  {[
+                    { label: lang === "sw" ? "Kwa siku" : "Daily", value: dailySalesTarget, set: setDailySalesTarget },
+                    { label: lang === "sw" ? "Kwa wiki" : "Weekly", value: weeklySalesTarget, set: setWeeklySalesTarget },
+                    { label: lang === "sw" ? "Kwa mwezi" : "Monthly", value: monthlySalesTarget, set: setMonthlySalesTarget },
+                  ].map((target) => <div key={target.label}>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">{target.label} (TZS)</label>
+                    <input type="number" min="1" max="2147483647" step="1" inputMode="numeric" value={target.value} onChange={(event) => target.set(event.target.value)} placeholder={lang === "sw" ? "Acha wazi" : "Not set"} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </div>)}
                 </div>
               </div>
               <div className="rounded-lg border border-brand-100 bg-brand-50/60 p-3">

@@ -37,7 +37,23 @@ test("assistant questions are bounded to supported topics and periods", () => {
   assert.deepEqual(parseAssistantQuestion("Compare net profit this week with last week"), { intent: "net_profit", period: "this_week", compareTo: "last_week" });
   assert.deepEqual(parseAssistantQuestion("Faida baada ya matumizi wiki iliyopita"), { intent: "net_profit", period: "last_week" });
   assert.deepEqual(parseAssistantQuestion("Nimekusanya kiasi gani wiki hii?"), { intent: "collections", period: "this_week" });
-  for (const question of ["sales and expenses today", "profit this month", "stock this month", "stock from 2026-10-01 to 2026-10-31", "debts from 2026-10-01 to 2026-10-31", "sales in 2024", "sales from 2026-02-30 to 2026-03-01", "top products and expenses this month", "sales today and purchases this month", "compare sales this week with last month", "sales and net profit this month", "overdue debts and sales this month", "supplier spend and expenses this month", "What haven't we sold and how much were sales this month?"]) {
+  assert.deepEqual(parseAssistantQuestion("What changed this week, and what drove it?"), { intent: "performance_drivers", period: "this_week", compareTo: "last_week" });
+  assert.deepEqual(parseAssistantQuestion("Nini kimebadilika wiki hii?"), { intent: "performance_drivers", period: "this_week", compareTo: "last_week" });
+  assert.deepEqual(parseAssistantQuestion("What needs my attention today?"), { intent: "daily_brief", period: "today" });
+  assert.deepEqual(parseAssistantQuestion("Which products made the most gross profit this month?"), { intent: "product_profit", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("Which products have had no sales in the last 60 days?"), { intent: "unsold_products", period: "last_60_days" });
+  assert.deepEqual(parseAssistantQuestion("Bidhaa gani hazijauzwa siku 60 zilizopita?"), { intent: "unsold_products", period: "last_60_days" });
+  assert.deepEqual(parseAssistantQuestion("Which products have had no sales in the last 30 days?"), { intent: "unsold_products", period: "last_30_days" });
+  assert.deepEqual(parseAssistantQuestion("Which products have had no sales in the last 90 days?"), { intent: "unsold_products", period: "last_90_days" });
+  assert.deepEqual(parseAssistantQuestion("Which products are likely to run out before the next delivery?"), { intent: "reorder_risk", period: "current" });
+  assert.deepEqual(parseAssistantQuestion("Which supplier orders are late or still awaiting delivery?"), { intent: "supplier_orders", period: "current" });
+  assert.deepEqual(parseAssistantQuestion("Which supplier deliveries had quantity differences?"), { intent: "delivery_differences", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("How much did we actually collect versus record in sales this month?"), { intent: "sales_collections", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("Tumekusanya kiasi gani dhidi ya mauzo yaliyorekodiwa mwezi huu?"), { intent: "sales_collections", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("Which days or hours are busiest?"), { intent: "sales_patterns", period: "last_90_days" });
+  assert.deepEqual(parseAssistantQuestion("How are sales performing against my monthly target?"), { intent: "sales_target", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("Lengo la wiki la mauzo likoje?"), { intent: "sales_target", period: "this_week" });
+  for (const question of ["sales and expenses today", "profit this month", "stock this month", "stock from 2026-10-01 to 2026-10-31", "debts from 2026-10-01 to 2026-10-31", "sales in 2024", "sales from 2026-02-30 to 2026-03-01", "top products and expenses this month", "sales today and purchases this month", "compare sales this week with last month", "sales and net profit this month", "overdue debts and sales this month", "supplier spend and expenses this month", "What haven't we sold and how much were sales this month?", "sales against my target last month", "busiest day all time", "supplier orders last month", "run-out risk last month", "what changed last month?"]) {
     assert.equal(parseAssistantQuestion(question), null, question);
   }
   assert.deepEqual(parseAssistantQuestion("sales"), { intent: "sales", period: "month" });
@@ -106,8 +122,15 @@ test("assistant permission is separate and recommendation history stays source-s
   assert.deepEqual(assistantRequiredPermissions("expenses"), ["canRecordExpenses"]);
   assert.deepEqual(assistantRequiredPermissions("purchases"), ["canViewReports"]);
   assert.deepEqual(assistantRequiredPermissions("gross_profit"), ["canViewReports"]);
-  assert.deepEqual(assistantRequiredPermissions("product_trends"), ["canViewReports"]);
-  assert.deepEqual(assistantRequiredPermissions("unsold_products"), ["canViewReports"]);
+  assert.deepEqual(assistantRequiredPermissions("product_trends"), ["canViewProductPerformance"]);
+  assert.deepEqual(assistantRequiredPermissions("unsold_products"), ["canViewProductPerformance"]);
   assert.deepEqual(assistantRequiredPermissions("supplier_spend"), ["canViewReports"]);
   assert.deepEqual(assistantRequiredPermissions("net_profit"), ["canViewReports", "canRecordExpenses"]);
+  assert.deepEqual(assistantRequiredPermissions("daily_brief"), []);
+  assert.deepEqual(assistantRequiredPermissions("product_profit"), ["canViewProductPerformance"]);
+  assert.deepEqual(assistantRequiredPermissions("performance_drivers"), ["canViewReports", "canRecordExpenses"]);
+  assert.deepEqual(assistantRequiredPermissions("reorder_risk"), ["canManageStock"]);
+  assert.deepEqual(assistantRequiredPermissions("supplier_orders"), ["canManageStock"]);
+  assert.deepEqual(assistantRequiredPermissions("delivery_differences"), ["canManageStock"]);
+  assert.deepEqual(assistantRequiredPermissions("sales_collections"), ["canViewReports", "canSell"]);
 });

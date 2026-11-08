@@ -1264,6 +1264,11 @@ async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, 
 }
 
 async function orders(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
+  const isValidDateOnly = (value: unknown) => {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
   const orderId = id?.replace(/\/(confirm-delivery|cancel|reorder|receipts|receipt-corrections|revisions)$/, "");
   const readOrder = async (savedId: string) => {
     const { data, error } = await client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock,sellingPrice))").eq("id", savedId).eq("shopId", shop.id).maybeSingle();
@@ -1314,13 +1319,18 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
     if (!groups?.length || groups.length > 20 || typeof body.orderGroupId !== "string") {
       return json({ error: "A valid supplier order batch is required" }, 400);
     }
-    const { data, error } = await client.rpc("save_supplier_order_batch", {
+    const expectedDeliveryDate = body.expectedDeliveryDate === undefined || body.expectedDeliveryDate === null || body.expectedDeliveryDate === ""
+      ? null
+      : body.expectedDeliveryDate;
+    if (expectedDeliveryDate !== null && !isValidDateOnly(expectedDeliveryDate)) return json({ error: "Expected delivery date must be a valid YYYY-MM-DD date" }, 400);
+    const { data, error } = await client.rpc("save_supplier_order_batch_with_eta", {
       p_shop_id: shop.id,
       p_groups: groups,
       p_order_group_id: body.orderGroupId,
       p_note: typeof body.note === "string" ? body.note : null,
       p_user_id: user.userId,
       p_staff_id: user.staffId ?? null,
+      p_expected_delivery_date: expectedDeliveryDate,
     });
     if (error) throw error;
     const savedRows = Array.isArray(data?.orders) ? data.orders.filter((row: any) => typeof row?.id === "string" && typeof row?.supplierId === "string") : [];
@@ -1392,6 +1402,9 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
     return json(data);
   }
   if (method === "PATCH" && Array.isArray(body.items)) {
+    if (body.expectedDeliveryDate !== undefined && body.expectedDeliveryDate !== null && body.expectedDeliveryDate !== "" && !isValidDateOnly(body.expectedDeliveryDate)) {
+      return json({ error: "Expected delivery date must be a valid YYYY-MM-DD date" }, 400);
+    }
     const { data: savedId, error } = await client.rpc("save_supplier_order_with_revision", { p_shop_id: shop.id, p_order_id: orderId, p_body: body, p_user_id: user.userId, p_staff_id: user.staffId ?? null });
     if (error) throw error;
     return reply(await readOrder(savedId));
@@ -1421,7 +1434,7 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
   if (request.method === "GET" && path === "/settings") {
     const [{ data: account, error: accountError }, { data: currentShop, error: shopError }, { data: supplier, error: supplierError }] = await Promise.all([
       client.from("users").select("id,phone,name,role,language,createdAt").eq("id", user.userId).maybeSingle(),
-      client.from("shops").select("id,name,location,district,category,isCatalogPublished,timeZone").eq("id", shop.id).maybeSingle(),
+      client.from("shops").select("id,name,location,district,category,isCatalogPublished,timeZone,dailySalesTarget,weeklySalesTarget,monthlySalesTarget").eq("id", shop.id).maybeSingle(),
       client.from("suppliers").select("id,name,phone,address").eq("userId", user.userId).maybeSingle(),
     ]);
     if (accountError) throw accountError;
@@ -1469,7 +1482,23 @@ async function settings(client: SupabaseClient, user: Record<string, unknown>, s
   if (path === "/settings/shop") {
     if (staffId && user.staffRole !== "OWNER") return json({ error: "Only the shop owner can change shop settings" }, 403);
     if (body.timeZone !== undefined && !validTimeZone(body.timeZone)) return json({ error: "timeZone must be a valid IANA time zone such as Africa/Nairobi" }, 400);
-    const update: Record<string, unknown> = { updatedAt: now }; for (const key of ["name", "location", "district", "category", "isCatalogPublished", "timeZone"]) if (body[key] !== undefined) update[key] = key === "timeZone" ? String(body[key]).trim() : body[key]; const { data, error } = await client.from("shops").update(update).eq("id", shop.id).select("*").single(); if (error) throw error; return json({ shop: data });
+    const update: Record<string, unknown> = { updatedAt: now };
+    for (const key of ["name", "location", "district", "category", "isCatalogPublished", "timeZone"]) {
+      if (body[key] !== undefined) update[key] = key === "timeZone" ? String(body[key]).trim() : body[key];
+    }
+    for (const key of ["dailySalesTarget", "weeklySalesTarget", "monthlySalesTarget"]) {
+      if (body[key] === undefined) continue;
+      if (body[key] === null || body[key] === "") {
+        update[key] = null;
+        continue;
+      }
+      const target = Number(body[key]);
+      if (!Number.isSafeInteger(target) || target < 1 || target > 2_147_483_647) return json({ error: "Sales targets must be whole TZS amounts from 1 to 2,147,483,647" }, 400);
+      update[key] = target;
+    }
+    const { data, error } = await client.from("shops").update(update).eq("id", shop.id).select("*").single();
+    if (error) throw error;
+    return json({ shop: data });
   }
   if (path === "/settings/pin") {
     const currentPin = String(body.currentPin ?? ""); const newPin = String(body.newPin ?? "");
@@ -1750,6 +1779,7 @@ function assistantRange(period: string, now: Date, timeZone: string, customFrom?
   if (period === "yesterday") return { from: startOfTimeZoneDate(shiftDateKey(today, -1), timeZone), to: todayStart };
   if (period === "last_7_days") return { from: startOfTimeZoneDate(shiftDateKey(today, -6), timeZone), to: now };
   if (period === "last_30_days") return { from: startOfTimeZoneDate(shiftDateKey(today, -29), timeZone), to: now };
+  if (period === "last_60_days") return { from: startOfTimeZoneDate(shiftDateKey(today, -59), timeZone), to: now };
   if (period === "last_90_days") return { from: startOfTimeZoneDate(shiftDateKey(today, -89), timeZone), to: now };
   if (period === "this_week") return { from: weekStart, to: now };
   if (period === "last_week") return { from: addCalendarDaysInTimeZone(weekStart, -7, timeZone), to: weekStart };
@@ -1785,7 +1815,7 @@ function assistantComparisonRange(compareTo: string, period: string, now: Date, 
 function assistantPeriodLabel(period: string, compare = false, sw = false) {
   const labels: Record<string, [string, string]> = {
     today: ["today so far", "leo hadi sasa"], yesterday: ["yesterday", "jana"], last_7_days: ["the last 7 calendar days", "siku 7 za kalenda zilizopita"],
-    last_30_days: ["the last 30 calendar days", "siku 30 za kalenda zilizopita"], last_90_days: ["the last 90 calendar days", "siku 90 za kalenda zilizopita"],
+    last_30_days: ["the last 30 calendar days", "siku 30 za kalenda zilizopita"], last_60_days: ["the last 60 calendar days", "siku 60 za kalenda zilizopita"], last_90_days: ["the last 90 calendar days", "siku 90 za kalenda zilizopita"],
     this_week: [compare ? "this week so far" : "this week", compare ? "wiki hii hadi sasa" : "wiki hii"],
     last_week: ["last week", "wiki iliyopita"], month: ["this month so far", "mwezi huu hadi sasa"],
     last_month: ["last month", "mwezi uliopita"], year: ["this year so far", "mwaka huu hadi sasa"],
@@ -1848,7 +1878,7 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
   const timeZone = shopTimeZone(shop);
   if (!parsed) {
     const clarification = assistantEarningsClarification(question, sw);
-    return json({ answer: { message: clarification?.message ?? (sw ? "Sijaelewa vizuri. Uliza kuhusu mauzo, bidhaa ambazo hazijauzwa, faida ghafi, faida baada ya matumizi, matumizi, manunuzi yaliyopokelewa, makusanyo, njia za malipo, mwenendo wa bidhaa, wasambazaji, stock, mabadiliko ya stock au madeni yaliyochelewa. Unaweza kutumia wiki hii, siku 30/90 zilizopita, mwezi huu au tarehe mbili." : "I couldn’t map that question safely. Ask about sales, active products with no recorded sales, gross profit, profit after expenses, expenses, received purchases, collections, payment methods, product trends, supplier spend, stock movements, debt aging, or outstanding debts. You can use this week, the last 30/90 days, this month, or a date range."), clarificationOptions: clarification?.clarificationOptions, source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
+    return json({ answer: { message: clarification?.message ?? (sw ? "Sijaelewa vizuri. Uliza kuhusu mauzo, kilichobadilika, muhtasari wa leo, bidhaa zisizouza au zenye faida, stock, order zinazosubiri, tofauti za kupokea, matumizi, manunuzi, makusanyo, saa za mauzo, malengo au madeni. Tumia siku 30/60/90, wiki, mwezi au tarehe maalum." : "I couldn’t map that question safely. Ask about sales and what changed, today’s priorities, unsold or profitable products, stock risk, waiting supplier orders, delivery differences, expenses, purchases, collections, busy sales times, targets, or debts. Use 30/60/90 days, a week, a month, or a custom date range."), clarificationOptions: clarification?.clarificationOptions, source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
   }
   const required = assistantRequiredPermissions(parsed.intent);
   if (!required.every((permission) => hasStaffPermission(user, permission))) return json({ error: "You do not have permission to view the records needed for this answer" }, 403);
@@ -1859,7 +1889,32 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
   const money = (value: unknown) => `TZS ${Math.round(Number(value) || 0).toLocaleString("en-US")}`;
   const periodLabel = assistantPeriodLabel(parsed.period, Boolean(parsed.compareTo), sw);
   let data: Record<string, any>;
-  if (parsed.intent === "stock") {
+  if (parsed.intent === "daily_brief") {
+    const snapshotResponse = await assistantHomeSnapshot(client, user, shop);
+    if (!snapshotResponse.ok) return snapshotResponse;
+    const snapshot = await snapshotResponse.json();
+    snapshot.sources = snapshot.sources ?? {};
+    if (hasStaffPermission(user, "canManageStock")) {
+      try {
+        const supplierOrderMetrics = await client.rpc("assistant_expanded_metrics", {
+          p_shop_id: shop.id, p_intent: "supplier_orders", p_from: null, p_to: null,
+          p_compare_from: null, p_compare_to: null, p_time_zone: timeZone,
+        });
+        if (supplierOrderMetrics.error) throw supplierOrderMetrics.error;
+        snapshot.supplierOrders = supplierOrderMetrics.data ?? {};
+        snapshot.sources.supplierOrders = { status: "ready" };
+      } catch {
+        snapshot.sources.supplierOrders = { status: "unavailable" };
+      }
+    } else {
+      snapshot.sources.supplierOrders = { status: "restricted" };
+    }
+    data = { snapshot };
+  } else if (parsed.intent === "reorder_risk") {
+    const metrics = await client.rpc("assistant_reorder_risk_metrics", { p_shop_id: shop.id, p_time_zone: timeZone });
+    if (metrics.error) throw metrics.error;
+    data = metrics.data ?? {};
+  } else if (parsed.intent === "stock") {
     const snapshot = await client.rpc("assistant_stock_snapshot", {
       p_shop_id: shop.id, p_time_zone: timeZone,
       p_can_manage_stock: hasStaffPermission(user, "canManageStock"),
@@ -1892,6 +1947,44 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
     });
     if (metrics.error) throw metrics.error;
     data = metrics.data ?? {};
+  } else if (["performance_drivers", "product_profit", "sales_patterns", "supplier_orders", "delivery_differences"].includes(parsed.intent)) {
+    let compareRange: { from: Date; to: Date } | null = null;
+    if (parsed.intent === "performance_drivers") {
+      compareRange = parsed.compareTo ? assistantComparisonRange(parsed.compareTo, parsed.period, now, timeZone) : null;
+      if (!compareRange && range.from && range.to) {
+        const span = range.to.getTime() - range.from.getTime();
+        compareRange = { from: new Date(range.from.getTime() - span), to: range.from };
+      }
+      if (!compareRange) return json({ error: "Choose this week, this month, or a bounded date range to explain changes" }, 400);
+    }
+    const metrics = await client.rpc("assistant_expanded_metrics", {
+      p_shop_id: shop.id,
+      p_intent: parsed.intent,
+      p_from: range.from?.toISOString() ?? null,
+      p_to: range.to?.toISOString() ?? null,
+      p_compare_from: compareRange?.from.toISOString() ?? null,
+      p_compare_to: compareRange?.to.toISOString() ?? null,
+      p_time_zone: timeZone,
+    });
+    if (metrics.error) throw metrics.error;
+    data = metrics.data ?? {};
+  } else if (parsed.intent === "sales_collections") {
+    const [sales, collections] = await Promise.all([
+      client.rpc("assistant_query_metrics", { p_shop_id: shop.id, p_intent: "sales", p_from: range.from?.toISOString() ?? null, p_to: range.to?.toISOString() ?? null, p_time_zone: timeZone }),
+      client.rpc("assistant_query_metrics", { p_shop_id: shop.id, p_intent: "collections", p_from: range.from?.toISOString() ?? null, p_to: range.to?.toISOString() ?? null, p_time_zone: timeZone }),
+    ]);
+    if (sales.error) throw sales.error;
+    if (collections.error) throw collections.error;
+    data = { sales: sales.data ?? {}, collections: collections.data ?? {} };
+  } else if (parsed.intent === "sales_target") {
+    const targetColumn = parsed.period === "today" ? "dailySalesTarget" : parsed.period === "this_week" ? "weeklySalesTarget" : "monthlySalesTarget";
+    const [{ data: targetRow, error: targetError }, sales] = await Promise.all([
+      client.from("shops").select("dailySalesTarget,weeklySalesTarget,monthlySalesTarget").eq("id", shop.id).maybeSingle(),
+      client.rpc("assistant_query_metrics", { p_shop_id: shop.id, p_intent: "sales", p_from: range.from?.toISOString() ?? null, p_to: range.to?.toISOString() ?? null, p_time_zone: timeZone }),
+    ]);
+    if (targetError) throw targetError;
+    if (sales.error) throw sales.error;
+    data = { target: targetRow?.[targetColumn] ?? null, sales: sales.data ?? {}, targetColumn };
   } else if (parsed.intent === "gross_profit" || parsed.intent === "net_profit") {
     const metrics = await client.rpc("assistant_profit_metrics", {
       p_shop_id: shop.id,
@@ -1919,8 +2012,201 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
   let definition = "";
   let recordCount: number | null = null;
   let relatedRecordCount: number | null = null;
+  let relatedLinks: Array<{ label: string; href: string }> = [];
+  let followUpOptions: Array<{ label: string; question: string }> = [];
   const warnings: string[] = [];
-  if (parsed.intent === "sales") {
+  if (parsed.intent === "daily_brief") {
+    const snapshot = data.snapshot ?? {};
+    const sources = snapshot.sources ?? {};
+    const issues: Array<{ rank: number; label: string; detail: string; href: string; question: string }> = [];
+    if (sources.stock?.status === "ready") {
+      const stock = snapshot.stock ?? {};
+      const stockProducts = Array.isArray(stock.products) ? stock.products as Array<Record<string, unknown>> : [];
+      const out = stockProducts.filter((product) => Number(product.currentStock ?? 0) <= 0).length;
+      const low = Number(stock.count ?? stockProducts.length);
+      const outLabel = out >= stockProducts.length && low > stockProducts.length
+        ? (sw ? `angalau ${out}` : `at least ${out}`)
+        : String(out);
+      if (out > 0) issues.push({ rank: 100, label: sw ? "Bidhaa zimeisha" : "Products are out of stock", detail: sw ? `${outLabel} bidhaa zinazohitaji restock hazina stock.` : `${outLabel} reorderable products have no stock on hand.`, href: "/inventory?stockFilter=out", question: "What stock needs attention?" });
+      else if (low > 0) issues.push({ rank: 75, label: sw ? "Kagua stock ya chini" : "Review low stock", detail: sw ? `Bidhaa ${low} zinazohitaji restock zina stock chini; bidhaa zenye order ya kutosha hazijahesabiwa.` : `${low} reorderable products are below their minimum after accounting for open orders.`, href: "/inventory?stockFilter=restock", question: "What stock needs attention?" });
+    }
+    if (sources.supplierOrders?.status === "ready") {
+      const supplierOrders = snapshot.supplierOrders ?? {};
+      const late = Number(supplierOrders.lateCount ?? 0);
+      const open = Number(supplierOrders.openCount ?? 0);
+      if (late > 0) issues.push({ rank: 80, label: sw ? "Order za supplier zimechelewa" : "Supplier orders are past their ETA", detail: sw ? `Order ${late} zimepita tarehe ya kufika.` : `${late} open orders are past their saved expected delivery date.`, href: "/orders", question: "Which supplier orders are late or still awaiting delivery?" });
+      else if (open > 0) issues.push({ rank: 45, label: sw ? "Order za supplier zinasubiri" : "Supplier orders are still open", detail: sw ? `Order ${open} bado hazijapokelewa.` : `${open} supplier orders are not yet received.`, href: "/orders", question: "Which supplier orders are late or still awaiting delivery?" });
+    }
+    if (sources.debts?.status === "ready") {
+      const overdue = Number(snapshot.debts?.summary?.overdueCount ?? 0);
+      if (overdue > 0) issues.push({ rank: 85, label: sw ? "Madeni yaliyochelewa" : "Overdue debts", detail: sw ? `Rekodi ${overdue} zinahitaji ufuatiliaji.` : `${overdue} records need follow-up.`, href: "/debts", question: "Which debts are overdue?" });
+    }
+    if (sources.sync?.status === "ready") {
+      const failed = Number(snapshot.syncHealth?.serverKnownFailed ?? 0);
+      const pending = Number(snapshot.syncHealth?.serverKnownPending ?? 0);
+      if (failed + pending > 0) issues.push({ rank: failed > 0 ? 90 : 70, label: sw ? "Hakiki sync ya mauzo" : "Check sales sync", detail: sw ? `Zilizoshindwa ${failed}; zinazosubiri ${pending}.` : `${failed} failed and ${pending} pending sync reports.`, href: "/sales", question: "Are all sales devices synced?" });
+      if (snapshot.syncHealth?.lastSuccessfulSyncAt) {
+        const lastSync = new Intl.DateTimeFormat(sw ? "sw-TZ" : "en-US", { dateStyle: "medium", timeStyle: "short", timeZone }).format(new Date(String(snapshot.syncHealth.lastSuccessfulSyncAt)));
+        warnings.push(sw ? `Tukio la mwisho la sync iliyofanikiwa lililoripotiwa na seva: ${lastSync}; hii si uthibitisho wa foleni za vifaa ambazo hazijaripotiwa.` : `Last successful sync event reported to the server: ${lastSync}; this cannot reveal device queues that have not reported.`);
+      }
+      if (snapshot.syncHealth?.observationLimitReached) warnings.push(sw ? "Hali ya sync imekagua matukio 2,000 ya hivi karibuni pekee." : "Sync health inspected only the 2,000 most recent server events; older unresolved items may not be represented.");
+    }
+    if (sources.costs?.status === "ready") {
+      const missing = Number(snapshot.costs?.summary?.missingCostSalesRevenue ?? 0);
+      if (missing > 0) issues.push({ rank: 60, label: sw ? "Gharama za kununua hazijakamilika" : "Some buying costs are missing", detail: sw ? `Mauzo ya ${money(missing)} hayana gharama iliyohifadhiwa.` : `${money(missing)} in sales has no saved buying cost.`, href: "/inventory", question: "Which products made the most gross profit?" });
+    }
+    issues.sort((a, b) => b.rank - a.rank || a.label.localeCompare(b.label));
+    const visible = issues.slice(0, 4);
+    message = visible.length
+      ? (sw ? `Vipaumbele vya leo (${visible.length}): ${visible.map((item) => `${item.label} — ${item.detail}`).join("; ")}` : `Today’s priorities (${visible.length}): ${visible.map((item) => `${item.label} — ${item.detail}`).join("; ")}`)
+      : (sw ? "Hakuna tatizo la haraka lililoonekana kwenye vyanzo vinavyopatikana kwa ruhusa zako." : "No urgent issue was found in the data sources available to your permissions.");
+    source = sw ? "Muhtasari wa duka na hali ya data" : "Shop snapshot and data health";
+    href = "/assistant";
+    definition = sw ? "Vipaumbele ni viashiria vya utendaji vinavyoweza kuthibitishwa, si utabiri. Vyanzo vilivyozuiwa au visivyopatikana havijajumuishwa." : "Priorities are measurable operational signals, not predictions. Restricted or unavailable sources are not included.";
+    recordCount = visible.length;
+    relatedLinks = visible.map((item) => ({ label: item.label, href: item.href }));
+    followUpOptions = visible.slice(0, 3).map((item) => ({ label: item.label, question: item.question }));
+    for (const [key, status] of Object.entries(sources) as Array<[string, { status?: string }]>) {
+      if (status?.status === "unavailable") warnings.push(sw ? `Chanzo cha ${key} hakikupatikana; vipaumbele vinaweza kutokamilika.` : `${key} source was unavailable; this brief may be incomplete.`);
+    }
+  } else if (parsed.intent === "reorder_risk") {
+    const products = Array.isArray(data.products) ? data.products : [];
+    const details = products.slice(0, 5).map((product: Record<string, unknown>) => {
+      const eta = product.nextDeliveryDate
+        ? (sw ? `inatarajiwa ${String(product.nextDeliveryDate)}` : `expected ${String(product.nextDeliveryDate)}`)
+        : (product.estimateBasis === "configured_supplier_lead_time"
+          ? (sw ? `kwa lead time ya siku ${Number(product.leadTimeDays)}` : `using the configured ${Number(product.leadTimeDays)}-day lead time`)
+          : (sw ? "tarehe ya kufika haijulikani" : "delivery date is unknown"));
+      const reorder = Number(product.suggestedOrderQuantity) > 0
+        ? (sw ? `; pendekezo la kuagiza ${Number(product.suggestedOrderQuantity)} ${String(product.unit ?? "pcs")}` : `; suggested order ${Number(product.suggestedOrderQuantity)} ${String(product.unit ?? "pcs")}`)
+        : (Number(product.onOrderQuantity) > 0 ? (sw ? `; tayari zipo ${Number(product.onOrderQuantity)} ${String(product.unit ?? "pcs")} kwenye order wazi, hakuna pendekezo jipya ili kuepuka kurudia order` : `; ${Number(product.onOrderQuantity)} ${String(product.unit ?? "pcs")} are already on open orders, so no duplicate reorder quantity is suggested`) : "");
+      return `${String(product.name)}: ${Number(product.currentStock)} ${String(product.unit ?? "pcs")} sasa, takriban siku ${Number(product.daysOfCoverOnHand)} za stock dhidi ya ${Number(product.daysUntilDelivery)} siku hadi delivery (${eta}); upungufu wa makadirio ${Number(product.estimatedShortfallBeforeDelivery)} ${String(product.unit ?? "pcs")}${reorder}`;
+    });
+    message = products.length
+      ? (sw ? `Bidhaa ${Number(data.recordCount ?? products.length)} zinaweza kuisha kabla ya delivery inayokadiriwa: ${details.join("; ")}.` : `${Number(data.recordCount ?? products.length)} products may run out before the estimated delivery: ${details.join("; ")}.`)
+      : (Number(data.insufficientHistoryCount ?? 0) > 0
+        ? (sw ? `Hakuna hatari iliyothibitishwa, lakini historia ya stock/mauzo haitoshi kwa bidhaa ${Number(data.insufficientHistoryCount)}; hakiki stock na tarehe za delivery.` : `No run-out risk could be confirmed, but stock/sales history is insufficient for ${Number(data.insufficientHistoryCount)} products; verify stock and delivery dates.`)
+        : (Number(data.unknownDeliveryCount ?? 0) > 0
+          ? (sw ? `Hakuna hatari iliyokadiriwa kwa uhakika kwa sababu tarehe za delivery au lead time hazijulikani kwa bidhaa ${Number(data.unknownDeliveryCount)}.` : `Run-out timing cannot be assessed reliably for ${Number(data.unknownDeliveryCount)} products because their delivery date or supplier lead time is unknown.`)
+          : (sw ? "Hakuna bidhaa iliyokadiriwa kuisha kabla ya delivery inayojulikana kwa sasa." : "No product is currently estimated to run out before its known or configured delivery lead time.")));
+    source = sw ? "Stock, historia ya upatikanaji na order zinazoingia" : "Stock, observed availability, and incoming orders";
+    href = "/inventory?lowStock=true";
+    definition = sw ? "Makadirio hutumia stock iliyopo, kasi ya mauzo kwa siku zilizokuwa na stock, na tarehe ya order ijayo au lead time iliyowekwa. Si ahadi ya supplier." : "Estimates use on-hand stock, sales on observed in-stock days, and the next saved ETA or configured lead time. They are not a supplier guarantee.";
+    recordCount = Number(data.recordCount ?? products.length);
+    warnings.push(sw ? "Makadirio yanaweza kukosa mahitaji yaliyopotea kabla ya ufuatiliaji kuanza, promosheni au mabadiliko ya msimu." : "The estimate cannot infer demand missed before tracking began, promotions, or seasonal changes.");
+    if (Number(data.missingLeadTimeCount ?? 0) > 0) warnings.push(sw ? `Weka lead time ya supplier kwa bidhaa ${Number(data.missingLeadTimeCount)} ili makadirio yajumuishe muda wa kufika.` : `Set supplier lead times for ${Number(data.missingLeadTimeCount)} products before treating this as a complete run-out review.`);
+    if (Number(data.unknownDeliveryCount ?? 0) > 0) warnings.push(sw ? `Order zilizo out-for-delivery au zilizochelewa bila tarehe mpya hazikukadiriwa.` : `Orders out for delivery without a current ETA, and overdue orders without a revised date, were not assigned a delivery countdown.`);
+  } else if (parsed.intent === "performance_drivers") {
+    const current = data.current ?? {};
+    const previous = data.previous ?? {};
+    const delta = (key: string) => Number(current[key] ?? 0) - Number(previous[key] ?? 0);
+    const moneyDelta = (key: string) => `${delta(key) >= 0 ? "+" : "−"}${money(Math.abs(delta(key)))}`;
+    const products = Array.isArray(data.products) ? data.products : [];
+    const movements = products.slice(0, 3).map((item: Record<string, unknown>) => `${String(item.name)} ${Number(item.revenueChange) >= 0 ? "+" : "−"}${money(Math.abs(Number(item.revenueChange)))}`);
+    const profitAvailable = current.grossProfit != null && previous.grossProfit != null;
+    message = sw
+      ? `Mauzo ${money(current.revenue)} dhidi ya ${money(previous.revenue)} (${moneyDelta("revenue")}); idadi ya mauzo ${Number(current.sale_count ?? 0)} dhidi ya ${Number(previous.sale_count ?? 0)}; vipande ${Number(current.units ?? 0)} dhidi ya ${Number(previous.units ?? 0)}. Gharama ya bidhaa zilizouzwa ${money(current.cogs)} dhidi ya ${money(previous.cogs)}. ${profitAvailable ? `Faida ghafi ${money(current.grossProfit)} dhidi ya ${money(previous.grossProfit)};` : "Faida ghafi haijalinganishwa kwa gharama pungufu;"} matumizi yaliyorekodiwa ${money(current.expenses)} dhidi ya ${money(previous.expenses)}. Bidhaa zenye mabadiliko makubwa ya mapato: ${movements.join(", ") || "hakuna line item za bidhaa"}.`
+      : `Recorded sales revenue was ${money(current.revenue)} versus ${money(previous.revenue)} (${moneyDelta("revenue")}); sale count ${Number(current.sale_count ?? 0)} versus ${Number(previous.sale_count ?? 0)}; units sold ${Number(current.units ?? 0)} versus ${Number(previous.units ?? 0)}. Cost of goods sold was ${money(current.cogs)} versus ${money(previous.cogs)}. ${profitAvailable ? `Gross profit was ${money(current.grossProfit)} versus ${money(previous.grossProfit)};` : "Gross-profit comparison is withheld because cost coverage is incomplete in at least one period;"} recorded expenses were ${money(current.expenses)} versus ${money(previous.expenses)}. Products with the largest recorded revenue changes: ${movements.join(", ") || "no product lines"}.`;
+    source = sw ? "Mauzo, bidhaa, gharama na matumizi yaliyorekodiwa" : "Recorded sales, product lines, costs, and expenses";
+    href = assistantFilteredHref("/analytics", range, timeZone);
+    definition = sw ? "Vipindi vya ukubwa sawa: kipindi kilichochaguliwa dhidi ya kilichotangulia; mabadiliko yanaonyesha uhusiano wa namba tu, si uthibitisho wa chanzo." : "Equal-length periods: selected period versus the immediately preceding matching period. The figures describe changes, not proven causes.";
+    recordCount = Number(current.sale_count ?? 0);
+    if (!profitAvailable) warnings.push(sw ? "Gharama za kununua hazijakamilika katika kipindi kimoja au vyote; faida imefichwa." : "Buying-cost coverage is incomplete in one or both periods; gross-profit comparison is withheld.");
+    if (Number(current.revenue ?? 0) !== Number(current.item_revenue ?? 0) || Number(previous.revenue ?? 0) !== Number(previous.item_revenue ?? 0)) warnings.push(sw ? "Jumla ya mauzo kwenye header inatofautiana na bidhaa zilizohifadhiwa; kagua risiti." : "Sale-header totals differ from saved product lines; verify receipts before treating product mix as a complete explanation.");
+    followUpOptions = [
+      { label: sw ? "Bidhaa zenye faida" : "Product gross profit", question: "Which products made the most gross profit this month?" },
+      { label: sw ? "Matumizi" : "Expenses", question: "What expenses were recorded this month?" },
+    ];
+  } else if (parsed.intent === "product_profit") {
+    const products = Array.isArray(data.products) ? data.products : [];
+    const ranked = products.slice(0, 5).map((product: Record<string, unknown>, index: number) => `${index + 1}. ${String(product.name)}: ${money(product.grossProfit)} gross profit (${Number(product.unitsSold)} ${String(product.unit ?? "pcs")} sold)`);
+    message = ranked.length
+      ? (sw ? `Bidhaa zilizo juu kwa faida ghafi ${periodLabel}: ${ranked.join("; ")}.` : `Top products by gross profit ${periodLabel}: ${ranked.join("; ")}.`)
+      : (sw ? `Hakuna line items zenye gharama kamili za kuhesabu faida ghafi ${periodLabel}.` : `No product lines with complete saved cost data were available to rank by gross profit ${periodLabel}.`);
+    source = sw ? "Sale items na gharama zilizohifadhiwa" : "Sale lines and saved buying costs";
+    href = assistantFilteredHref("/analytics", range, timeZone, undefined, "grossProfit");
+    definition = sw ? "Mapato ya kila bidhaa ukitoa buying price iliyohifadhiwa kwa kila sale line; bidhaa zenye gharama pungufu hazijawekwa kwenye ranking." : "Each product’s recorded sale-line revenue less its saved buying costs. Products with missing costs are excluded from the ranking.";
+    recordCount = Number(data.productCount ?? products.length);
+    relatedRecordCount = Number(data.recordCount ?? 0);
+    if (Number(data.incompleteCostProductCount ?? 0) > 0) warnings.push(sw ? `Bidhaa ${Number(data.incompleteCostProductCount)} zina gharama pungufu; sales za ${money(data.missingCostSalesRevenue)} hazijaingizwa kwenye ranking.` : `${Number(data.incompleteCostProductCount)} products have incomplete costs; ${money(data.missingCostSalesRevenue)} in sales was excluded from the ranking.`);
+    followUpOptions = [{ label: sw ? "Bidhaa zinazoongoza kwa mauzo" : "Top products by sales", question: "Which products sold the most this month?" }];
+  } else if (parsed.intent === "supplier_orders") {
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const details = orders.slice(0, 5).map((order: Record<string, unknown>) => `${String(order.supplier)} (${String(order.status).replaceAll("_", " ")}${order.expectedDeliveryDate ? `, ETA ${String(order.expectedDeliveryDate)}` : ", no ETA set"})`);
+    message = Number(data.openCount ?? 0) > 0
+      ? (sw ? `Order za supplier zilizo wazi: ${Number(data.openCount)}; zilizopita tarehe ya ETA: ${Number(data.lateCount ?? 0)}; bila ETA: ${Number(data.noExpectedDateCount ?? 0)}. ${details.join("; ")}` : `Open supplier orders: ${Number(data.openCount)}; past their saved ETA: ${Number(data.lateCount ?? 0)}; with no ETA set: ${Number(data.noExpectedDateCount ?? 0)}. ${details.join("; ")}`)
+      : (sw ? "Hakuna order za supplier zilizo wazi." : "There are no open supplier orders.");
+    source = sw ? "Order za supplier na tarehe za ETA" : "Supplier orders and saved ETAs";
+    href = "/orders";
+    definition = sw ? "Order katika PENDING, CONFIRMED au OUT_FOR_DELIVERY; order ni late tu ikiwa tarehe yake ya ETA iliyohifadhiwa imepita." : "Orders in PENDING, CONFIRMED, or OUT_FOR_DELIVERY. An order is called late only when its saved expected delivery date has passed.";
+    recordCount = Number(data.openCount ?? 0);
+    if (Number(data.noExpectedDateCount ?? 0) > 0) warnings.push(sw ? "Order zisizo na ETA haziwezi kuainishwa kama late." : "Orders without an ETA cannot be classified as late.");
+    followUpOptions = [{ label: sw ? "Tofauti za kupokea" : "Delivery differences", question: "Which supplier deliveries had quantity differences?" }];
+  } else if (parsed.intent === "delivery_differences") {
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const details = orders.slice(0, 5).map((order: Record<string, unknown>) => {
+      const items = Array.isArray(order.items) ? order.items as Array<Record<string, unknown>> : [];
+      const differences = items.map((item) => `${String(item.product)} ${Number(item.ordered)}→${Number(item.received)}`).join(", ");
+      return `#${String(order.orderGroupId || order.id).slice(-8)} ${String(order.supplier)}: ${differences}${order.correctionRecorded ? (sw ? " (marekebisho yapo)" : " (correction recorded)") : (sw ? " (hakuna correction iliyorekodiwa)" : " (no correction recorded)")}`;
+    });
+    message = Number(data.recordCount ?? 0) > 0
+      ? (sw ? `Order ${Number(data.recordCount)} zilizopokelewa zilikuwa na tofauti ya idadi: ${details.join("; ")}.` : `${Number(data.recordCount)} received orders had quantity differences: ${details.join("; ")}.`)
+      : (sw ? `Hakuna tofauti ya idadi iliyorekodiwa ${periodLabel}.` : `No quantity differences were recorded ${periodLabel}.`);
+    source = sw ? "Rekodi za kupokea order za supplier" : "Supplier receipt records";
+    href = "/orders";
+    definition = sw ? "Inalinganisha idadi iliyoagizwa na idadi iliyorekodiwa kwenye receipt ya kwanza; marekebisho yanaonyeshwa kando." : "Compares ordered quantities with the first saved receipt; later corrections are identified separately and do not erase the original discrepancy.";
+    recordCount = Number(data.recordCount ?? 0);
+    followUpOptions = [{ label: sw ? "Order zinazosubiri" : "Open orders", question: "Which supplier orders are late or awaiting delivery?" }];
+  } else if (parsed.intent === "sales_collections") {
+    message = sw
+      ? `Mauzo yaliyorekodiwa ${periodLabel}: ${money(data.sales?.amount)} katika mauzo ${Number(data.sales?.count ?? 0)}. Fedha zilizokusanywa ${periodLabel}: ${money(data.collections?.totalCollected)}. Si lazima collections ziwe za mauzo ya kipindi hiki, kwa sababu zinaweza kujumuisha malipo ya madeni ya zamani.`
+      : `Recorded sales ${periodLabel}: ${money(data.sales?.amount)} across ${Number(data.sales?.count ?? 0)} sales. Collections recorded during that period: ${money(data.collections?.totalCollected)}. Collections may include payments on older debts, so the difference is not automatically the unpaid balance from these sales.`;
+    source = sw ? "Rekodi za mauzo na malipo" : "Sales and collection records";
+    href = assistantFilteredHref("/sales", range, timeZone, "history");
+    definition = sw ? "Sales ni jumla ya mauzo yaliyorekodiwa, pamoja na mkopo. Collections ni malipo ya cash sales pamoja na debt payments zilizorekodiwa ndani ya kipindi." : "Sales include recorded credit sales. Collections include non-credit sales and debt payments recorded during the selected period.";
+    recordCount = Number(data.sales?.count ?? 0);
+    relatedRecordCount = Number(data.collections?.paidSalesCount ?? 0) + Number(data.collections?.debtPaymentCount ?? 0);
+    warnings.push(sw ? "Makusanyo yanaweza kuhusiana na mauzo ya kipindi kilichopita; usiyatoe moja kwa moja kwenye mauzo ili kupata madeni ya kipindi." : "Collections can relate to sales from earlier periods; do not subtract them from period sales to infer this period’s outstanding debts.");
+    followUpOptions = [{ label: sw ? "Njia za malipo" : "Payment methods", question: "Which payment methods were used this month?" }];
+  } else if (parsed.intent === "sales_patterns") {
+    const salesCount = Number(data.salesCount ?? 0);
+    const observedDays = Number(data.observedDays ?? 0);
+    const dayRow = data.busiestDay;
+    const hourRow = data.busiestHour;
+    if (salesCount < 20 || observedDays < 14 || !dayRow || !hourRow) {
+      message = sw ? `Bado data haitoshi kubaini muda wenye shughuli nyingi kwa uhakika: mauzo ${salesCount} katika siku ${observedDays} zenye mauzo ${periodLabel}.` : `There isn’t enough history to reliably identify busy times yet: ${salesCount} sales across ${observedDays} days with sales ${periodLabel}.`;
+    } else {
+      const dayDate = new Date(Date.UTC(2024, 0, Number(dayRow.weekday) - 1));
+      const dayName = new Intl.DateTimeFormat(sw ? "sw-TZ" : "en-US", { weekday: "long", timeZone: "UTC" }).format(dayDate);
+      const hour = Number(hourRow.hour);
+      const hourLabel = `${String(hour).padStart(2, "0")}:00–${String((hour + 1) % 24).padStart(2, "0")}:00`;
+      message = sw
+        ? `Siku yenye mauzo mengi zaidi ${periodLabel} ni ${dayName} (${Number(dayRow.sales)} mauzo, ${money(dayRow.revenue)}). Saa iliyoongoza ni ${hourLabel} kwa saa za duka (${Number(hourRow.sales)} mauzo, ${money(hourRow.revenue)}).`
+        : `The busiest recorded day ${periodLabel} was ${dayName} (${Number(dayRow.sales)} sales, ${money(dayRow.revenue)}). The busiest hour was ${hourLabel} shop time (${Number(hourRow.sales)} sales, ${money(hourRow.revenue)}).`;
+    }
+    source = sw ? "Muda wa mauzo kwa timezone ya duka" : "Sales timestamps in the shop time zone";
+    href = assistantFilteredHref("/analytics", range, timeZone);
+    definition = sw ? "Hupanga siku na saa kwa idadi ya sales zilizohifadhiwa; si idadi ya wateja waliopita bila kununua." : "Ranks local weekdays and hours by recorded sale count; it does not measure foot traffic or customers who did not buy.";
+    recordCount = salesCount;
+    followUpOptions = [{ label: sw ? "Linganishia wiki" : "Compare sales", question: "Compare this week's sales with last week." }];
+  } else if (parsed.intent === "sales_target") {
+    const target = Number(data.target ?? 0);
+    const actual = Number(data.sales?.amount ?? 0);
+    const targetPeriod = parsed.period === "today" ? (sw ? "lengo la leo" : "today’s target") : parsed.period === "this_week" ? (sw ? "lengo la wiki hii" : "this week’s target") : (sw ? "lengo la mwezi huu" : "this month’s target");
+    if (target <= 0) {
+      message = sw ? `Hakuna ${targetPeriod} lililowekwa. Mmiliki anaweza kuweka malengo ya siku/wiki/mwezi kwenye Settings.` : `No target is set for ${targetPeriod.replace("target", "this period")}. The owner can configure daily, weekly, and monthly targets in Settings.`;
+      href = "/settings";
+    } else {
+      const percentage = Math.round(actual * 100 / target);
+      const remaining = Math.max(target - actual, 0);
+      message = sw ? `Mauzo yaliyorekodiwa ${targetPeriod}: ${money(actual)} kati ya ${money(target)} (${percentage}%). ${remaining > 0 ? `Bado ${money(remaining)} kufikia lengo.` : `Lengo limevukwa kwa ${money(actual - target)}.`}` : `Recorded sales toward ${targetPeriod}: ${money(actual)} of ${money(target)} (${percentage}%). ${remaining > 0 ? `${money(remaining)} remains to reach the target.` : `The target has been exceeded by ${money(actual - target)}.`}`;
+      href = assistantFilteredHref("/sales", range, timeZone, "history");
+    }
+    source = sw ? "Lengo la duka na rekodi za mauzo" : "Shop target and recorded sales";
+    definition = sw ? "Inalinganisha mauzo yaliyorekodiwa (pamoja na mkopo) na lengo la duka la kipindi. Hili si makadirio ya mwisho wa kipindi." : "Compares recorded sales, including credit sales, with the shop’s configured target. This is not a month-end forecast.";
+    recordCount = Number(data.sales?.count ?? 0);
+    if (target > 0) followUpOptions = [{ label: sw ? "Makusanyo halisi" : "Cash collected", question: "How much did we collect versus record in sales this month?" }];
+  } else if (parsed.intent === "sales") {
     message = sw ? `Mauzo yaliyorekodiwa ${periodLabel}: ${money(data.amount)} katika mauzo ${Number(data.count ?? 0)}. Hii inajumuisha mauzo ya mkopo; si fedha zilizokusanywa.` : `Recorded sales ${periodLabel}: ${money(data.amount)} across ${Number(data.count ?? 0)} sales. This includes credit sales; it is not the amount of cash collected.`;
     source = sw ? "Rekodi za mauzo" : "Sales records"; href = assistantFilteredHref("/sales", range, timeZone, "history");
     definition = sw ? "Jumla ya totalAmount ya mauzo yaliyorekodiwa, pamoja na mauzo ya mkopo; si makusanyo ya fedha." : "Sum of recorded sale totals, including credit sales; this is not cash collected.";
@@ -2005,7 +2291,7 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
     warnings.push(sw ? "Marejesho hayapunguzi mauzo isipokuwa mauzo ya awali yarekebishwe pia." : "Returns do not reduce sales totals unless the original sale is also reversed.");
   } else if (parsed.intent === "unsold_products") {
     const products = Array.isArray(data.products) ? data.products : [];
-    const productNames = products.map((product: Record<string, unknown>) => `${String(product.name)} (${String(product.unit ?? "pcs")})`);
+    const productNames = products.map((product: Record<string, unknown>) => `${String(product.name)} (${String(product.currentStock ?? 0)} ${String(product.unit ?? "pcs")} ${sw ? "stock" : "in stock"})`);
     const omitted = Math.max(0, Number(data.recordCount ?? 0) - productNames.length);
     const listedNames = [...productNames, ...(omitted ? [sw ? `na bidhaa nyingine ${omitted}` : `and ${omitted} more`] : [])].join(", ");
     message = Number(data.recordCount ?? 0) === 0
@@ -2135,9 +2421,24 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
     unsold_products: ["Active products with no recorded sales", "Bidhaa hai zisizo na mauzo yaliyorekodiwa"],
     top_supplier: ["Delivered supplier orders", "Order za supplier zilizopokelewa"], supplier_spend: ["Delivered supplier orders", "Order za supplier zilizopokelewa"], gross_profit: ["Sales", "Mauzo"],
     net_profit: ["Sales", "Mauzo"], stock: ["Products requiring review", "Bidhaa zinazohitaji ukaguzi"],
+    daily_brief: ["Priority signals", "Viashiria vya kipaumbele"], performance_drivers: ["Sales in the current period", "Mauzo ya kipindi cha sasa"],
+    product_profit: ["Products with complete costs", "Bidhaa zenye gharama kamili"], reorder_risk: ["Products with enough history", "Bidhaa zenye historia ya kutosha"],
+    sales_patterns: ["Recorded sales", "Mauzo yaliyorekodiwa"], supplier_orders: ["Open supplier orders", "Order za supplier zilizo wazi"],
+    delivery_differences: ["Received orders with differences", "Order zilizopokelewa zenye tofauti"], sales_collections: ["Recorded sales", "Mauzo yaliyorekodiwa"],
+    sales_target: ["Recorded sales", "Mauzo yaliyorekodiwa"],
   };
+  if (followUpOptions.length === 0) {
+    const suggestions: Partial<Record<string, Array<{ label: string; question: string }>>> = {
+      sales: [{ label: sw ? "Linganishia na wiki iliyopita" : "Compare with last week", question: "Compare this week's sales with last week." }],
+      unsold_products: [{ label: sw ? "Angalia za siku 60" : "Check 60 days", question: "Which products have had no sales in the last 60 days?" }, { label: sw ? "Bidhaa zenye faida" : "Gross profit by product", question: "Which products made the most gross profit this month?" }],
+      gross_profit: [{ label: sw ? "Faida kwa bidhaa" : "Gross profit by product", question: "Which products made the most gross profit this month?" }],
+      collections: [{ label: sw ? "Linganisha makusanyo na mauzo" : "Collections vs sales", question: "How much did we actually collect versus record in sales this month?" }],
+      stock: [{ label: sw ? "Hatari ya kuishiwa" : "Run-out risk", question: "Which products are likely to run out before the next delivery?" }],
+    };
+    followUpOptions = suggestions[parsed.intent] ?? [];
+  }
   const [recordCountLabel, relatedRecordCountLabel] = countLabels[parsed.intent] ?? [sw ? "Rekodi zilizohusika" : "Records included", ""];
-  return json({ answer: { message, source, href, from: evidenceFrom, to: evidenceTo, checkedAt: now.toISOString(), timeZone, evidence: { definition, recordCount, recordCountLabel, relatedRecordCount, relatedRecordCountLabel: parsed.intent === "net_profit" ? (sw ? "Rekodi za matumizi" : "Expense records") : parsed.intent === "supplier_spend" ? (sw ? "Wasambazaji" : "Suppliers") : undefined, warnings } } });
+  return json({ answer: { message, source, href, relatedLinks, followUpOptions, from: evidenceFrom, to: evidenceTo, checkedAt: now.toISOString(), timeZone, evidence: { definition, recordCount, recordCountLabel, relatedRecordCount, relatedRecordCountLabel: parsed.intent === "net_profit" ? (sw ? "Rekodi za matumizi" : "Expense records") : parsed.intent === "supplier_spend" ? (sw ? "Wasambazaji" : "Suppliers") : parsed.intent === "product_profit" ? (sw ? "Sale lines" : "Sale lines") : undefined, warnings } } });
 }
 
 async function assistant(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {

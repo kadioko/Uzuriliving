@@ -6,7 +6,8 @@ DECLARE
   supplier_id TEXT := gen_random_uuid()::TEXT; product_id TEXT := gen_random_uuid()::TEXT;
   order_id TEXT := gen_random_uuid()::TEXT; customer_id TEXT := gen_random_uuid()::TEXT;
   debt_id TEXT := gen_random_uuid()::TEXT; result JSONB; repeat_result JSONB;
-  qty INTEGER; count_id TEXT; saved_order TEXT; opening_product TEXT; registered_id TEXT; other_shop TEXT := gen_random_uuid()::TEXT;
+  qty INTEGER; count_id TEXT; saved_order TEXT; opening_product TEXT; registered_id TEXT; eta_order_id TEXT;
+  expected_date DATE := CURRENT_DATE + 5; metric_result JSONB; other_shop TEXT := gen_random_uuid()::TEXT;
 BEGIN
   INSERT INTO users(id,phone,pin,name,role,"approvalStatus","updatedAt") VALUES(owner_id,'audit-'||owner_id,'unused','Audit fixture','MERCHANT','APPROVED',NOW());
   INSERT INTO shops(id,name,location,"userId","updatedAt") VALUES(shop_id,'Audit fixture','Test',owner_id,NOW());
@@ -111,8 +112,35 @@ BEGIN
   IF result->'shop'->>'subscriptionEndsAt'<>repeat_result->'shop'->>'subscriptionEndsAt' OR (SELECT COUNT(*) FROM subscription_payments WHERE "shopId"=shop_id)<>1 THEN RAISE EXCEPTION 'Payment retry duplicated entitlement'; END IF;
   result:=create_shop_debt(shop_id,owner_id,'{"customerPhone":"+255700000001","amount":100,"amountPaid":20}');
   IF (SELECT SUM(amount) FROM debt_payments WHERE "debtId"=result->'debt'->>'id')<>20 THEN RAISE EXCEPTION 'Opening debt payment missing'; END IF;
-  opening_product:=create_shop_product(jsonb_build_object('id',gen_random_uuid()::TEXT,'name','Opening stock audit','unit','pcs','buyingPrice',5,'sellingPrice',10,'currentStock',2,'minimumStock',5,'barcodeGenerated',FALSE,'doesNotExpire',FALSE,'isReorderable',TRUE,'shopId',shop_id,'createdAt',NOW(),'updatedAt',NOW()),owner_id,NULL);
+  opening_product:=create_shop_product(jsonb_build_object('id',gen_random_uuid()::TEXT,'name','Opening stock audit','unit','pcs','buyingPrice',5,'sellingPrice',10,'currentStock',2,'minimumStock',5,'reorderPackSize',1,'assistantStockTrackingStartedAt',NOW()-INTERVAL '30 days','barcodeGenerated',FALSE,'doesNotExpire',FALSE,'isReorderable',TRUE,'shopId',shop_id,'createdAt',NOW(),'updatedAt',NOW()),owner_id,NULL);
   IF (SELECT SUM(quantity) FROM stock_movements WHERE "productId"=opening_product)<>2 THEN RAISE EXCEPTION 'Opening stock ledger missing'; END IF;
+  result:=save_supplier_order_batch_with_eta(
+    shop_id,
+    jsonb_build_array(jsonb_build_object('supplierId',supplier_id,'items',jsonb_build_array(jsonb_build_object('productId',opening_product,'quantity',4,'unitPrice',5)))),
+    'audit-eta-batch','ETA audit',owner_id,NULL,expected_date
+  );
+  eta_order_id:=result->'orders'->0->>'id';
+  IF (SELECT "expectedDeliveryDate" FROM orders WHERE id=eta_order_id)<>expected_date
+     OR (SELECT "afterSnapshot"->>'expectedDeliveryDate' FROM supplier_order_revisions WHERE "orderId"=eta_order_id AND action='CREATED')<>expected_date::TEXT
+  THEN RAISE EXCEPTION 'Supplier batch ETA was not stored in the order and revision'; END IF;
+  repeat_result:=save_supplier_order_batch_with_eta(
+    shop_id,
+    jsonb_build_array(jsonb_build_object('supplierId',supplier_id,'items',jsonb_build_array(jsonb_build_object('productId',opening_product,'quantity',4,'unitPrice',5)))),
+    'audit-eta-batch','ETA audit',owner_id,NULL,expected_date
+  );
+  IF repeat_result->>'reused'<>'true' THEN RAISE EXCEPTION 'ETA batch retry was not idempotent'; END IF;
+  metric_result:=assistant_expanded_metrics(shop_id,'supplier_orders',NULL,NULL,NULL,NULL,'Africa/Nairobi');
+  IF (metric_result->>'openCount')::INTEGER<1 THEN RAISE EXCEPTION 'Supplier order analytics omitted the open ETA order'; END IF;
+  metric_result:=assistant_expanded_metrics(shop_id,'performance_drivers',NOW()-INTERVAL '30 days',NOW()+INTERVAL '1 day',NOW()-INTERVAL '60 days',NOW()-INTERVAL '30 days','Africa/Nairobi');
+  IF metric_result->'current' IS NULL OR metric_result->'previous' IS NULL THEN RAISE EXCEPTION 'Performance driver summary is incomplete'; END IF;
+  metric_result:=assistant_expanded_metrics(shop_id,'product_profit',NOW()-INTERVAL '30 days',NOW()+INTERVAL '1 day',NULL,NULL,'Africa/Nairobi');
+  IF metric_result->'products' IS NULL THEN RAISE EXCEPTION 'Product profit analytics did not return a ranking'; END IF;
+  metric_result:=assistant_expanded_metrics(shop_id,'sales_patterns',NOW()-INTERVAL '90 days',NOW()+INTERVAL '1 day',NULL,NULL,'Africa/Nairobi');
+  IF metric_result->'salesCount' IS NULL THEN RAISE EXCEPTION 'Sales pattern analytics did not return its sample count'; END IF;
+  metric_result:=assistant_expanded_metrics(shop_id,'delivery_differences',NOW()-INTERVAL '90 days',NOW()+INTERVAL '1 day',NULL,NULL,'Africa/Nairobi');
+  IF metric_result->'orders' IS NULL THEN RAISE EXCEPTION 'Delivery difference analytics did not return receipt records'; END IF;
+  metric_result:=assistant_reorder_risk_metrics(shop_id,'Africa/Nairobi');
+  IF metric_result->'missingLeadTimeCount' IS NULL OR metric_result->'products' IS NULL THEN RAISE EXCEPTION 'Reorder risk analytics did not return its coverage status'; END IF;
   IF NOT check_auth_rate_limit('audit:'||shop_id,2,60) OR NOT check_auth_rate_limit('audit:'||shop_id,2,60) OR check_auth_rate_limit('audit:'||shop_id,2,60) THEN RAISE EXCEPTION 'Authentication rate limit failed'; END IF;
   registered_id:=register_shop_account(jsonb_build_object('name','Registration fixture','role','MERCHANT','phone','audit-register-'||shop_id),'unused-hash');
   IF NOT EXISTS(SELECT 1 FROM users u JOIN shops s ON s."userId"=u.id WHERE u.id=registered_id AND u."approvalStatus"='PENDING') THEN RAISE EXCEPTION 'Registration missing approval state or shop'; END IF;
@@ -123,4 +151,4 @@ BEGIN
   IF has_table_privilege('anon','public.users','SELECT') OR has_function_privilege('anon','public.record_shop_sale(text,text,text,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'Anonymous database access is still open'; END IF;
 END $$;
 ROLLBACK;
-SELECT 'passed: stock/sale/order atomicity, delivery edits, retries, debt ledger, reservations, stale counts, billing, registration, login identity, rate limits, anonymous access restrictions' AS result;
+SELECT 'passed: stock/sale/order atomicity, delivery edits and ETA history, assistant analytics, retries, debt ledger, reservations, stale counts, billing, registration, login identity, rate limits, anonymous access restrictions' AS result;
