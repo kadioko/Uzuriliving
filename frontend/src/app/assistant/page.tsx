@@ -8,7 +8,7 @@ import { api, formatTZS } from "@/lib/api";
 import { useLang } from "@/lib/i18n";
 import { formatAppDateTime } from "@/lib/timezone";
 import { getPendingOfflineSalesCount } from "@/lib/offline-sales";
-import { ArrowRight, CheckCircle2, ClipboardCopy, HandCoins, Package, ReceiptText, ShoppingCart, Sparkles, TrendingDown, TrendingUp, Undo2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleHelp, ClipboardCopy, HandCoins, Package, ReceiptText, ShoppingCart, Sparkles, TrendingDown, TrendingUp, Undo2 } from "lucide-react";
 
 interface DashboardData {
   summary: { totalSales: number; totalProfit: number; totalExpenses?: number; netProfit?: number; lowStockCount: number; outOfStockCount: number; pendingOrders: number; salesCount?: number };
@@ -381,9 +381,15 @@ export default function AssistantPage() {
                 <Sparkles className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-950">
-                  <TextReveal text="Uzuri Living AI Assistant" fontSize="inherit" hoverColor="#15803d" />
-                </h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-xl font-bold text-gray-950">
+                    <TextReveal text="Uzuri Living AI Assistant" fontSize="inherit" hoverColor="#15803d" />
+                  </h1>
+                  <Link href="/assistant/help" aria-label={lang === "sw" ? "Jinsi ya kutumia AI Assistant" : "How to use the AI Assistant"} title={lang === "sw" ? "Jinsi ya kutumia AI Assistant" : "How to use the AI Assistant"} className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-800 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                    <CircleHelp className="h-4 w-4" />
+                    {lang === "sw" ? "Msaada" : "Help"}
+                  </Link>
+                </div>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600">
                   {lang === "sw"
                     ? "Kila siku inachambua mauzo, bidhaa, madeni na matumizi kisha inapanga hatua za kufanya kwanza."

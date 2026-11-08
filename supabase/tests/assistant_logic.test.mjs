@@ -47,10 +47,12 @@ test("assistant questions are bounded to supported topics and periods", () => {
   assert.deepEqual(parseAssistantQuestion("Which products have had no sales in the last 90 days?"), { intent: "unsold_products", period: "last_90_days" });
   assert.deepEqual(parseAssistantQuestion("Which products are likely to run out before the next delivery?"), { intent: "reorder_risk", period: "current" });
   assert.deepEqual(parseAssistantQuestion("Which supplier orders are late or still awaiting delivery?"), { intent: "supplier_orders", period: "current" });
+  assert.deepEqual(parseAssistantQuestion("Order gani za supplier zimechelewa au zinasubiri delivery?"), { intent: "supplier_orders", period: "current" });
   assert.deepEqual(parseAssistantQuestion("Which supplier deliveries had quantity differences?"), { intent: "delivery_differences", period: "month" });
   assert.deepEqual(parseAssistantQuestion("How much did we actually collect versus record in sales this month?"), { intent: "sales_collections", period: "month" });
   assert.deepEqual(parseAssistantQuestion("Tumekusanya kiasi gani dhidi ya mauzo yaliyorekodiwa mwezi huu?"), { intent: "sales_collections", period: "month" });
   assert.deepEqual(parseAssistantQuestion("Which days or hours are busiest?"), { intent: "sales_patterns", period: "last_90_days" });
+  assert.deepEqual(parseAssistantQuestion("Siku au saa gani zina mauzo mengi zaidi?"), { intent: "sales_patterns", period: "last_90_days" });
   assert.deepEqual(parseAssistantQuestion("How are sales performing against my monthly target?"), { intent: "sales_target", period: "month" });
   assert.deepEqual(parseAssistantQuestion("Lengo la wiki la mauzo likoje?"), { intent: "sales_target", period: "this_week" });
   for (const question of ["sales and expenses today", "profit this month", "stock this month", "stock from 2026-10-01 to 2026-10-31", "debts from 2026-10-01 to 2026-10-31", "sales in 2024", "sales from 2026-02-30 to 2026-03-01", "top products and expenses this month", "sales today and purchases this month", "compare sales this week with last month", "sales and net profit this month", "overdue debts and sales this month", "supplier spend and expenses this month", "What haven't we sold and how much were sales this month?", "sales against my target last month", "busiest day all time", "supplier orders last month", "run-out risk last month", "what changed last month?"]) {
