@@ -1266,7 +1266,7 @@ async function uploadUrl(client: SupabaseClient, user: Record<string, unknown>, 
 async function orders(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request, method: string, id?: string) {
   const orderId = id?.replace(/\/(confirm-delivery|cancel|reorder|receipts|receipt-corrections|revisions)$/, "");
   const readOrder = async (savedId: string) => {
-    const { data, error } = await client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("id", savedId).eq("shopId", shop.id).maybeSingle();
+    const { data, error } = await client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock,sellingPrice))").eq("id", savedId).eq("shopId", shop.id).maybeSingle();
     if (error) throw error;
     return data;
   };
@@ -1301,7 +1301,7 @@ async function orders(client: SupabaseClient, user: Record<string, unknown>, sho
     if (orderId) { const order = await readOrder(orderId); return order ? reply(order) : json({ error: "Order not found" }, 404); }
     const status = new URL(request.url).searchParams.get("status")?.toUpperCase();
     const rows = await readAll(() => {
-      let query = client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock))").eq("shopId", shop.id).order("createdAt", { ascending: false }).order("id");
+      let query = client.from("orders").select("*,supplier:suppliers(id,name,phone),items:order_items(*,product:products(id,name,unit,note,isReorderable,imageUrl,currentStock,sellingPrice))").eq("shopId", shop.id).order("createdAt", { ascending: false }).order("id");
       if (status) query = query.eq("status", status);
       return query;
     });
@@ -1848,7 +1848,7 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
   const timeZone = shopTimeZone(shop);
   if (!parsed) {
     const clarification = assistantEarningsClarification(question, sw);
-    return json({ answer: { message: clarification?.message ?? (sw ? "Sijaelewa vizuri. Uliza kuhusu mauzo, faida ghafi, faida baada ya matumizi, matumizi, manunuzi yaliyopokelewa, makusanyo, njia za malipo, mwenendo wa bidhaa, wasambazaji, stock, mabadiliko ya stock au madeni yaliyochelewa. Unaweza kutumia wiki hii, siku 30/90 zilizopita, mwezi huu au tarehe mbili." : "I couldn’t map that question safely. Ask about sales, gross profit, profit after expenses, expenses, received purchases, collections, payment methods, product trends, supplier spend, stock movements, debt aging, or outstanding debts. You can use this week, the last 30/90 days, this month, or a date range."), clarificationOptions: clarification?.clarificationOptions, source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
+    return json({ answer: { message: clarification?.message ?? (sw ? "Sijaelewa vizuri. Uliza kuhusu mauzo, bidhaa ambazo hazijauzwa, faida ghafi, faida baada ya matumizi, matumizi, manunuzi yaliyopokelewa, makusanyo, njia za malipo, mwenendo wa bidhaa, wasambazaji, stock, mabadiliko ya stock au madeni yaliyochelewa. Unaweza kutumia wiki hii, siku 30/90 zilizopita, mwezi huu au tarehe mbili." : "I couldn’t map that question safely. Ask about sales, active products with no recorded sales, gross profit, profit after expenses, expenses, received purchases, collections, payment methods, product trends, supplier spend, stock movements, debt aging, or outstanding debts. You can use this week, the last 30/90 days, this month, or a date range."), clarificationOptions: clarification?.clarificationOptions, source: null, href: null, from: null, to: null, checkedAt: now.toISOString(), timeZone } });
   }
   const required = assistantRequiredPermissions(parsed.intent);
   if (!required.every((permission) => hasStaffPermission(user, permission))) return json({ error: "You do not have permission to view the records needed for this answer" }, 403);
@@ -1881,6 +1881,14 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
       p_from: range.from?.toISOString() ?? null,
       p_to: range.to?.toISOString() ?? null,
       p_time_zone: timeZone,
+    });
+    if (metrics.error) throw metrics.error;
+    data = metrics.data ?? {};
+  } else if (parsed.intent === "unsold_products") {
+    const metrics = await client.rpc("assistant_unsold_product_metrics", {
+      p_shop_id: shop.id,
+      p_from: range.from?.toISOString() ?? null,
+      p_to: range.to?.toISOString() ?? null,
     });
     if (metrics.error) throw metrics.error;
     data = metrics.data ?? {};
@@ -1995,6 +2003,19 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
     recordCount = Number(data.recordCount ?? products.length);
     warnings.push(sw ? "Mauzo hayawezi kuonyesha mahitaji yaliyokosekana bidhaa ilipokuwa haina stock." : "Sales records cannot show demand that was missed while a product was out of stock.");
     warnings.push(sw ? "Marejesho hayapunguzi mauzo isipokuwa mauzo ya awali yarekebishwe pia." : "Returns do not reduce sales totals unless the original sale is also reversed.");
+  } else if (parsed.intent === "unsold_products") {
+    const products = Array.isArray(data.products) ? data.products : [];
+    const productNames = products.map((product: Record<string, unknown>) => `${String(product.name)} (${String(product.unit ?? "pcs")})`);
+    const omitted = Math.max(0, Number(data.recordCount ?? 0) - productNames.length);
+    const listedNames = [...productNames, ...(omitted ? [sw ? `na bidhaa nyingine ${omitted}` : `and ${omitted} more`] : [])].join(", ");
+    message = Number(data.recordCount ?? 0) === 0
+      ? (sw ? `Kila bidhaa hai ina angalau mauzo moja yaliyorekodiwa ${periodLabel}.` : `Every active product has at least one recorded sale ${periodLabel}.`)
+      : (sw ? `Bidhaa hai ${Number(data.recordCount)} hazina mauzo yaliyorekodiwa ${periodLabel}: ${listedNames}.` : `${Number(data.recordCount)} active products had no recorded sales ${periodLabel}: ${listedNames}.`);
+    source = sw ? "Bidhaa hai na rekodi za mauzo" : "Active products and sale records";
+    href = "/inventory";
+    definition = sw ? "Bidhaa hai zenye vipande sifuri au visivyozidi sifuri katika sale items ndani ya kipindi kilichochaguliwa. Hii haimaanishi kuwa bidhaa haikuhitajika." : "Active products with no positive-quantity sale-item record in the selected period. This does not prove the product had no demand.";
+    recordCount = Number(data.recordCount ?? 0);
+    warnings.push(sw ? "Mauzo ya offline ambayo hayajasawazishwa hayajumuishwi; stockout na marejesho yanaweza kubadilisha tafsiri." : "Offline sales not yet synced are excluded; stockouts and returns can also change how to interpret this list.");
   } else if (parsed.intent === "supplier_spend") {
     const suppliers = Array.isArray(data.suppliers) ? data.suppliers.slice(0, 3) : [];
     const breakdown = suppliers.map((supplier: Record<string, unknown>) => `${String(supplier.name)}: ${money(supplier.amount)}`).join("; ");
@@ -2111,6 +2132,7 @@ async function askAssistant(client: SupabaseClient, user: Record<string, unknown
     sales: ["Sales", "Mauzo"], expenses: ["Expense records", "Rekodi za matumizi"], debts: ["Open debt records", "Rekodi za madeni wazi"],
     purchases: ["Delivered supplier orders", "Order za supplier zilizopokelewa"], collections: ["Payment records", "Rekodi za malipo"],
     payment_breakdown: ["Payment records", "Rekodi za malipo"], top_products: ["Products ranked", "Bidhaa zilizopangwa"],
+    unsold_products: ["Active products with no recorded sales", "Bidhaa hai zisizo na mauzo yaliyorekodiwa"],
     top_supplier: ["Delivered supplier orders", "Order za supplier zilizopokelewa"], supplier_spend: ["Delivered supplier orders", "Order za supplier zilizopokelewa"], gross_profit: ["Sales", "Mauzo"],
     net_profit: ["Sales", "Mauzo"], stock: ["Products requiring review", "Bidhaa zinazohitaji ukaguzi"],
   };

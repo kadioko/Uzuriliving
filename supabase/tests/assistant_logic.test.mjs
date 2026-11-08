@@ -17,6 +17,9 @@ test("assistant questions are bounded to supported topics and periods", () => {
   assert.deepEqual(parseAssistantQuestion("How much did I spend from 2026-10-01 to 2026-10-31?"), { intent: "expenses", period: "custom", fromDate: "2026-10-01", toDate: "2026-10-31" });
   assert.deepEqual(parseAssistantQuestion("sales over the last 7 days"), { intent: "sales", period: "last_7_days" });
   assert.deepEqual(parseAssistantQuestion("top selling products this month"), { intent: "top_products", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("What haven't we sold this month?"), { intent: "unsold_products", period: "month" });
+  assert.deepEqual(parseAssistantQuestion("Which products didn't we sell last month?"), { intent: "unsold_products", period: "last_month" });
+  assert.deepEqual(parseAssistantQuestion("Bidhaa ambazo hazijauzwa mwezi huu"), { intent: "unsold_products", period: "month" });
   assert.deepEqual(parseAssistantQuestion("top supplier purchases last month"), { intent: "top_supplier", period: "last_month" });
   assert.deepEqual(parseAssistantQuestion("How much did I spend with suppliers last month?"), { intent: "supplier_spend", period: "last_month" });
   assert.deepEqual(parseAssistantQuestion("Supplier spend this week vs last week"), { intent: "supplier_spend", period: "this_week", compareTo: "last_week" });
@@ -34,7 +37,7 @@ test("assistant questions are bounded to supported topics and periods", () => {
   assert.deepEqual(parseAssistantQuestion("Compare net profit this week with last week"), { intent: "net_profit", period: "this_week", compareTo: "last_week" });
   assert.deepEqual(parseAssistantQuestion("Faida baada ya matumizi wiki iliyopita"), { intent: "net_profit", period: "last_week" });
   assert.deepEqual(parseAssistantQuestion("Nimekusanya kiasi gani wiki hii?"), { intent: "collections", period: "this_week" });
-  for (const question of ["sales and expenses today", "profit this month", "stock this month", "stock from 2026-10-01 to 2026-10-31", "debts from 2026-10-01 to 2026-10-31", "sales in 2024", "sales from 2026-02-30 to 2026-03-01", "top products and expenses this month", "sales today and purchases this month", "compare sales this week with last month", "sales and net profit this month", "overdue debts and sales this month", "supplier spend and expenses this month"]) {
+  for (const question of ["sales and expenses today", "profit this month", "stock this month", "stock from 2026-10-01 to 2026-10-31", "debts from 2026-10-01 to 2026-10-31", "sales in 2024", "sales from 2026-02-30 to 2026-03-01", "top products and expenses this month", "sales today and purchases this month", "compare sales this week with last month", "sales and net profit this month", "overdue debts and sales this month", "supplier spend and expenses this month", "What haven't we sold and how much were sales this month?"]) {
     assert.equal(parseAssistantQuestion(question), null, question);
   }
   assert.deepEqual(parseAssistantQuestion("sales"), { intent: "sales", period: "month" });
@@ -104,6 +107,7 @@ test("assistant permission is separate and recommendation history stays source-s
   assert.deepEqual(assistantRequiredPermissions("purchases"), ["canViewReports"]);
   assert.deepEqual(assistantRequiredPermissions("gross_profit"), ["canViewReports"]);
   assert.deepEqual(assistantRequiredPermissions("product_trends"), ["canViewReports"]);
+  assert.deepEqual(assistantRequiredPermissions("unsold_products"), ["canViewReports"]);
   assert.deepEqual(assistantRequiredPermissions("supplier_spend"), ["canViewReports"]);
   assert.deepEqual(assistantRequiredPermissions("net_profit"), ["canViewReports", "canRecordExpenses"]);
 });

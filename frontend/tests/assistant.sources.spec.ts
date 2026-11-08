@@ -363,3 +363,34 @@ test("broad earnings questions offer choices and evidence can carry offline-sync
   await expect(page.getByText(/Two offline sales are waiting to sync/)).toBeVisible();
   expect(submitted).toEqual(["How much did I make last week?", "What was my gross profit last week?"]);
 });
+
+test("Ask explains active products with no recorded sales for the selected month", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("uzuriliving_language", "en"));
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    let body: unknown = {};
+    if (path === "/auth/me") body = { user: { id: "owner", name: "Owner", role: "MERCHANT", shop: { id: "shop", name: "Shop" } } };
+    else if (path === "/assistant/ask") body = { answer: {
+      message: "3 active products had no recorded sales this month: Tea (pcs), Soap (pcs), Rice (bag).",
+      source: "Active products and sale records", href: "/inventory", from: "2026-11-01T00:00:00Z", to: "2026-11-30T23:59:59Z",
+      checkedAt: "2026-11-08T13:00:00Z", timeZone: "Africa/Dar_es_Salaam",
+      evidence: { definition: "Active products with no positive-quantity sale-item record in the selected period. This does not prove the product had no demand.", recordCount: 3, recordCountLabel: "Active products with no recorded sales", warnings: ["Offline sales not yet synced are excluded; stockouts and returns can also change how to interpret this list."] },
+    } };
+    else if (path === "/assistant/snapshot") body = {
+      checkedAt: "2026-11-08T13:00:00Z", businessDate: "2026-11-08", timeZone: "Africa/Dar_es_Salaam", permissions: { canManageStock: false },
+      sources: { today: { status: "ready" }, history: { status: "ready" }, debts: { status: "restricted" }, expenses: { status: "restricted" }, costs: { status: "restricted" }, stock: { status: "restricted" }, purchases: { status: "restricted" } },
+      dashboard: null, historySummary: { summary: { hasBusinessHistory: true } }, debts: null, expenses: null, costs: null, stock: null,
+    };
+    else if (path === "/assistant/actions") body = { actions: [], businessDate: "2026-11-08", timeZone: "Africa/Dar_es_Salaam" };
+    else if (path === "/notifications") body = { items: [], unreadCount: 0 };
+    else if (path === "/subscription/status") body = { status: "active", daysLeft: 30 };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/assistant");
+  await page.getByLabel("Question for assistant").fill("What haven't we sold this month?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.getByText(/3 active products had no recorded sales this month/)).toBeVisible();
+  await expect(page.getByText("How this was calculated")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open relevant records/ })).toHaveAttribute("href", "/inventory");
+  await expect(page.getByText(/Offline sales not yet synced are excluded/)).toBeVisible();
+});

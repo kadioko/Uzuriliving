@@ -35,7 +35,7 @@ test(`${account} can save an out-for-delivery order without silently repricing i
   await page.getByRole("button", { name: "Expand order Coastal Wholesale" }).click();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(page.getByLabel("Unit purchase price for Spa Soak")).toHaveValue("1800");
-  await expect(page.getByText("TZS 1,800").last()).toBeVisible();
+  await expect(page.getByText("TZS 1,800")).toHaveCount(0);
   await expect(page.getByText("Spa Soak", { exact: true }).first()).toBeVisible();
   await page.getByLabel("Quantity for Spa Soak").fill("");
   await expect(page.getByLabel("Quantity for Spa Soak")).toHaveValue("");
@@ -43,14 +43,67 @@ test(`${account} can save an out-for-delivery order without silently repricing i
   await page.getByRole("button", { name: "Save changes" }).click();
 
   await expect(page.getByText("Order updated.")).toBeVisible();
-  await expect(page.getByText("TZS 3,600")).toBeVisible();
+  await expect(page.getByText("TZS 3,600")).toHaveCount(0);
   expect(savedPayloads[0]?.items[0]).toMatchObject({ quantity: 2, unitPrice: 1800, supplierId: supplier.id });
   expect(order.status).toBe("OUT_FOR_DELIVERY");
 
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Unit purchase price for Spa Soak").fill("1700");
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("TZS 3,400")).toBeVisible();
+  await expect(page.getByText("TZS 3,400")).toHaveCount(0);
   expect(savedPayloads[1]?.items[0]).toMatchObject({ quantity: 2, unitPrice: 1700, supplierId: supplier.id });
 });
 }
+
+test("out-for-delivery staff PDF hides supplier totals and shows retail selling prices", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("uzuriliving_language", "en");
+    window.print = () => {};
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    (window as unknown as { __orderCanvasText: string[] }).__orderCanvasText = [];
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+      (window as unknown as { __orderCanvasText: string[] }).__orderCanvasText.push(String(text));
+      return originalFillText.call(this, text, x, y, maxWidth);
+    };
+  });
+  const supplier = { id: "supplier-1", name: "Coastal Wholesale", phone: "+255700000001" };
+  const product = { id: "product-1", name: "Spa Soak", unit: "pcs", sellingPrice: 2500, imageUrl: null, currentStock: 4 };
+  const order = {
+    id: "order-1", orderGroupId: "group-17500", status: "OUT_FOR_DELIVERY", totalAmount: 17500, createdAt: "2026-11-08T09:00:00Z", supplier,
+    items: [{ id: "item-1", productId: product.id, product, quantity: 7, unitPrice: 1000, note: "Check the seal" }],
+  };
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    let payload: unknown = {};
+    if (path === "/auth/me") payload = { user: { id: "owner-1", role: "MERCHANT", name: "Gilbert", language: "en", shop: { id: "shop-1", name: "Uzuri Shop" } } };
+    else if (path === "/orders" && route.request().method() === "GET") payload = { orders: [order] };
+    else if (path === "/orders/order-1" && route.request().method() === "GET") payload = { order };
+    else if (path === "/products") payload = { products: [{ ...product, buyingPrice: 1000, minimumStock: 5, isReorderable: true }], pagination: { totalPages: 1 } };
+    else if (path === "/suppliers") payload = { suppliers: [supplier] };
+    else if (path === "/notifications") payload = { items: [], unreadCount: 0 };
+    else if (path === "/subscription/status") payload = { status: "active", daysLeft: 30 };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+
+  await page.goto("/orders");
+  await expect(page.getByText("Coastal Wholesale").first()).toBeVisible();
+  await expect(page.getByText("TZS 17,500")).toHaveCount(0);
+  await page.getByRole("button", { name: "Expand order Coastal Wholesale" }).click();
+  const popupPromise = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "PDF" }).click();
+  const popup = await popupPromise;
+  await expect(popup.locator("body")).toContainText("Retail selling price");
+  await expect(popup.locator("body")).toContainText("TZS 2,500");
+  await expect(popup.locator("body")).toContainText("Check the seal");
+  await expect(popup.locator("body")).not.toContainText("TZS 1,000");
+  await expect(popup.locator("body")).not.toContainText("TZS 17,500");
+  await expect(popup.locator("body")).not.toContainText("Total:");
+  const jpgDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "JPG" }).click();
+  expect((await jpgDownload).suggestedFilename()).toMatch(/\.jpg$/);
+  const canvasText = await page.evaluate(() => (window as unknown as { __orderCanvasText: string[] }).__orderCanvasText);
+  expect(canvasText).toContain("TZS 2,500");
+  expect(canvasText).not.toContain("TZS 1,000");
+  expect(canvasText).not.toContain("TZS 17,500");
+  expect(canvasText).not.toContain("Estimated total");
+});

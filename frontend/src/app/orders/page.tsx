@@ -47,7 +47,7 @@ interface Product {
 interface OrderItem {
   id: string;
   productId: string;
-  product: { id: string; name: string; unit: string; imageUrl?: string | null; currentStock?: number };
+  product: { id: string; name: string; unit: string; imageUrl?: string | null; currentStock?: number; sellingPrice?: number | null };
   quantity: number;
   note?: string | null;
   unitPrice?: number;
@@ -675,7 +675,7 @@ export default function OrdersPage() {
   function orderMarkup(batch: Order[]) {
     const first = batch[0];
     const date = formatAppDate(first.createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
-    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Suppliers:</b> ${batch.map((order) => escapeHtml(order.supplier.name)).join(", ")} &nbsp; <b>Order:</b> #${(first.orderGroupId || first.id).slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p>${batch.map((order) => `<h3>${escapeHtml(order.supplier.name)} <span class="status">${escapeHtml(order.status)}</span></h3><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td class="product">${item.product.imageUrl ? `<img src="${item.product.imageUrl}" alt="" />` : ""}<span>${escapeHtml(item.product.name)}</span></td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>`).join("")}<h3>Total: ${formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0))}</h3></div>`;
+    return `<div class="order-sheet"><h1>Uzuri Living</h1><h2>Supplier order follow-up</h2><p><b>Suppliers:</b> ${batch.map((order) => escapeHtml(order.supplier.name)).join(", ")} &nbsp; <b>Order:</b> #${(first.orderGroupId || first.id).slice(-8).toUpperCase()} &nbsp; <b>Date:</b> ${date}</p><p class="staff-note">Staff copy · retail selling prices shown · supplier costs and order total are not shown.</p>${batch.map((order) => `<h3>${escapeHtml(order.supplier.name)} <span class="status">${escapeHtml(order.status.replaceAll("_", " "))}</span></h3><table><thead><tr><th>Product</th><th>Available stock</th><th>Order quantity</th><th>Retail selling price</th><th>Notes</th></tr></thead><tbody>${order.items.map((item) => `<tr><td class="product">${item.product.imageUrl ? `<img src="${escapeHtml(item.product.imageUrl)}" alt="" />` : ""}<span>${escapeHtml(item.product.name)}</span></td><td>${item.product.currentStock ?? "-"} ${escapeHtml(item.product.unit)}</td><td>${item.quantity} ${escapeHtml(item.product.unit)}</td><td>${item.product.sellingPrice == null ? "Not set" : formatTZS(item.product.sellingPrice)}</td><td>${escapeHtml(item.note || "")}</td></tr>`).join("")}</tbody></table>`).join("")}</div>`;
   }
 
   async function getFreshOrderBatch(batch: Order[]) {
@@ -696,7 +696,7 @@ export default function OrdersPage() {
     if (!latest) { popup.close(); return; }
     batch = latest;
     const order = batch[0];
-    popup.document.write(`<html><head><title>Order ${(order.orderGroupId || order.id).slice(-8).toUpperCase()}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#1f2937}.order-sheet{max-width:760px;margin:auto}h1{color:#b56600;margin-bottom:4px}h2{margin-top:0;font-size:20px}h3{margin:22px 0 4px}.status{font-size:11px;background:#fff3d6;padding:4px 8px;border-radius:10px}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border:1px solid #d1d5db;padding:8px;text-align:left;font-size:12px}th{background:#fff3d6}.product{display:flex;align-items:center;gap:8px}.product img{height:48px;width:48px;object-fit:cover;border-radius:6px}hr{border:0;border-top:1px solid #e5e7eb}</style></head><body>${orderMarkup(batch)}</body></html>`);
+    popup.document.write(`<html><head><title>Order ${(order.orderGroupId || order.id).slice(-8).toUpperCase()}</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#1f2937}.order-sheet{max-width:900px;margin:auto}h1{color:#b56600;margin-bottom:4px}h2{margin-top:0;font-size:20px}h3{margin:22px 0 4px}.staff-note{background:#f3f7f3;color:#365d45;border:1px solid #d5e7d8;border-radius:8px;padding:9px 12px;font-size:12px}.status{font-size:11px;background:#fff3d6;padding:4px 8px;border-radius:10px}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border:1px solid #d1d5db;padding:8px;text-align:left;font-size:12px}th{background:#fff3d6}.product{display:flex;align-items:center;gap:8px}.product img{height:48px;width:48px;object-fit:cover;border-radius:6px}hr{border:0;border-top:1px solid #e5e7eb}@media print{body{padding:8mm}}</style></head><body>${orderMarkup(batch)}</body></html>`);
     popup.document.close();
     await Promise.all([...popup.document.images].map((image) => image.complete ? Promise.resolve() : new Promise<void>((resolve) => { image.onload = () => resolve(); image.onerror = () => resolve(); })));
     popup.focus(); popup.print();
@@ -706,11 +706,11 @@ export default function OrdersPage() {
     const latest = await getFreshOrderBatch(batch);
     if (!latest) return;
     batch = latest;
-    const width = 1400;
+    const width = 1600;
     const pagePadding = 64;
     const rowHeight = 136;
     const supplierBlockHeight = (order: Order) => 70 + order.items.length * rowHeight;
-    const height = 360 + batch.reduce((sum, order) => sum + supplierBlockHeight(order), 0) + 110;
+    const height = 360 + batch.reduce((sum, order) => sum + supplierBlockHeight(order), 0) + 40;
     const canvas = document.createElement("canvas");
     canvas.width = width; canvas.height = height;
     const context = canvas.getContext("2d");
@@ -740,10 +740,11 @@ export default function OrdersPage() {
     context.fillStyle = "#d47f00"; context.fillRect(0, 0, canvas.width, 18);
     drawRounded(pagePadding, 48, width - pagePadding * 2, 220, 24, "#ffffff", "#f1dfb7");
     context.fillStyle = "#b56600"; context.font = "bold 42px Arial"; context.fillText("Uzuri Living", pagePadding + 32, 105);
-    context.fillStyle = "#1f2937"; context.font = "bold 28px Arial"; context.fillText("Supplier order follow-up", pagePadding + 32, 150);
-    context.fillStyle = "#64748b"; context.font = "20px Arial"; context.fillText(`Order #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, pagePadding + 32, 194);
+    context.fillStyle = "#1f2937"; context.font = "bold 28px Arial"; context.fillText("Supplier order follow-up · staff copy", pagePadding + 32, 150);
+    context.fillStyle = "#526b5a"; context.font = "18px Arial"; context.fillText("Retail selling prices only · supplier costs and order total hidden", pagePadding + 32, 180);
+    context.fillStyle = "#64748b"; context.font = "20px Arial"; context.fillText(`Order #${(batch[0].orderGroupId || batch[0].id).slice(-8).toUpperCase()}`, pagePadding + 32, 222);
     const date = formatAppDate(batch[0].createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short", year: "numeric" });
-    context.fillText(date, width - pagePadding - 220, 194);
+    context.fillText(date, width - pagePadding - 220, 222);
     const supplierText = batch.map((order) => order.supplier.name).join(", ");
     context.font = "bold 18px Arial"; context.fillStyle = "#854b08"; context.fillText("SUPPLIERS", width - pagePadding - 360, 90);
     context.font = "18px Arial"; context.fillStyle = "#334155"; wrapText(supplierText, 330, 3).forEach((line, index) => context.fillText(line, width - pagePadding - 360, 120 + index * 27));
@@ -760,19 +761,18 @@ export default function OrdersPage() {
           if (image) { context.save(); context.beginPath(); context.roundRect(pagePadding + 16, y + 16, 88, 88, 12); context.clip(); context.drawImage(image, pagePadding + 16, y + 16, 88, 88); context.restore(); }
         }
         context.fillStyle = "#1f2937"; context.font = "bold 21px Arial";
-        wrapText(item.product.name, 510, 2).forEach((line, index) => context.fillText(line, pagePadding + 126, y + 43 + index * 27));
+        wrapText(item.product.name, 530, 2).forEach((line, index) => context.fillText(line, pagePadding + 126, y + 43 + index * 27));
         context.fillStyle = "#64748b"; context.font = "17px Arial"; context.fillText(`Available in shop: ${item.product.currentStock ?? "-"} ${item.product.unit}`, pagePadding + 126, y + 96);
-        context.fillStyle = "#64748b"; context.font = "bold 15px Arial"; context.fillText("ORDER QUANTITY", pagePadding + 760, y + 33);
-        context.fillStyle = "#b56600"; context.font = "bold 26px Arial"; context.fillText(`${item.quantity} ${item.product.unit}`, pagePadding + 760, y + 70);
-        context.fillStyle = "#64748b"; context.font = "bold 15px Arial"; context.fillText("NOTE", pagePadding + 1000, y + 33);
-        context.fillStyle = "#334155"; context.font = "16px Arial"; wrapText(item.note || "No note", 250, 3).forEach((line, index) => context.fillText(line, pagePadding + 1000, y + 62 + index * 22));
+        context.fillStyle = "#64748b"; context.font = "bold 14px Arial"; context.fillText("ORDER QTY", pagePadding + 720, y + 33);
+        context.fillStyle = "#b56600"; context.font = "bold 24px Arial"; context.fillText(`${item.quantity} ${item.product.unit}`, pagePadding + 720, y + 70);
+        context.fillStyle = "#64748b"; context.font = "bold 14px Arial"; context.fillText("RETAIL PRICE", pagePadding + 885, y + 33);
+        context.fillStyle = "#087f6b"; context.font = "bold 19px Arial"; context.fillText(item.product.sellingPrice == null ? "Not set" : formatTZS(item.product.sellingPrice), pagePadding + 885, y + 70);
+        context.fillStyle = "#64748b"; context.font = "bold 14px Arial"; context.fillText("NOTE", pagePadding + 1085, y + 33);
+        context.fillStyle = "#334155"; context.font = "16px Arial"; wrapText(item.note || "No note", 290, 3).forEach((line, index) => context.fillText(line, pagePadding + 1085, y + 62 + index * 22));
         y += rowHeight;
       }
       y += 8;
     }
-    drawRounded(pagePadding, y, width - pagePadding * 2, 70, 16, "#102a43");
-    context.fillStyle = "#ffffff"; context.font = "bold 22px Arial"; context.fillText("Estimated total", pagePadding + 24, y + 44);
-    context.textAlign = "right"; context.font = "bold 28px Arial"; context.fillText(formatTZS(batch.reduce((sum, order) => sum + (order.totalAmount || 0), 0)), width - pagePadding - 24, y + 45); context.textAlign = "left";
     const link = document.createElement("a"); link.download = `uzuri-order-${(batch[0].orderGroupId || batch[0].id).slice(-8)}.jpg`; link.href = canvas.toDataURL("image/jpeg", 0.92); link.click();
   }
 
@@ -866,6 +866,7 @@ export default function OrdersPage() {
           <div className="space-y-3">
             {grouped.map(({ key: batchKey, orders: batch }) => {
               const order = batch[0];
+              const hideOrderTotal = batch.some((item) => item.status === "OUT_FOR_DELIVERY");
               const allDelivered = batch.every((item) => item.status === "DELIVERED");
               const allCancelled = batch.every((item) => item.status === "CANCELLED");
               const statusLabels = [...new Set(batch.map((item) => t(`orders.status.${item.status}`, lang)))];
@@ -883,7 +884,7 @@ export default function OrdersPage() {
                       #{batchKey.slice(-8).toUpperCase()} •{" "}
                       {formatAppDate(order.createdAt, lang === "sw" ? "sw-TZ" : "en-US", { day: "numeric", month: "short" })}
                     </p>
-                    {canViewOrderQuantities && batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
+                    {canViewOrderQuantities && !hideOrderTotal && batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0) > 0 && (
                       <p className="text-sm font-bold text-brand-700 mt-1">{formatTZS(batch.reduce((sum, item) => sum + (item.totalAmount || 0), 0))}</p>
                     )}
                   </div>
@@ -1005,7 +1006,7 @@ export default function OrdersPage() {
                 </div>
                 {orderItems.length > 0 && (
                   <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50/50 p-3">
-                    <div className="mb-2 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-brand-800">{lang === "sw" ? "Bidhaa ulizochagua" : "Selected products"}</p><p className="mt-0.5 text-[11px] text-brand-700">{orderItems.length} {lang === "sw" ? "bidhaa ·" : "products ·"} {selectedSupplierCount} {lang === "sw" ? "suppliers" : "suppliers"}</p></div><p className="text-sm font-bold text-brand-800">{formatTZS(estimatedTotal)}</p></div>
+                    <div className="mb-2 flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wide text-brand-800">{lang === "sw" ? "Bidhaa ulizochagua" : "Selected products"}</p><p className="mt-0.5 text-[11px] text-brand-700">{orderItems.length} {lang === "sw" ? "bidhaa ·" : "products ·"} {selectedSupplierCount} {lang === "sw" ? "suppliers" : "suppliers"}</p></div>{editingOrder?.status !== "OUT_FOR_DELIVERY" && <p className="text-sm font-bold text-brand-800">{formatTZS(estimatedTotal)}</p>}</div>
                   <div className="space-y-2">
                     {orderItems.map((item) => {
                       const p = products.find((pr) => pr.id === item.productId);
@@ -1278,12 +1279,12 @@ export default function OrdersPage() {
                       {revision.beforeSnapshot && <div className="rounded-lg bg-gray-50 p-3">
                         <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">{lang === "sw" ? "Kabla" : "Before"}</p>
                         <div className="space-y-1.5">{beforeItems.map((item) => <div key={item.productId} className="flex justify-between gap-2 text-xs"><span className="min-w-0 truncate text-gray-700">{item.productName} × {item.quantity}</span><span className="shrink-0 text-gray-500">{formatTZS(item.unitPrice ?? 0)}</span></div>)}</div>
-                        <p className="mt-2 border-t pt-2 text-right text-xs font-bold text-gray-700">{formatTZS(revision.beforeSnapshot.totalAmount ?? 0)}</p>
+                        {revisionHistoryOrder?.status !== "OUT_FOR_DELIVERY" && <p className="mt-2 border-t pt-2 text-right text-xs font-bold text-gray-700">{formatTZS(revision.beforeSnapshot.totalAmount ?? 0)}</p>}
                       </div>}
                       <div className="rounded-lg bg-green-50/60 p-3">
                         <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-green-800">{revision.beforeSnapshot ? (lang === "sw" ? "Baada ya mabadiliko" : "After edit") : (lang === "sw" ? "Order iliyohifadhiwa" : "Saved order")}</p>
                         <div className="space-y-1.5">{afterItems.map((item) => <div key={item.productId} className="flex justify-between gap-2 text-xs"><span className="min-w-0 truncate text-gray-800">{item.productName} × {item.quantity}</span><span className="shrink-0 text-gray-600">{formatTZS(item.unitPrice ?? 0)}</span></div>)}</div>
-                        <p className="mt-2 border-t border-green-200 pt-2 text-right text-xs font-bold text-gray-800">{formatTZS(revision.afterSnapshot.totalAmount ?? 0)}</p>
+                        {revisionHistoryOrder?.status !== "OUT_FOR_DELIVERY" && <p className="mt-2 border-t border-green-200 pt-2 text-right text-xs font-bold text-gray-800">{formatTZS(revision.afterSnapshot.totalAmount ?? 0)}</p>}
                       </div>
                     </div>
                   </article>

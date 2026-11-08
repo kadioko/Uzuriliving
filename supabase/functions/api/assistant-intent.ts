@@ -11,6 +11,7 @@ export type AssistantIntent =
   | "collections"
   | "payment_breakdown"
   | "top_products"
+  | "unsold_products"
   | "product_trends"
   | "supplier_spend"
   | "top_supplier";
@@ -41,6 +42,7 @@ export type ParsedAssistantQuestion = {
 
 export function assistantRequiredPermissions(intent: AssistantIntent): string[] {
   if (intent === "stock" || intent === "stock_movements") return ["canViewInventoryAndPrices"];
+  if (intent === "unsold_products") return ["canViewReports"];
   if (intent === "debts" || intent === "debt_aging" || intent === "collections") return ["canViewReports", "canSell"];
   if (intent === "expenses") return ["canRecordExpenses"];
   if (intent === "net_profit") return ["canViewReports", "canRecordExpenses"];
@@ -140,9 +142,10 @@ export function parseAssistantQuestion(question: string): ParsedAssistantQuestio
   if (range && (!isValidDateKey(range[1]) || !isValidDateKey(range[2]) || range[1] > range[2])) return null;
 
   const asksForProductTrends = /\b(product trends?|product performance trends?|products?\s+(?:(?:are|have been)\s+)?(?:gaining|growing|slowing|declining)|bidhaa zinazopanda|mwenendo wa bidhaa)\b/.test(text);
+  const asksForUnsoldProducts = /\b(?:what|which)\s+(?:(?:products?|items?)\s+)?(?:haven't we sold|have we not sold|didn't we sell|did we not sell|didn't sell|did not sell)\b|\bwhich\s+(?:products?|items?)\s+(?:have no|had no|have zero|had zero)\s+(?:recorded\s+)?sales\b|\bwhich\s+(?:products?|items?)\s+(?:we\s+)?(?:haven't|have not|didn't|did not|weren't|were not)\s+(?:been\s+)?(?:sold|sell)\b|\b(?:unsold|never sold)\s+(?:products?|items?)\b|\b(?:products?|items?)\s+(?:we\s+)?(?:haven't|have not|didn't|did not)\s+(?:been\s+)?sold\b|\bbidhaa\b.*\b(?:hazijauzwa|hazikuuzwa|hatuzijauza|hazina mauzo)\b/.test(text);
   const asksForDebtAging = /\b(debt aging|overdue debts?|oldest debts?|age of (?:my )?debts?|most overdue|who is most overdue|madeni yaliyochelewa|madeni ya zamani|umri wa madeni)\b/.test(text);
   const asksForStockMovements = /\b(stock movements?|inventory movements?|stock history|stock in and out|movement history|mabadiliko ya stock|historia ya stock)\b/.test(text);
-  const asksForTopProducts = !asksForProductTrends && /\b(top|best|most|highest|best-selling|top-selling|bora|zilizouza|zinazouza)\b/.test(text)
+  const asksForTopProducts = !asksForProductTrends && !asksForUnsoldProducts && /\b(top|best|most|highest|best-selling|top-selling|bora|zilizouza|zinazouza)\b/.test(text)
     && /\b(products?|items?|bidhaa)\b/.test(text);
   const asksForTopSupplier = /\b(top|best|highest|most|largest|bora|mkuu)\b/.test(text)
     && /\b(suppliers?|vendors?|wasambazaji|msambazaji)\b/.test(text);
@@ -153,13 +156,15 @@ export function parseAssistantQuestion(question: string): ParsedAssistantQuestio
   const asksForCollections = /\b(collect|collected|collection|collections|cash collected|money collected|cash received|money received|debt payments?|pesa zilizokusanywa|makusanyo|malipo yaliyopokelewa|nimekusanya)\b/.test(text);
 
   const flags = {
-    sales: /\b(sales?|sell|sells|sold|revenue|mapato|mauzo|niliuza)\b/.test(text),
+    sales: !asksForUnsoldProducts && /\b(sales?|sell|sells|sold|revenue|mapato|mauzo|niliuza)\b/.test(text),
     expenses: /\b(expenses?|gharama)\b/.test(text) || (!asksForTopSupplier && !asksForSupplierSpend && /\b(spend(?:ing)?|matumizi)\b/.test(text)),
     debts: !asksForDebtAging && /\b(debts?|owed|owe|madeni|deni|nadai)\b/.test(text),
     purchases: !asksForSupplierSpend && /\b(purchases?|purchased|bought|manunuzi|nilinunua)\b/.test(text),
     stock: !asksForStockMovements && /\b(stock|inventory|low stock|out of stock|reorder(?:ing)?|restock|kuagiza|bidhaa zilizobaki)\b/.test(text),
   };
   const hasOtherTopic = flags.sales || flags.expenses || flags.debts || flags.purchases || flags.stock || asksForTopSupplier || asksForSupplierSpend || asksForTopProducts || asksForPaymentBreakdown || asksForCollections;
+  const asksForSeparateSalesAmount = /\b(?:how much|total|amount|value|revenue|cash collected|recorded sales)\b.{0,40}\b(?:sales?|revenue|mapato|mauzo)\b/.test(text);
+  if (asksForUnsoldProducts && (flags.expenses || flags.debts || flags.purchases || flags.stock || asksForTopSupplier || asksForSupplierSpend || asksForTopProducts || asksForPaymentBreakdown || asksForCollections || asksForNetProfit || asksForGrossProfit || asksForSeparateSalesAmount)) return null;
   if ((asksForDebtAging || asksForStockMovements || asksForProductTrends) && hasOtherTopic) return null;
   if (asksForSupplierSpend && (flags.sales || flags.expenses || flags.debts || flags.stock || asksForTopSupplier || asksForTopProducts || asksForPaymentBreakdown || asksForCollections)) return null;
   if ((asksForNetProfit && asksForGrossProfit) || ((asksForNetProfit || asksForGrossProfit) && (asksForTopProducts || asksForTopSupplier || asksForPaymentBreakdown || asksForCollections || flags.sales || flags.debts || flags.purchases || flags.stock))) return null;
@@ -170,6 +175,7 @@ export function parseAssistantQuestion(question: string): ParsedAssistantQuestio
 
   let intent: AssistantIntent | null = null;
   if (asksForProductTrends) intent = "product_trends";
+  else if (asksForUnsoldProducts) intent = "unsold_products";
   else if (asksForDebtAging) intent = "debt_aging";
   else if (asksForStockMovements) intent = "stock_movements";
   else if (asksForSupplierSpend) intent = "supplier_spend";
