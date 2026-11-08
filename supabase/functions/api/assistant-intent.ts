@@ -1,18 +1,26 @@
 export type AssistantIntent =
   | "sales"
+  | "gross_profit"
+  | "net_profit"
   | "stock"
+  | "stock_movements"
   | "debts"
+  | "debt_aging"
   | "expenses"
   | "purchases"
   | "collections"
   | "payment_breakdown"
   | "top_products"
+  | "product_trends"
+  | "supplier_spend"
   | "top_supplier";
 
 export type AssistantPeriod =
   | "today"
   | "yesterday"
   | "last_7_days"
+  | "last_30_days"
+  | "last_90_days"
   | "this_week"
   | "last_week"
   | "month"
@@ -32,9 +40,10 @@ export type ParsedAssistantQuestion = {
 };
 
 export function assistantRequiredPermissions(intent: AssistantIntent): string[] {
-  if (intent === "stock") return ["canViewInventoryAndPrices"];
-  if (intent === "debts" || intent === "collections") return ["canViewReports", "canSell"];
+  if (intent === "stock" || intent === "stock_movements") return ["canViewInventoryAndPrices"];
+  if (intent === "debts" || intent === "debt_aging" || intent === "collections") return ["canViewReports", "canSell"];
   if (intent === "expenses") return ["canRecordExpenses"];
+  if (intent === "net_profit") return ["canViewReports", "canRecordExpenses"];
   return ["canViewReports"];
 }
 
@@ -46,22 +55,71 @@ export function assistantActionRequiredPermissions(actionKey: string): string[] 
   return ["canViewReports"];
 }
 
-export function estimateStockCover(currentStock: number, incoming: number, today: string, sales: Array<{ date: string; quantity: number }>) {
+export function assistantFinancialReconciliation(metrics: Record<string, unknown>) {
+  const revenueDifference = Number(metrics.revenueDifference ?? 0);
+  const profitDifference = metrics.profitDifference == null ? null : Number(metrics.profitDifference);
+  const missingCostSalesRevenue = Number(metrics.missingCostSalesRevenue ?? 0);
+  const reconciled = revenueDifference === 0 && (profitDifference === null || profitDifference === 0);
+  return {
+    revenueDifference: Number.isFinite(revenueDifference) ? revenueDifference : 0,
+    profitDifference: profitDifference !== null && Number.isFinite(profitDifference) ? profitDifference : null,
+    missingCostSalesRevenue: Number.isFinite(missingCostSalesRevenue) ? missingCostSalesRevenue : 0,
+    grossProfitSafe: missingCostSalesRevenue === 0 && profitDifference !== null && reconciled,
+    reconciled,
+  };
+}
+
+export function estimateStockCover(
+  currentStock: number,
+  incoming: number,
+  today: string,
+  sales: Array<{ date: string; quantity: number }>,
+  settings: {
+    leadTimeDays?: number | null;
+    safetyDays?: number | null;
+    packSize?: number | null;
+    availability?: { coverageFrom: string; coverageTo?: string; coverageDays: number; stockoutDays: number; availableDays: number; stockoutDates?: string[] };
+  } = {},
+) {
   const ordinal = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) / 86400000 : NaN;
   const todayDay = ordinal(today);
-  const valid = sales.filter((sale) => Number.isFinite(sale.quantity) && sale.quantity > 0 && Number.isFinite(ordinal(sale.date)) && ordinal(sale.date) <= todayDay && ordinal(sale.date) >= todayDay - 27);
+  const availability = settings.availability;
+  if (!Number.isFinite(todayDay) || !availability || !Number.isFinite(ordinal(availability.coverageFrom))) return null;
+  const stockoutDates = new Set(Array.isArray(availability.stockoutDates) ? availability.stockoutDates : []);
+  const valid = sales.filter((sale) => Number.isFinite(sale.quantity) && sale.quantity > 0 && Number.isFinite(ordinal(sale.date)) && ordinal(sale.date) < todayDay && ordinal(sale.date) >= Math.max(todayDay - 28, ordinal(availability.coverageFrom)) && !stockoutDates.has(sale.date));
   const activeDays = new Set(valid.map((sale) => sale.date)).size;
-  const firstDay = valid.reduce((first, sale) => Math.min(first, ordinal(sale.date)), todayDay);
-  const observedDays = valid.length ? todayDay - firstDay + 1 : 0;
+  const observedDays = Math.max(0, Math.min(28, Math.floor(availability.coverageDays)));
+  const availableDays = Math.max(0, Math.min(observedDays, Math.floor(availability.availableDays)));
+  const stockoutDays = Math.max(0, Math.min(observedDays, Math.floor(availability.stockoutDays)));
   const units = valid.reduce((total, sale) => total + sale.quantity, 0);
-  if (!Number.isFinite(todayDay) || observedDays < 14 || activeDays < 7 || units <= 0) return null;
-  const dailyRate = units / observedDays;
+  if (!Number.isFinite(observedDays) || availableDays === 0) return null;
+  const dailyRate = units / availableDays;
   const availableWithIncoming = Math.max(0, currentStock) + Math.max(0, incoming);
+  const hasEnoughHistory = observedDays >= 21 && availableDays >= 14 && activeDays >= 7 && units > 0;
+  const leadTimeDays = settings.leadTimeDays;
+  const safetyDays = settings.safetyDays;
+  const packSize = Number.isInteger(settings.packSize) && Number(settings.packSize) > 0 ? Number(settings.packSize) : 1;
+  const hasConfiguredReorderPolicy = Number.isInteger(leadTimeDays) && Number(leadTimeDays) >= 0
+    && Number.isInteger(safetyDays) && Number(safetyDays) >= 0;
+  const rawAdditionalUnits = hasEnoughHistory && hasConfiguredReorderPolicy
+    ? Math.max(0, Math.ceil(dailyRate * (Number(leadTimeDays) + Number(safetyDays)) - availableWithIncoming))
+    : null;
+  const suggestedOrderQuantity = rawAdditionalUnits === null ? null : Math.ceil(rawAdditionalUnits / packSize) * packSize;
   return {
     observedDays,
+    coverageTo: availability.coverageTo ?? null,
     activeDays,
-    daysOfCover: Math.round(availableWithIncoming / dailyRate * 10) / 10,
-    suggestedAdditionalUnits: Math.max(0, Math.ceil(dailyRate * 14 - availableWithIncoming)),
+    availabilityDays: availableDays,
+    stockoutDays,
+    dailyRate: Math.round(dailyRate * 100) / 100,
+    hasEnoughHistory,
+    hasConfiguredReorderPolicy,
+    daysOfCover: dailyRate > 0 ? Math.round(availableWithIncoming / dailyRate * 10) / 10 : null,
+    suggestedAdditionalUnits: suggestedOrderQuantity,
+    suggestedOrderQuantity,
+    leadTimeDays: hasConfiguredReorderPolicy ? Number(leadTimeDays) : null,
+    safetyDays: hasConfiguredReorderPolicy ? Number(safetyDays) : null,
+    packSize,
   };
 }
 
@@ -81,28 +139,44 @@ export function parseAssistantQuestion(question: string): ParsedAssistantQuestio
   const range = text.match(/\b(?:between|from|kuanzia)?\s*(\d{4}-\d{2}-\d{2})\s+(?:and|to|through|mpaka|hadi)\s+(\d{4}-\d{2}-\d{2})\b/);
   if (range && (!isValidDateKey(range[1]) || !isValidDateKey(range[2]) || range[1] > range[2])) return null;
 
-  const asksForTopProducts = /\b(top|best|most|highest|best-selling|top-selling|bora|zilizouza|zinazouza)\b/.test(text)
+  const asksForProductTrends = /\b(product trends?|product performance trends?|products?\s+(?:(?:are|have been)\s+)?(?:gaining|growing|slowing|declining)|bidhaa zinazopanda|mwenendo wa bidhaa)\b/.test(text);
+  const asksForDebtAging = /\b(debt aging|overdue debts?|oldest debts?|age of (?:my )?debts?|most overdue|who is most overdue|madeni yaliyochelewa|madeni ya zamani|umri wa madeni)\b/.test(text);
+  const asksForStockMovements = /\b(stock movements?|inventory movements?|stock history|stock in and out|movement history|mabadiliko ya stock|historia ya stock)\b/.test(text);
+  const asksForTopProducts = !asksForProductTrends && /\b(top|best|most|highest|best-selling|top-selling|bora|zilizouza|zinazouza)\b/.test(text)
     && /\b(products?|items?|bidhaa)\b/.test(text);
   const asksForTopSupplier = /\b(top|best|highest|most|largest|bora|mkuu)\b/.test(text)
     && /\b(suppliers?|vendors?|wasambazaji|msambazaji)\b/.test(text);
+  const asksForSupplierSpend = !asksForTopSupplier && /\b(supplier spend|spend with suppliers?|spent with suppliers?|supplier purchases|purchases? from suppliers?|wasambazaji kiasi|manunuzi kwa suppliers?|manunuzi ya wasambazaji|matumizi kwa wasambazaji)\b/.test(text);
+  const asksForNetProfit = /\b(net profit|profit after expenses|profit after costs|faida baada ya matumizi|faida halisi)\b/.test(text);
+  const asksForGrossProfit = /\b(gross profit|profit before expenses|faida ghafi)\b/.test(text);
   const asksForPaymentBreakdown = /\b(payment methods?|methods of payment|payment breakdown|by payment|how (?:did|was) (?:customers? )?(?:pay|paid)|malipo kwa njia|njia za malipo)\b/.test(text);
   const asksForCollections = /\b(collect|collected|collection|collections|cash collected|money collected|cash received|money received|debt payments?|pesa zilizokusanywa|makusanyo|malipo yaliyopokelewa|nimekusanya)\b/.test(text);
 
   const flags = {
     sales: /\b(sales?|sell|sells|sold|revenue|mapato|mauzo|niliuza)\b/.test(text),
-    expenses: /\b(expenses?|spend(?:ing)?|matumizi|gharama)\b/.test(text),
-    debts: /\b(debts?|owed|owe|madeni|deni|nadai)\b/.test(text),
-    purchases: /\b(purchases?|purchased|bought|manunuzi|nilinunua)\b/.test(text),
-    stock: /\b(stock|inventory|low stock|out of stock|reorder(?:ing)?|restock|kuagiza|bidhaa zilizobaki)\b/.test(text),
+    expenses: /\b(expenses?|gharama)\b/.test(text) || (!asksForTopSupplier && !asksForSupplierSpend && /\b(spend(?:ing)?|matumizi)\b/.test(text)),
+    debts: !asksForDebtAging && /\b(debts?|owed|owe|madeni|deni|nadai)\b/.test(text),
+    purchases: !asksForSupplierSpend && /\b(purchases?|purchased|bought|manunuzi|nilinunua)\b/.test(text),
+    stock: !asksForStockMovements && /\b(stock|inventory|low stock|out of stock|reorder(?:ing)?|restock|kuagiza|bidhaa zilizobaki)\b/.test(text),
   };
-  if (asksForTopProducts && (asksForTopSupplier || flags.expenses || flags.debts || flags.purchases || flags.stock)) return null;
+  const hasOtherTopic = flags.sales || flags.expenses || flags.debts || flags.purchases || flags.stock || asksForTopSupplier || asksForSupplierSpend || asksForTopProducts || asksForPaymentBreakdown || asksForCollections;
+  if ((asksForDebtAging || asksForStockMovements || asksForProductTrends) && hasOtherTopic) return null;
+  if (asksForSupplierSpend && (flags.sales || flags.expenses || flags.debts || flags.stock || asksForTopSupplier || asksForTopProducts || asksForPaymentBreakdown || asksForCollections)) return null;
+  if ((asksForNetProfit && asksForGrossProfit) || ((asksForNetProfit || asksForGrossProfit) && (asksForTopProducts || asksForTopSupplier || asksForPaymentBreakdown || asksForCollections || flags.sales || flags.debts || flags.purchases || flags.stock))) return null;
+  if (asksForTopProducts && (asksForTopSupplier || asksForSupplierSpend || flags.expenses || flags.debts || flags.purchases || flags.stock)) return null;
   if (asksForTopSupplier && (flags.sales || flags.expenses || flags.debts || flags.stock)) return null;
   if (asksForPaymentBreakdown && (flags.expenses || flags.purchases || flags.stock || asksForTopProducts || asksForTopSupplier)) return null;
   if (asksForCollections && (flags.expenses || flags.purchases || flags.stock || asksForTopProducts || asksForTopSupplier)) return null;
 
   let intent: AssistantIntent | null = null;
-  if (asksForTopProducts) intent = "top_products";
+  if (asksForProductTrends) intent = "product_trends";
+  else if (asksForDebtAging) intent = "debt_aging";
+  else if (asksForStockMovements) intent = "stock_movements";
+  else if (asksForSupplierSpend) intent = "supplier_spend";
+  else if (asksForTopProducts) intent = "top_products";
   else if (asksForTopSupplier) intent = "top_supplier";
+  else if (asksForNetProfit && !asksForGrossProfit) intent = "net_profit";
+  else if (asksForGrossProfit) intent = "gross_profit";
   else if (asksForPaymentBreakdown) intent = "payment_breakdown";
   else if (asksForCollections) intent = "collections";
   else {
@@ -129,6 +203,8 @@ export function parseAssistantQuestion(question: string): ParsedAssistantQuestio
     } else return null;
   } else {
     const periods: Array<[AssistantPeriod, RegExp]> = [
+      ["last_90_days", /\b(last|past|previous) 90 days\b/],
+      ["last_30_days", /\b(last|past|previous) 30 days\b/],
       ["today", /\b(today|leo)\b/],
       ["yesterday", /\b(yesterday|jana)\b/],
       ["last_7_days", /\b(last|past|previous) 7 days\b/],
@@ -144,17 +220,18 @@ export function parseAssistantQuestion(question: string): ParsedAssistantQuestio
     else if (matches.length !== 0) return null;
   }
 
-  if (period === null) period = intent === "stock" || intent === "debts" ? "current" : "month";
+  if (period === null) period = ["stock", "debts", "debt_aging"].includes(intent) ? "current" : ["product_trends", "stock_movements"].includes(intent) ? "last_30_days" : "month";
 
   if (period === "custom") {
-    if (!range || intent === "stock" || intent === "debts" || /\b(compare|compared|versus|vs\.?|against|last|previous)\b/.test(text)) return null;
+    if (!range || ["stock", "debts", "debt_aging"].includes(intent) || /\b(compare|compared|versus|vs\.?|against|last|previous)\b/.test(text)) return null;
     return { intent, period, fromDate: range[1], toDate: range[2] };
   }
-  if (period === "last_7_days" && (intent === "stock" || intent === "debts")) return null;
+  if (["last_7_days", "last_30_days", "last_90_days"].includes(period) && ["stock", "debts", "debt_aging"].includes(intent)) return null;
   if (intent === "stock" && period !== "current") return null;
-  if (intent === "debts" && period !== "current") return null;
+  if ((intent === "debts" || intent === "debt_aging") && period !== "current") return null;
+  if (intent === "product_trends" && period === "all") return null;
   if (period === "all" && ["collections", "payment_breakdown"].includes(intent)) return null;
-  if (compareTo && !["sales", "expenses", "collections", "purchases"].includes(intent)) return null;
+  if (compareTo && !["sales", "expenses", "collections", "purchases", "supplier_spend", "gross_profit", "net_profit"].includes(intent)) return null;
 
   return { intent, period, ...(compareTo ? { compareTo } : {}) };
 }
