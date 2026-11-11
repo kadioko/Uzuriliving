@@ -6,7 +6,7 @@ DECLARE
   supplier_id TEXT := gen_random_uuid()::TEXT; product_id TEXT := gen_random_uuid()::TEXT;
   order_id TEXT := gen_random_uuid()::TEXT; customer_id TEXT := gen_random_uuid()::TEXT;
   debt_id TEXT := gen_random_uuid()::TEXT; result JSONB; repeat_result JSONB;
-  qty INTEGER; count_id TEXT; saved_order TEXT; opening_product TEXT; registered_id TEXT; eta_order_id TEXT;
+  qty INTEGER; count_id TEXT; saved_order TEXT; opening_product TEXT; zero_stock_product TEXT; registered_id TEXT; eta_order_id TEXT;
   expected_date DATE := CURRENT_DATE + 5; metric_result JSONB; other_shop TEXT := gen_random_uuid()::TEXT;
 BEGIN
   INSERT INTO users(id,phone,pin,name,role,"approvalStatus","updatedAt") VALUES(owner_id,'audit-'||owner_id,'unused','Audit fixture','MERCHANT','APPROVED',NOW());
@@ -112,8 +112,14 @@ BEGIN
   IF result->'shop'->>'subscriptionEndsAt'<>repeat_result->'shop'->>'subscriptionEndsAt' OR (SELECT COUNT(*) FROM subscription_payments WHERE "shopId"=shop_id)<>1 THEN RAISE EXCEPTION 'Payment retry duplicated entitlement'; END IF;
   result:=create_shop_debt(shop_id,owner_id,'{"customerPhone":"+255700000001","amount":100,"amountPaid":20}');
   IF (SELECT SUM(amount) FROM debt_payments WHERE "debtId"=result->'debt'->>'id')<>20 THEN RAISE EXCEPTION 'Opening debt payment missing'; END IF;
-  opening_product:=create_shop_product(jsonb_build_object('id',gen_random_uuid()::TEXT,'name','Opening stock audit','unit','pcs','buyingPrice',5,'sellingPrice',10,'currentStock',2,'minimumStock',5,'reorderPackSize',1,'assistantStockTrackingStartedAt',NOW()-INTERVAL '30 days','barcodeGenerated',FALSE,'doesNotExpire',FALSE,'isReorderable',TRUE,'shopId',shop_id,'createdAt',NOW(),'updatedAt',NOW()),owner_id,NULL);
-  IF (SELECT SUM(quantity) FROM stock_movements WHERE "productId"=opening_product)<>2 THEN RAISE EXCEPTION 'Opening stock ledger missing'; END IF;
+  -- Match the product API payload: it does not send the tracking timestamp.
+  opening_product:=create_shop_product(jsonb_build_object('id',gen_random_uuid()::TEXT,'name','Opening stock audit','unit','pcs','buyingPrice',5,'sellingPrice',10,'currentStock',2,'minimumStock',5,'reorderPackSize',1,'barcodeGenerated',FALSE,'doesNotExpire',FALSE,'isReorderable',TRUE,'shopId',shop_id,'createdAt',NOW(),'updatedAt',NOW()),owner_id,NULL);
+  IF NOT EXISTS(SELECT 1 FROM products WHERE id=opening_product AND "currentStock"=2 AND "assistantStockTrackingStartedAt" IS NOT NULL) THEN RAISE EXCEPTION 'Product creation failed to initialize stock tracking'; END IF;
+  IF (SELECT COUNT(*) FROM stock_movements WHERE "productId"=opening_product AND type='IN' AND quantity=2)<>1 THEN RAISE EXCEPTION 'Opening stock ledger missing or duplicated'; END IF;
+  zero_stock_product:=create_shop_product(jsonb_build_object('id',gen_random_uuid()::TEXT,'name','Zero stock audit','unit','pcs','buyingPrice',5,'sellingPrice',10,'currentStock',0,'minimumStock',5,'reorderPackSize',1,'barcodeGenerated',FALSE,'doesNotExpire',FALSE,'isReorderable',TRUE,'shopId',shop_id,'createdAt',NOW(),'updatedAt',NOW()),owner_id,NULL);
+  IF NOT EXISTS(SELECT 1 FROM products WHERE id=zero_stock_product AND "currentStock"=0 AND "assistantStockTrackingStartedAt" IS NOT NULL) THEN RAISE EXCEPTION 'Zero-stock product tracking missing'; END IF;
+  IF EXISTS(SELECT 1 FROM stock_movements WHERE "productId"=zero_stock_product) THEN RAISE EXCEPTION 'Zero opening stock created a stock movement'; END IF;
+  IF (SELECT COUNT(*) FROM product_stockout_periods WHERE "productId"=zero_stock_product AND "endedAt" IS NULL)<>1 THEN RAISE EXCEPTION 'Zero-stock product did not start stockout tracking'; END IF;
   result:=save_supplier_order_batch_with_eta(
     shop_id,
     jsonb_build_array(jsonb_build_object('supplierId',supplier_id,'items',jsonb_build_array(jsonb_build_object('productId',opening_product,'quantity',4,'unitPrice',5)))),
