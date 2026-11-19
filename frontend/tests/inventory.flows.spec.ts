@@ -147,7 +147,7 @@ test("inventory supports add, edit, and stock adjustment flows", async ({ page }
   await page.getByLabel(/selling price|bei ya kuuza/i).fill("3500");
   await page.getByLabel(/current stock|idadi iliyopo/i).fill("8");
   await page.getByLabel(/minimum stock|kiwango cha chini/i).fill("2");
-  await page.getByLabel(/supplier|msambazaji/i).selectOption("sup-1");
+  await page.getByLabel(/^supplier$|^msambazaji$/i).selectOption("sup-1");
   await page.getByLabel(/does not expire|haiishi muda/i).check();
   await page.getByLabel(/^save$|^hifadhi$/i).click();
 

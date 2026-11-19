@@ -4,6 +4,7 @@ import AppShell from "@/components/layout/AppShell";
 import IncomingStock from "@/components/inventory/IncomingStock";
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang } from "@/lib/i18n";
+import { prepareProductImage, ProductImageError } from "@/lib/product-image";
 import Link from "next/link";
 import {
   Plus,
@@ -132,14 +133,27 @@ export default function InventoryPage() {
   const [stockCountScannerOpen, setStockCountScannerOpen] = useState(false);
 const [stockCountCode, setStockCountCode] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [originalImage, setOriginalImage] = useState<File | null>(null);
+  const [whiteBackgroundImage, setWhiteBackgroundImage] = useState<File | null>(null);
+  const [imageChoice, setImageChoice] = useState<"original" | "white">("original");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageProcessing, setImageProcessing] = useState(false);
+  const [imageStage, setImageStage] = useState<"preparing" | "background">("preparing");
+  const [imageError, setImageError] = useState("");
+  const imageJob = useRef(0);
+  const imageProcessingRef = useRef(false);
+  const imageErrorRef = useRef(false);
+  const imagePreviewUrl = useRef<string | null>(null);
+  const uploadedImage = useRef<{ productId: string; file: File; publicUrl: string } | null>(null);
   const [showQuickSupplier, setShowQuickSupplier] = useState(false);
   const [quickSupplier, setQuickSupplier] = useState({ name: "", phone: "", address: "" });
   const [savingQuickSupplier, setSavingQuickSupplier] = useState(false);
   const [canManageOwnerSuppliers, setCanManageOwnerSuppliers] = useState(false);
 
-  const MAX_PRODUCT_IMAGE_BYTES = 1 * 1024 * 1024;
-  const MAX_PRODUCT_IMAGE_DIMENSION = 2400;
+  useEffect(() => () => {
+    imageJob.current += 1;
+    if (imagePreviewUrl.current) URL.revokeObjectURL(imagePreviewUrl.current);
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     const requestId = ++latestLoad.current;
@@ -196,12 +210,85 @@ const [stockCountCode, setStockCountCode] = useState("");
     api.get<{ count: NonNullable<typeof stockCount> | null }>("/stock-counts").then((data) => { if (data.count) setStockCount(data.count); }).catch(() => {});
   }, []);
 
+  function clearImageSelection(fallback: string | null = editProduct?.imageUrl || null) {
+    imageJob.current += 1;
+    imageProcessingRef.current = false;
+    imageErrorRef.current = false;
+    if (imagePreviewUrl.current) URL.revokeObjectURL(imagePreviewUrl.current);
+    imagePreviewUrl.current = null;
+    uploadedImage.current = null;
+    setImageProcessing(false);
+    setImageError("");
+    setSelectedImage(null);
+    setOriginalImage(null);
+    setWhiteBackgroundImage(null);
+    setImageChoice("original");
+    setImagePreview(fallback);
+  }
+
+  function previewPreparedImage(file: File, choice: "original" | "white") {
+    if (imagePreviewUrl.current) URL.revokeObjectURL(imagePreviewUrl.current);
+    const preview = URL.createObjectURL(file);
+    imagePreviewUrl.current = preview;
+    uploadedImage.current = null;
+    setSelectedImage(file);
+    setImageChoice(choice);
+    setImagePreview(preview);
+  }
+
+  function choosePreparedImage(file: File, choice: "original" | "white") {
+    imageJob.current += 1;
+    imageProcessingRef.current = false;
+    imageErrorRef.current = false;
+    setImageProcessing(false);
+    setImageError("");
+    previewPreparedImage(file, choice);
+  }
+
+  async function applyWhiteBackground(file: File, job: number) {
+    setImageStage("background");
+    try {
+      const { removeProductBackground } = await import("@/lib/product-background");
+      if (job !== imageJob.current) return;
+      const white = await removeProductBackground(file, () => job !== imageJob.current);
+      if (job !== imageJob.current) return;
+      setWhiteBackgroundImage(white);
+      previewPreparedImage(white, "white");
+    } catch {
+      if (job !== imageJob.current) return;
+      imageErrorRef.current = true;
+      setImageError(lang === "sw"
+        ? "Haikuwezekana kuondoa background. Angalia intaneti na ujaribu tena, au tumia picha ya asili."
+        : "The background could not be removed. Check your connection and retry, or use the original image.");
+    } finally {
+      if (job === imageJob.current) {
+        imageProcessingRef.current = false;
+        setImageProcessing(false);
+      }
+    }
+  }
+
+  function retryWhiteBackground() {
+    if (!originalImage) return;
+    const job = ++imageJob.current;
+    imageProcessingRef.current = true;
+    imageErrorRef.current = false;
+    setImageProcessing(true);
+    setImageError("");
+    void applyWhiteBackground(originalImage, job);
+  }
+
+  function closeProductForm() {
+    if (mutationInFlight.current) return;
+    clearImageSelection(null);
+    setShowForm(false);
+  }
+
   function openAdd() {
     setEditProduct(null);
     setForm({ name: "", sku: "", unit: "pcs", buyingPrice: "", sellingPrice: "", wholesalePrice: "", wholesaleMinQty: "", currentStock: "0", minimumStock: "5", supplierId: "", isReorderable: true, note: "", expiryDate: "", doesNotExpire: false, barcode: "", barcodeType: "", generateBarcode: false });
     setError("");
-    setSelectedImage(null);
-    setImagePreview(null);
+    clearImageSelection(null);
     setShowForm(true);
   }
 
@@ -219,61 +306,70 @@ const [stockCountCode, setStockCountCode] = useState("");
       doesNotExpire: p.doesNotExpire,
       barcode: p.barcode || "", barcodeType: p.barcodeType || "", generateBarcode: false,
     });
-    setSelectedImage(null);
-    setImagePreview(p.imageUrl || null);
+    clearImageSelection(p.imageUrl || null);
     setError("");
     setShowForm(true);
   }
 
   async function handleImageChange(file: File | undefined) {
     if (!file) return;
-    if (![
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ].includes(file.type)) {
-      setError(lang === "sw" ? "Tumia picha ya JPG, PNG, au WebP." : "Use a JPG, PNG, or WebP image.");
-      return;
-    }
-    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
-      setError(lang === "sw" ? "Picha lazima iwe chini ya MB 1." : "The image must be 1 MB or smaller.");
-      return;
-    }
-    const preview = URL.createObjectURL(file);
-    const dimensions = await new Promise<{ width: number; height: number } | null>((resolve) => {
-      const image = new window.Image();
-      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-      image.onerror = () => resolve(null);
-      image.src = preview;
-    });
-    if (!dimensions || dimensions.width > MAX_PRODUCT_IMAGE_DIMENSION || dimensions.height > MAX_PRODUCT_IMAGE_DIMENSION) {
-      URL.revokeObjectURL(preview);
-      setError(lang === "sw" ? "Picha iwe na upana na urefu wa chini ya px 2400." : "Image width and height must each be 2400 px or smaller.");
-      return;
-    }
-    setSelectedImage(file);
-    setImagePreview(preview);
+    clearImageSelection();
+    const job = ++imageJob.current;
+    imageProcessingRef.current = true;
+    setImageProcessing(true);
+    setImageStage("preparing");
     setError("");
+    try {
+      const optimized = await prepareProductImage(file);
+      if (job !== imageJob.current) return;
+      setOriginalImage(optimized);
+      previewPreparedImage(optimized, "original");
+      await applyWhiteBackground(optimized, job);
+    } catch (failure) {
+      if (job !== imageJob.current) return;
+      const code = failure instanceof ProductImageError ? failure.code : "processing";
+      const message = code === "type"
+        ? (lang === "sw" ? "Tumia picha ya JPG, PNG, au WebP." : "Use a JPG, PNG, or WebP image.")
+        : code === "size"
+          ? (lang === "sw" ? "Chagua picha yenye ukubwa wa hadi MB 15." : "Choose an image of up to 15 MB.")
+          : code === "dimensions"
+            ? (lang === "sw" ? "Picha ni kubwa mno. Tumia hadi megapixel 40 na px 12,000 kwa upande." : "This image is too large. Use up to 40 megapixels and 12,000 pixels per side.")
+            : (lang === "sw" ? "Picha haikuweza kutayarishwa. Jaribu picha nyingine." : "The image could not be prepared. Try another image.");
+      imageErrorRef.current = true;
+      setImageError(message);
+    } finally {
+      if (job === imageJob.current) {
+        imageProcessingRef.current = false;
+        setImageProcessing(false);
+      }
+    }
   }
 
   async function uploadProductImage(productId: string, file: File) {
-    const upload = await api.post<{ signedUrl: string; publicUrl: string }>("/storage/upload-url", {
-      fileName: file.name,
-      contentType: file.type,
-      fileSize: file.size,
-      scope: "product",
-    });
-    const response = await fetch(upload.signedUrl, {
-      method: "PUT",
-      headers: { "Content-Type": file.type, "x-upsert": "true" },
-      body: file,
-    });
-    if (!response.ok) throw new Error(lang === "sw" ? "Picha haikuweza kupakiwa." : "The product image could not be uploaded.");
-    return api.patch<{ product: Product }>(`/products/${productId}`, { imageUrl: upload.publicUrl });
+    let publicUrl = uploadedImage.current?.productId === productId && uploadedImage.current.file === file
+      ? uploadedImage.current.publicUrl : null;
+    if (!publicUrl) {
+      const upload = await api.post<{ signedUrl: string; publicUrl: string }>("/storage/upload-url", {
+        fileName: file.name,
+        contentType: file.type,
+        fileSize: file.size,
+        scope: "product",
+      });
+      const response = await fetch(upload.signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type, "x-upsert": "true" },
+        body: file,
+      });
+      if (!response.ok) throw new Error(lang === "sw" ? "Picha haikuweza kupakiwa." : "The product image could not be uploaded.");
+      publicUrl = upload.publicUrl;
+      uploadedImage.current = { productId, file, publicUrl };
+    }
+    return api.patch<{ product: Product }>(`/products/${productId}`, { imageUrl: publicUrl });
   }
 
   async function handleSave() {
     if (mutationInFlight.current) return;
+    if (imageProcessingRef.current || imageErrorRef.current) return;
     setError("");
     if (!form.name.trim() || (canViewFinancials && form.buyingPrice === "") || form.sellingPrice === "") {
       setError(t("inventory.fieldRequired", lang));
@@ -312,16 +408,28 @@ const [stockCountCode, setStockCountCode] = useState("");
         : await api.post<{ product: Product }>("/products", body);
       let savedProduct = response.product;
       if (selectedImage) {
-        const imageResponse = await uploadProductImage(savedProduct.id, selectedImage);
-        savedProduct = imageResponse.product;
+        try {
+          const imageResponse = await uploadProductImage(savedProduct.id, selectedImage);
+          savedProduct = imageResponse.product;
+        } catch (imageFailure) {
+          // Product creation and image attachment are separate operations. Keep
+          // the saved product as an edit so retrying cannot create a duplicate.
+          setEditProduct(savedProduct);
+          setForm((current) => ({ ...current, barcode: savedProduct.barcode || "", barcodeType: savedProduct.barcodeType || "", generateBarcode: false }));
+          setProducts((current) => current.some((product) => product.id === savedProduct.id)
+            ? current.map((product) => product.id === savedProduct.id ? savedProduct : product)
+            : [savedProduct, ...current]);
+          const detail = imageFailure instanceof Error ? ` ${imageFailure.message}` : "";
+          setError((lang === "sw" ? "Bidhaa imehifadhiwa, lakini picha haikupakiwa. Bonyeza Hifadhi kujaribu tena." : "The product was saved, but its image could not be attached. Press Save to retry.") + detail);
+          return;
+        }
       }
       if (editProduct) {
         setProducts((current) => current.map((product) => product.id === editProduct.id ? savedProduct : product));
       } else {
         setProducts((current) => [savedProduct, ...current]);
       }
-      setSelectedImage(null);
-      setImagePreview(null);
+      clearImageSelection(null);
       setShowForm(false);
       toast(editProduct ? (lang === "sw" ? "Bidhaa imebadilishwa." : "Product updated.") : (lang === "sw" ? "Bidhaa imeongezwa." : "Product added."), "success");
       await fetchProducts();
@@ -720,7 +828,7 @@ const [stockCountCode, setStockCountCode] = useState("");
 
       {/* Add/Edit Product Modal */}
       {showForm && (
-        <Modal title={editProduct ? t("inventory.editTitle", lang) : t("inventory.addTitle", lang)} onClose={() => setShowForm(false)}>
+        <Modal title={editProduct ? t("inventory.editTitle", lang) : t("inventory.addTitle", lang)} onClose={closeProductForm}>
           <div className="space-y-3">
             {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-2">{error}</p>}
             <Field label={t("inventory.nameLabel", lang)}>
@@ -730,12 +838,30 @@ const [stockCountCode, setStockCountCode] = useState("");
             <Field label={lang === "sw" ? "Picha ya bidhaa" : "Product image"}>
               <input
                 type="file"
+                aria-label={lang === "sw" ? "Picha ya bidhaa" : "Product image"}
                 accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => void handleImageChange(event.target.files?.[0])}
+                disabled={saving}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  void handleImageChange(file);
+                }}
                 className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700"
               />
-              <p className="mt-1 text-xs text-gray-500">JPG, PNG, WebP · max 1 MB · max 2400 × 2400 px</p>
-              {imagePreview && <img src={imagePreview} alt="Product preview" className="mt-2 h-24 w-24 rounded-xl border border-gray-200 object-cover" />}
+              <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "JPG, PNG, WebP · picha ya asili hadi MB 15 · huhifadhiwa hadi MB 1" : "JPG, PNG, WebP · original up to 15 MB · saved at 1 MB or less"}</p>
+              <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Background huondolewa kwenye kifaa chako. Mara ya kwanza, faili za AI za takriban MB 20 hupakuliwa kutoka Hugging Face na jsDelivr. Kagua matokeo; unaweza kutumia picha ya asili." : "Background removal runs on your device. First use downloads about 20 MB of AI files from Hugging Face and jsDelivr. Review the result; you can keep the original."}</p>
+              <div aria-live="polite">
+                {imageProcessing && <p className="mt-2 text-xs text-gray-600">{imageStage === "preparing" ? (lang === "sw" ? "Inatayarisha picha..." : "Preparing image...") : (lang === "sw" ? "Inaondoa background... Hii inaweza kuchukua muda." : "Removing background... This may take a moment.")}</p>}
+                {imageError && <p role="alert" className="mt-2 text-xs text-red-700">{imageError}</p>}
+                {selectedImage && !imageProcessing && !imageError && <p className="mt-2 text-xs text-green-700">{lang === "sw" ? "Picha imetayarishwa" : "Image ready"} · {Math.max(1, Math.ceil(selectedImage.size / 1024))} KB</p>}
+              </div>
+              {imagePreview && <img src={imagePreview} alt="Product preview" className="mt-2 h-44 w-44 max-w-full rounded-xl border border-gray-200 bg-white object-contain" />}
+              {originalImage && <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" disabled={saving} aria-pressed={imageChoice === "original" && !imageProcessing && !imageError} onClick={() => choosePreparedImage(originalImage, "original")} className={`rounded-lg border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${imageChoice === "original" && !imageProcessing && !imageError ? "border-brand-600 bg-brand-50 text-brand-800" : "border-gray-300 text-gray-700"}`}>{lang === "sw" ? "Tumia picha ya asili" : "Use original background"}</button>
+                {whiteBackgroundImage && <button type="button" disabled={saving} aria-pressed={imageChoice === "white" && !imageProcessing && !imageError} onClick={() => choosePreparedImage(whiteBackgroundImage, "white")} className={`rounded-lg border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${imageChoice === "white" && !imageProcessing && !imageError ? "border-brand-600 bg-brand-50 text-brand-800" : "border-gray-300 text-gray-700"}`}>{lang === "sw" ? "Tumia background nyeupe" : "Use white background"}</button>}
+                {!imageProcessing && !whiteBackgroundImage && <button type="button" disabled={saving} onClick={retryWhiteBackground} className="rounded-lg border border-brand-200 px-2 py-1 text-xs font-semibold text-brand-700 disabled:opacity-50">{lang === "sw" ? "Jaribu kuondoa tena" : "Retry background removal"}</button>}
+              </div>}
+              {(selectedImage || imageError || imageProcessing) && <button type="button" disabled={saving} onClick={() => clearImageSelection()} className="mt-2 text-xs font-semibold text-brand-700 underline disabled:opacity-50">{lang === "sw" ? "Ondoa picha iliyochaguliwa" : "Clear selected image"}</button>}
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("inventory.skuLabel", lang)}>
@@ -842,10 +968,10 @@ const [stockCountCode, setStockCountCode] = useState("");
             </div>}
 
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm font-medium">
+              <button onClick={closeProductForm} disabled={saving} className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">
                 {t("common.cancel", lang)}
               </button>
-              <button aria-label={t("common.save", lang)} onClick={handleSave} disabled={saving} className="flex-1 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">
+              <button aria-label={t("common.save", lang)} onClick={handleSave} disabled={saving || imageProcessing || Boolean(imageError)} className="flex-1 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-60">
                 {saving ? t("inventory.saving", lang) : t("common.save", lang)}
               </button>
             </div>
