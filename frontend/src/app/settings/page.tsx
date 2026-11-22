@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { t, useLang, setLanguage as setAppLanguage } from "@/lib/i18n";
 import { Store, User, Lock, Globe, Check, ChevronDown, Bell, ScanLine, Clock } from "lucide-react";
 import NotificationSettings from "@/components/notifications/NotificationSettings";
+import CatalogAccessSettings from "@/components/catalog/CatalogAccessSettings";
 import { DEFAULT_TIME_ZONE, getDeviceTimeZone, isValidTimeZone, setAppTimeZone, timeZoneOffsetLabel } from "@/lib/timezone";
 
 interface UserSettings {
@@ -416,6 +417,12 @@ export default function SettingsPage() {
                 {shopSaving ? "..." : t("common.save", lang)}
               </button>
             </form>
+          </SectionCard>
+        )}
+
+        {settings?.role === "MERCHANT" && !settings.isStaff && settings.shop && (
+          <SectionCard title={lang === "sw" ? "Ufikiaji wa bei za catalog" : "Customer catalogue access"} icon={<Lock className="w-4 h-4" />}>
+            <CatalogAccessSettings shopId={settings.shop.id} lang={lang} />
           </SectionCard>
         )}
 

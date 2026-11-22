@@ -124,7 +124,9 @@ async function request<T>(
   // Login, registration, and recovery requests must surface their own 401
   // response. Only an already-authenticated request should try refreshing a
   // session; otherwise a wrong PIN looks like a silent redirect/reload.
-  const isAuthenticationRequest = path.startsWith("/auth/");
+  // Catalogue customers do not have merchant sessions. An expired catalogue
+  // password must never refresh or log out a shop owner in the same browser.
+  const isAuthenticationRequest = path.startsWith("/auth/") || path.startsWith("/public/");
   if (res.status === 401 && !_isRetry && !isAuthenticationRequest) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {

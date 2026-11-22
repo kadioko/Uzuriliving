@@ -20,7 +20,8 @@ interface CatalogProduct {
   id: string;
   name: string;
   unit: string;
-  sellingPrice: number;
+  sellingPrice?: number;
+  catalogProtected?: boolean;
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
   currentStock: number;
@@ -249,12 +250,12 @@ export default function CatalogPage() {
                         {p.currentStock} {p.unit} {t("catalog.inStock", lang)}
                       </p>
                       <div className="mt-3 space-y-0.5">
-                        <p className="text-sm">
+                        {p.catalogProtected ? <Link href={`/catalog/${p.shop.id}`} className="text-sm font-semibold text-brand-700 hover:underline">{lang === "sw" ? "Ingia kuona bei" : "Sign in to view prices"}</Link> : <p className="text-sm">
                           <span className="text-gray-500">{t("catalog.retail", lang)}: </span>
-                          <span className="font-bold text-brand-700">{formatTZS(p.sellingPrice)}</span>
+                          <span className="font-bold text-brand-700">{p.sellingPrice == null ? "-" : formatTZS(p.sellingPrice)}</span>
                           <span className="text-gray-400"> / {p.unit}</span>
-                        </p>
-                        {p.wholesalePrice != null && (
+                        </p>}
+                        {!p.catalogProtected && p.wholesalePrice != null && (
                           <p className="text-xs text-gray-600">
                             {t("catalog.wholesale", lang)}:{" "}
                             <span className="font-semibold text-gray-800">{formatTZS(p.wholesalePrice)}</span>

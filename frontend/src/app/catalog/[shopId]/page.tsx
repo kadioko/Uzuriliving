@@ -16,6 +16,7 @@ import { api, formatTZS } from "@/lib/api";
 import { t, useLang, setLanguage as setAppLanguage } from "@/lib/i18n";
 import LogoMark from "@/components/brand/LogoMark";
 import CatalogProductImage from "@/components/catalog/CatalogProductImage";
+import ProtectedCatalog from "@/components/catalog/ProtectedCatalog";
 
 interface ShopInfo {
   id: string;
@@ -25,13 +26,14 @@ interface ShopInfo {
   category: string;
   phone?: string;
   productCount: number;
+  catalogProtected?: boolean;
 }
 
 interface Product {
   id: string;
   name: string;
   unit: string;
-  sellingPrice: number;
+  sellingPrice?: number;
   wholesalePrice?: number | null;
   wholesaleMinQty?: number | null;
   currentStock: number;
@@ -90,6 +92,7 @@ export default function ShopPage() {
   }, [shopId]);
 
   function addToCart(product: Product, tier: "RETAIL" | "WHOLESALE") {
+    if (product.sellingPrice == null) return;
     const unitPrice =
       tier === "WHOLESALE" && product.wholesalePrice != null
         ? product.wholesalePrice
@@ -182,6 +185,8 @@ export default function ShopPage() {
     );
   }
 
+  if (shop.catalogProtected) return <ProtectedCatalog shop={shop} products={products} lang={lang} />;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -244,7 +249,7 @@ export default function ShopPage() {
                   <div className="mt-2 space-y-0.5 flex-1">
                     <p className="text-sm">
                       <span className="text-gray-500">{t("catalog.retail", lang)}: </span>
-                      <span className="font-bold text-brand-700">{formatTZS(p.sellingPrice)}</span>
+                      <span className="font-bold text-brand-700">{p.sellingPrice == null ? "-" : formatTZS(p.sellingPrice)}</span>
                       <span className="text-gray-400"> / {p.unit}</span>
                     </p>
                     {p.wholesalePrice != null && (

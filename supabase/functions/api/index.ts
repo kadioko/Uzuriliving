@@ -5,6 +5,7 @@ import { jwtVerify, SignJWT } from "npm:jose@6.1.0";
 import { hasStaffPermission, canReadProducts, shopRouteAllowed, redactProduct } from "./permissions.ts";
 import { assistantActionRequiredPermissions, assistantFinancialReconciliation, assistantRequiredPermissions, estimateStockCover, parseAssistantQuestion } from "./assistant-intent.ts";
 import { readAll, csvCell } from "./query.ts";
+import { catalogAccessSummary, catalogSessionTier, privateCatalogProduct, publicCatalogProduct, validCatalogPassword } from "./catalog-security.mjs";
 
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -259,6 +260,103 @@ async function authLimit(client: SupabaseClient, key: string, limit = 8, seconds
   const { data, error } = await client.rpc("check_auth_rate_limit", { p_key: key, p_limit: limit, p_window_seconds: seconds });
   if (error) throw error;
   return data === true;
+}
+
+const catalogNoStore = { "cache-control": "private, no-store", "x-robots-tag": "noindex, nofollow" };
+const catalogCookieName = "uzuri_catalog_session";
+
+function catalogCookie(value: string, maxAgeSeconds: number) {
+  return `${catalogCookieName}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`;
+}
+
+async function catalogAccess(client: SupabaseClient, shopId: string) {
+  const { data, error } = await client.from("catalog_price_access").select("*").eq("shopId", shopId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function catalogAccessSettings(client: SupabaseClient, user: Record<string, unknown>, shop: Record<string, unknown>, request: Request) {
+  if (user.role !== "MERCHANT" || user.staffId || !shop.id) return json({ error: "Only the shop owner can manage customer catalogue access" }, 403, catalogNoStore);
+  const shopId = String(shop.id);
+  const existing = await catalogAccess(client, shopId);
+  if (request.method === "GET") return json({ settings: catalogAccessSummary(existing) }, 200, catalogNoStore);
+  if (request.method !== "PATCH") return json({ error: "Method not allowed" }, 405, catalogNoStore);
+  const body = await request.json().catch(() => ({}));
+  const retail = body.retailPassword;
+  const wholesale = body.wholesalePassword;
+  if (retail !== undefined && !validCatalogPassword(retail) || wholesale !== undefined && !validCatalogPassword(wholesale)) {
+    return json({ error: "Catalogue passwords must be at least 10 characters and no more than 72 UTF-8 bytes" }, 400, catalogNoStore);
+  }
+  if (body.enabled !== undefined && typeof body.enabled !== "boolean") return json({ error: "Invalid catalogue access setting" }, 400, catalogNoStore);
+  if (existing?.enabled && body.enabled === false && body.confirmPublicExposure !== true) {
+    return json({ error: "Confirm that turning protection off makes retail and wholesale prices public again" }, 400, catalogNoStore);
+  }
+  if (retail === undefined && wholesale === undefined && body.enabled === undefined) return json({ error: "No catalogue access changes supplied" }, 400, catalogNoStore);
+  if (retail !== undefined && wholesale !== undefined && retail === wholesale ||
+      retail !== undefined && wholesale === undefined && existing?.wholesalePasswordHash && await bcrypt.compare(retail, existing.wholesalePasswordHash) ||
+      wholesale !== undefined && retail === undefined && existing?.retailPasswordHash && await bcrypt.compare(wholesale, existing.retailPasswordHash)) {
+    return json({ error: "Retail and wholesale passwords must be different" }, 400, catalogNoStore);
+  }
+  const retailHash = retail === undefined ? existing?.retailPasswordHash ?? null : await bcrypt.hash(retail, 12);
+  const wholesaleHash = wholesale === undefined ? existing?.wholesalePasswordHash ?? null : await bcrypt.hash(wholesale, 12);
+  const enabled = body.enabled === undefined ? existing?.enabled === true : body.enabled;
+  if (enabled && (!retailHash || !wholesaleHash)) return json({ error: "Set both customer passwords before enabling catalogue protection" }, 400, catalogNoStore);
+  const disabling = existing?.enabled === true && enabled === false;
+  const update = {
+    enabled,
+    retailPasswordHash: retailHash,
+    wholesalePasswordHash: wholesaleHash,
+    retailVersion: retail !== undefined || disabling ? crypto.randomUUID() : existing?.retailVersion ?? crypto.randomUUID(),
+    wholesaleVersion: wholesale !== undefined || disabling ? crypto.randomUUID() : existing?.wholesaleVersion ?? crypto.randomUUID(),
+    revision: crypto.randomUUID(),
+    updatedAt: new Date().toISOString(),
+  };
+  const query = existing
+    ? client.from("catalog_price_access").update(update).eq("shopId", shopId).eq("revision", existing.revision)
+    : client.from("catalog_price_access").insert({ shopId, ...update });
+  const { data, error } = await query.select("*").maybeSingle();
+  if (error?.code === "23505" || !error && !data) return json({ error: "Catalogue settings changed. Refresh and try again." }, 409, catalogNoStore);
+  if (error) throw error;
+  return json({ settings: catalogAccessSummary(data) }, 200, catalogNoStore);
+}
+
+async function catalogLogin(client: SupabaseClient, request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const shopId = String(body.shopId ?? "");
+  const tier = String(body.tier ?? "").toUpperCase();
+  const password = body.password;
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(shopId) || !["RETAIL", "WHOLESALE"].includes(tier) || typeof password !== "string" || new TextEncoder().encode(password).length > 72) {
+    return json({ error: "Invalid catalogue login" }, 401, catalogNoStore);
+  }
+  const rateKey = `catalog:${shopId}:${tier}`;
+  if (!await authLimit(client, rateKey, 20, 900)) return json({ error: "Too many catalogue login attempts. Try again in 15 minutes." }, 429, catalogNoStore);
+  const { data: shop, error: shopError } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", shopId).maybeSingle();
+  if (shopError) throw shopError;
+  const access = await catalogAccess(client, shopId);
+  const hash = tier === "RETAIL" ? access?.retailPasswordHash : access?.wholesalePasswordHash;
+  if (!shop || !activeShop(shop, new Date(), true) || !access?.enabled || !hash || !await bcrypt.compare(password, hash)) return json({ error: "Invalid catalogue login" }, 401, catalogNoStore);
+  const version = tier === "RETAIL" ? access.retailVersion : access.wholesaleVersion;
+  const session = await token({ type: "catalog", shopId, tier, version }, "12h");
+  await client.from("auth_rate_limits").delete().eq("key", rateKey);
+  return json({ tier }, 200, { ...catalogNoStore, "set-cookie": catalogCookie(session, 12 * 60 * 60) });
+}
+
+async function catalogPrivateView(client: SupabaseClient, request: Request, shopId: string) {
+  const unauthorized = () => json({ error: "Sign in to view this catalogue" }, 401, catalogNoStore);
+  const session = readCookies(request)[catalogCookieName];
+  if (!session) return unauthorized();
+  let payload: Record<string, unknown>;
+  try { payload = (await jwtVerify(session, jwtSecret())).payload; } catch { return unauthorized(); }
+  const [access, shopResult] = await Promise.all([
+    catalogAccess(client, shopId),
+    client.from("shops").select("id,name,location,district,category,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", shopId).maybeSingle(),
+  ]);
+  if (shopResult.error) throw shopResult.error;
+  const tier = catalogSessionTier(payload, shopId, access);
+  if (!tier || !shopResult.data || !activeShop(shopResult.data, new Date(), true)) return unauthorized();
+  const priceFields = tier === "RETAIL" ? "sellingPrice" : "wholesalePrice,wholesaleMinQty";
+  const products = await readAll(() => client.from("products").select(`id,name,unit,currentStock,imageUrl,${priceFields}`).eq("shopId", shopId).eq("isActive", true).gt("currentStock", 0).order("name").order("id"));
+  return json({ tier, products: products.map((product) => privateCatalogProduct(product, tier)) }, 200, catalogNoStore);
 }
 
 async function authLogin(client: SupabaseClient, request: Request) {
@@ -2568,7 +2666,21 @@ async function adminSuppliers(client: SupabaseClient, request: Request, path: st
 
 
 
-async function publicOrderAtomic(client: SupabaseClient, request: Request) { const body = await request.json().catch(() => ({})); if (!body.shopId || !body.customerName || !body.customerPhone || !Array.isArray(body.items) || !body.items.length) return json({ error: "shopId, customerName, customerPhone, and items are required" }, 400); const { data: shop } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", body.shopId).maybeSingle(); if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "This shop is not currently accepting catalog orders" }, 402); const items: Array<{ productId: string; quantity: number; pricingTier: string }> = body.items.map((item: Record<string, unknown>) => ({ productId: String(item.productId ?? "").trim(), quantity: Number(item.quantity), pricingTier: String(item.pricingTier ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL" })); if (items.some((item) => !item.productId || !Number.isInteger(item.quantity) || item.quantity <= 0)) return json({ error: "Each item must include a productId and a whole-number quantity greater than 0" }, 400); const { data, error } = await client.rpc("create_public_customer_order", { p_shop_id: shop.id, p_customer_name: String(body.customerName).trim(), p_customer_phone: normalizePhone(body.customerPhone), p_note: body.note ? String(body.note).trim() : null, p_items: items }); if (error) { if (error.code === "22023") return json({ error: error.message }, 400); throw error; } return json({ order: data, shopWhatsAppUrl: null }, 201); }
+async function publicOrderAtomic(client: SupabaseClient, request: Request) {
+  const body = await request.json().catch(() => ({}));
+  if (!body.shopId || !body.customerName || !body.customerPhone || !Array.isArray(body.items) || !body.items.length) return json({ error: "shopId, customerName, customerPhone, and items are required" }, 400);
+  const { data: shop, error: shopError } = await client.from("shops").select("id,plan,trialEndsAt,subscriptionEndsAt,isActive,isCatalogPublished,isDemo").eq("id", body.shopId).maybeSingle();
+  if (shopError) throw shopError;
+  if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "This shop is not currently accepting catalog orders" }, 402);
+  // Price-only customer sessions cannot create orders, even by calling the
+  // legacy public endpoint directly or using an old browser tab.
+  if ((await catalogAccess(client, shop.id))?.enabled) return json({ error: "This catalogue is for viewing prices only" }, 403, catalogNoStore);
+  const items: Array<{ productId: string; quantity: number; pricingTier: string }> = body.items.map((item: Record<string, unknown>) => ({ productId: String(item.productId ?? "").trim(), quantity: Number(item.quantity), pricingTier: String(item.pricingTier ?? "RETAIL").toUpperCase() === "WHOLESALE" ? "WHOLESALE" : "RETAIL" }));
+  if (items.some((item) => !item.productId || !Number.isInteger(item.quantity) || item.quantity <= 0)) return json({ error: "Each item must include a productId and a whole-number quantity greater than 0" }, 400);
+  const { data, error } = await client.rpc("create_public_customer_order", { p_shop_id: shop.id, p_customer_name: String(body.customerName).trim(), p_customer_phone: normalizePhone(body.customerPhone), p_note: body.note ? String(body.note).trim() : null, p_items: items });
+  if (error) { if (error.code === "22023") return json({ error: error.message }, 400); throw error; }
+  return json({ order: data, shopWhatsAppUrl: null }, 201);
+}
 
 const defaultNotificationPreferences = { lowStock: true, debtDue: true, subscriptionExpiry: true, dailyAssistant: false };
 
@@ -2706,7 +2818,6 @@ async function publicProducts(client: SupabaseClient, request: Request) {
   const shopMap = new Map((availableShops ?? []).filter((shop) => activeShop(shop, new Date(), true)).map((shop) => [shop.id, shop]));
   const allowedShopIds = [...shopMap.keys()];
   if (!allowedShopIds.length) return { products: [], pagination: { total: 0, limit, offset, hasMore: false } };
-
   let query = client
     .from("products")
     .select("id,name,unit,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,imageUrl,shopId", { count: "exact" })
@@ -2719,8 +2830,17 @@ async function publicProducts(client: SupabaseClient, request: Request) {
   const { data: products, count, error } = await query.order("name").range(offset, offset + limit - 1);
   if (error) throw error;
 
+  // Only check the shops in this page (at most 100), and fail closed if the
+  // protection lookup fails. Never silently treat an incomplete lookup as
+  // an unprotected catalogue.
+  const pageShopIds = [...new Set((products ?? []).map((product) => product.shopId))];
+  const protectedRows = pageShopIds.length
+    ? await readAll(() => client.from("catalog_price_access").select("shopId").eq("enabled", true).in("shopId", pageShopIds).order("shopId"))
+    : [];
+  const protectedShopIds = new Set(protectedRows.map((row) => row.shopId));
+
   const visibleProducts = (products ?? []).map((product) => ({
-    ...product,
+    ...publicCatalogProduct(product, protectedShopIds.has(product.shopId)),
     shop: shopMap.get(product.shopId),
   }));
 
@@ -2736,8 +2856,9 @@ async function publicShopDetail(client: SupabaseClient, shopId: string) {
   if (!shop || !activeShop(shop, new Date(), true)) return json({ error: "Shop not found" }, 404);
   const { data: products, error } = await client.from("products").select("id,name,unit,sellingPrice,wholesalePrice,wholesaleMinQty,currentStock,imageUrl,shopId").eq("shopId", shopId).eq("isActive", true).gt("currentStock", 0).order("name");
   if (error) throw error;
+  const protectedCatalog = (await catalogAccess(client, shopId))?.enabled === true;
   const owner = Array.isArray(shop.owner) ? shop.owner[0] ?? null : shop.owner;
-  return json({ shop: { ...shop, phone: owner?.phone ?? null, owner: undefined }, products: products ?? [] });
+  return json({ shop: { ...shop, phone: owner?.phone ?? null, owner: undefined, catalogProtected: protectedCatalog }, products: (products ?? []).map((product) => publicCatalogProduct(product, protectedCatalog)) }, 200, catalogNoStore);
 }
 
 async function exportShopCsv(client: SupabaseClient, shop: Record<string, unknown>, path: string) {
@@ -2771,9 +2892,12 @@ async function handle(request: Request) {
     });
   }
 
+  if (request.method === "POST" && path === "/public/catalog/login") return catalogLogin(db, request);
+  if (request.method === "POST" && path === "/public/catalog/logout") return json({ ok: true }, 200, { ...catalogNoStore, "set-cookie": catalogCookie("", 0) });
+  if (request.method === "GET" && path.startsWith("/public/catalog/") && path !== "/public/catalog/") return catalogPrivateView(db, request, path.slice("/public/catalog/".length));
   if (request.method === "GET" && path.startsWith("/public/shops/") && path !== "/public/shops/") return publicShopDetail(db, path.slice("/public/shops/".length));
   if (request.method === "GET" && path === "/public/shops") return json({ shops: await publicShops(db) });
-  if (request.method === "GET" && path === "/public/products") return json(await publicProducts(db, request));
+  if (request.method === "GET" && path === "/public/products") return json(await publicProducts(db, request), 200, catalogNoStore);
   if (request.method === "POST" && path === "/public/events") return marketingEvent(db, request);
 
   if (request.method === "POST" && path === "/auth/register") return await authRegister(db, request);
@@ -2918,6 +3042,12 @@ async function handle(request: Request) {
     const access = await requireUser(db, request);
     if (access.response) return access.response;
     return orders(db, access.user!, access.shop!, request, request.method, path === "/orders" ? undefined : path.slice("/orders/".length));
+  }
+
+  if (path === "/settings/catalog-access") {
+    const access = await requireUser(db, request);
+    if (access.response) return access.response;
+    return catalogAccessSettings(db, access.user!, access.shop!, request);
   }
 
   if (path === "/settings" || path.startsWith("/settings/")) {
