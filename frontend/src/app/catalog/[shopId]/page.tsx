@@ -15,6 +15,7 @@ import {
 import { api, formatTZS } from "@/lib/api";
 import { t, useLang, setLanguage as setAppLanguage } from "@/lib/i18n";
 import LogoMark from "@/components/brand/LogoMark";
+import CatalogProductImage from "@/components/catalog/CatalogProductImage";
 
 interface ShopInfo {
   id: string;
@@ -237,13 +238,7 @@ export default function ShopPage() {
             ) : (
               products.map((p) => (
                 <article key={p.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-brand-300 transition-colors flex flex-col">
-                  <div className="mb-3 flex h-40 items-center justify-center overflow-hidden rounded-lg bg-gray-50">
-                    {p.imageUrl ? (
-                      <img src={p.imageUrl} alt={p.name} loading="lazy" className="h-full w-full object-cover" />
-                    ) : (
-                      <Store className="h-10 w-10 text-gray-300" aria-hidden="true" />
-                    )}
-                  </div>
+                  <CatalogProductImage src={p.imageUrl} name={p.name} lang={lang} heightClass="h-40" />
                   <p className="font-medium text-gray-900 text-sm leading-tight">{p.name}</p>
                   <p className="text-xs text-gray-400 mt-1">{p.currentStock} {p.unit} {t("catalog.inStock", lang)}</p>
                   <div className="mt-2 space-y-0.5 flex-1">

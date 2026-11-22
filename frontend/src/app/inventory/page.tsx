@@ -849,7 +849,6 @@ const [stockCountCode, setStockCountCode] = useState("");
                 className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand-700"
               />
               <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "JPG, PNG, WebP · picha ya asili hadi MB 15 · huhifadhiwa hadi MB 1" : "JPG, PNG, WebP · original up to 15 MB · saved at 1 MB or less"}</p>
-              <p className="mt-1 text-xs text-gray-500">{lang === "sw" ? "Background huondolewa kwenye kifaa chako. Mara ya kwanza, faili za AI za takriban MB 20 hupakuliwa kutoka Hugging Face na jsDelivr. Kagua matokeo; unaweza kutumia picha ya asili." : "Background removal runs on your device. First use downloads about 20 MB of AI files from Hugging Face and jsDelivr. Review the result; you can keep the original."}</p>
               <div aria-live="polite">
                 {imageProcessing && <p className="mt-2 text-xs text-gray-600">{imageStage === "preparing" ? (lang === "sw" ? "Inatayarisha picha..." : "Preparing image...") : (lang === "sw" ? "Inaondoa background... Hii inaweza kuchukua muda." : "Removing background... This may take a moment.")}</p>}
                 {imageError && <p role="alert" className="mt-2 text-xs text-red-700">{imageError}</p>}

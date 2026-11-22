@@ -108,6 +108,14 @@ async function keepOriginal(page: Page) {
   await expect(page.getByText(/image ready/i)).toBeVisible();
 }
 
+test("the upload explanation is hidden while image preparation remains available", async ({ page }) => {
+  await mockInventory(page);
+  await expect(page.getByText(/background removal runs on your device/i)).toHaveCount(0);
+  await page.getByLabel("Product image").setInputFiles({ name: "small.png", mimeType: "image/png", buffer: await imageBuffer(page, false) });
+  await keepOriginal(page);
+  await expect(page.getByAltText("Product preview")).toBeVisible();
+});
+
 test("large transparent photos are made square, white, and compressed before upload", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const calls = await mockInventory(page);
